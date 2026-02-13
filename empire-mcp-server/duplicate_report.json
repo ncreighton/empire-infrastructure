@@ -1,0 +1,362 @@
+{
+  "generated": "2025-12-29T00:20:45.405115",
+  "total_skills": 129,
+  "duplicate_names": 27,
+  "exact_duplicates": 69,
+  "recommendations": [
+    {
+      "skill_name": "AI_NUKE_LIST",
+      "instances": 3,
+      "identical": true,
+      "canonical_path": "C:\\Claude Code Projects\\empire-master\\modules\\content_engine\\skills\\AI_NUKE_LIST.md",
+      "canonical_project": "content_engine",
+      "locations": [
+        "content_engine",
+        "zimm-command-center",
+        "zimm-command-center-archived"
+      ]
+    },
+    {
+      "skill_name": "MASTER_RULES_REFERENCE",
+      "instances": 3,
+      "identical": true,
+      "canonical_path": "C:\\Claude Code Projects\\empire-master\\modules\\content_engine\\skills\\MASTER_RULES_REFERENCE.md",
+      "canonical_project": "content_engine",
+      "locations": [
+        "content_engine",
+        "zimm-command-center",
+        "zimm-command-center-archived"
+      ]
+    },
+    {
+      "skill_name": "SKILL",
+      "instances": 33,
+      "identical": false,
+      "canonical_path": "C:\\Claude Code Projects\\skills\\systeme-io-browser-automation\\SKILL.md",
+      "canonical_project": "Claude Code Projects",
+      "locations": [
+        "empire-skill-library",
+        "pinflux-engine",
+        "pinflux-engine",
+        "pinflux-engine",
+        "pinflux-engine",
+        "Claude Code Projects",
+        "Claude Code Projects",
+        "Claude Code Projects",
+        "UnifiedDesignEmpire",
+        "UnifiedDesignEmpire",
+        "UnifiedDesignEmpire",
+        "UnifiedDesignEmpire",
+        "UnifiedDesignEmpire",
+        "UnifiedDesignEmpire",
+        "UnifiedDesignEmpire",
+        "bulletjournals-claude-code",
+        "complete-site-projects",
+        "complete-site-projects",
+        "mythicalarchives-claude-code",
+        "pinflux-engine",
+        "pinflux-engine",
+        "pinflux-engine",
+        "pinflux-engine",
+        "smarthomewizards-claude-code",
+        "smarthomewizards-claude-code",
+        "theconnectedhaven-claude-code",
+        "UnifiedDesignEmpire",
+        "UnifiedDesignEmpire",
+        "UnifiedDesignEmpire",
+        "UnifiedDesignEmpire",
+        "UnifiedDesignEmpire",
+        "UnifiedDesignEmpire",
+        "UnifiedDesignEmpire"
+      ]
+    },
+    {
+      "skill_name": "affiliate-framework",
+      "instances": 3,
+      "identical": true,
+      "canonical_path": "C:\\Claude Code Projects\\empire-master\\modules\\content_engine\\skills\\affiliate-framework.md",
+      "canonical_project": "content_engine",
+      "locations": [
+        "content_engine",
+        "zimm-command-center",
+        "zimm-command-center-archived"
+      ]
+    },
+    {
+      "skill_name": "article-perfection-checklist",
+      "instances": 3,
+      "identical": true,
+      "canonical_path": "C:\\Claude Code Projects\\empire-master\\modules\\content_engine\\skills\\article-perfection-checklist.md",
+      "canonical_project": "content_engine",
+      "locations": [
+        "content_engine",
+        "zimm-command-center",
+        "zimm-command-center-archived"
+      ]
+    },
+    {
+      "skill_name": "audit_skill",
+      "instances": 3,
+      "identical": true,
+      "canonical_path": "C:\\Claude Code Projects\\empire-master\\skills\\audit_skill.md",
+      "canonical_project": "empire-master",
+      "locations": [
+        "empire-master",
+        "design-consistency-system",
+        "design-consistency-system-archived"
+      ]
+    },
+    {
+      "skill_name": "competitor-analysis",
+      "instances": 3,
+      "identical": true,
+      "canonical_path": "C:\\Claude Code Projects\\empire-master\\modules\\content_engine\\skills\\competitor-analysis.md",
+      "canonical_project": "content_engine",
+      "locations": [
+        "content_engine",
+        "zimm-command-center",
+        "zimm-command-center-archived"
+      ]
+    },
+    {
+      "skill_name": "content-calendar",
+      "instances": 3,
+      "identical": true,
+      "canonical_path": "C:\\Claude Code Projects\\empire-master\\modules\\content_engine\\skills\\content-calendar.md",
+      "canonical_project": "content_engine",
+      "locations": [
+        "content_engine",
+        "zimm-command-center",
+        "zimm-command-center-archived"
+      ]
+    },
+    {
+      "skill_name": "content-craft",
+      "instances": 3,
+      "identical": true,
+      "canonical_path": "C:\\Claude Code Projects\\empire-master\\modules\\content_engine\\skills\\content-craft.md",
+      "canonical_project": "content_engine",
+      "locations": [
+        "content_engine",
+        "zimm-command-center",
+        "zimm-command-center-archived"
+      ]
+    },
+    {
+      "skill_name": "content-domination-strategy",
+      "instances": 3,
+      "identical": true,
+      "canonical_path": "C:\\Claude Code Projects\\empire-master\\modules\\content_engine\\skills\\content-domination-strategy.md",
+      "canonical_project": "content_engine",
+      "locations": [
+        "content_engine",
+        "zimm-command-center",
+        "zimm-command-center-archived"
+      ]
+    },
+    {
+      "skill_name": "deploy_css_skill",
+      "instances": 3,
+      "identical": true,
+      "canonical_path": "C:\\Claude Code Projects\\empire-master\\skills\\deploy_css_skill.md",
+      "canonical_project": "empire-master",
+      "locations": [
+        "empire-master",
+        "design-consistency-system",
+        "design-consistency-system-archived"
+      ]
+    },
+    {
+      "skill_name": "eeat-injection-system",
+      "instances": 3,
+      "identical": true,
+      "canonical_path": "C:\\Claude Code Projects\\empire-master\\modules\\content_engine\\skills\\eeat-injection-system.md",
+      "canonical_project": "content_engine",
+      "locations": [
+        "content_engine",
+        "zimm-command-center",
+        "zimm-command-center-archived"
+      ]
+    },
+    {
+      "skill_name": "featured-snippets",
+      "instances": 3,
+      "identical": true,
+      "canonical_path": "C:\\Claude Code Projects\\empire-master\\modules\\content_engine\\skills\\featured-snippets.md",
+      "canonical_project": "content_engine",
+      "locations": [
+        "content_engine",
+        "zimm-command-center",
+        "zimm-command-center-archived"
+      ]
+    },
+    {
+      "skill_name": "humanization-patterns",
+      "instances": 3,
+      "identical": true,
+      "canonical_path": "C:\\Claude Code Projects\\empire-master\\modules\\content_engine\\skills\\humanization-patterns.md",
+      "canonical_project": "content_engine",
+      "locations": [
+        "content_engine",
+        "zimm-command-center",
+        "zimm-command-center-archived"
+      ]
+    },
+    {
+      "skill_name": "internal-linking",
+      "instances": 3,
+      "identical": true,
+      "canonical_path": "C:\\Claude Code Projects\\empire-master\\modules\\content_engine\\skills\\internal-linking.md",
+      "canonical_project": "content_engine",
+      "locations": [
+        "content_engine",
+        "zimm-command-center",
+        "zimm-command-center-archived"
+      ]
+    },
+    {
+      "skill_name": "link_scan_skill",
+      "instances": 3,
+      "identical": true,
+      "canonical_path": "C:\\Claude Code Projects\\empire-master\\skills\\link_scan_skill.md",
+      "canonical_project": "empire-master",
+      "locations": [
+        "empire-master",
+        "design-consistency-system",
+        "design-consistency-system-archived"
+      ]
+    },
+    {
+      "skill_name": "monetization-mastery",
+      "instances": 3,
+      "identical": true,
+      "canonical_path": "C:\\Claude Code Projects\\empire-master\\modules\\content_engine\\skills\\monetization-mastery.md",
+      "canonical_project": "content_engine",
+      "locations": [
+        "content_engine",
+        "zimm-command-center",
+        "zimm-command-center-archived"
+      ]
+    },
+    {
+      "skill_name": "n8n-reliability-master",
+      "instances": 3,
+      "identical": true,
+      "canonical_path": "C:\\Claude Code Projects\\empire-master\\modules\\content_engine\\skills\\n8n-reliability-master.md",
+      "canonical_project": "content_engine",
+      "locations": [
+        "content_engine",
+        "zimm-command-center",
+        "zimm-command-center-archived"
+      ]
+    },
+    {
+      "skill_name": "quality-assurance",
+      "instances": 3,
+      "identical": true,
+      "canonical_path": "C:\\Claude Code Projects\\empire-master\\modules\\content_engine\\skills\\quality-assurance.md",
+      "canonical_project": "content_engine",
+      "locations": [
+        "content_engine",
+        "zimm-command-center",
+        "zimm-command-center-archived"
+      ]
+    },
+    {
+      "skill_name": "research-pro",
+      "instances": 3,
+      "identical": true,
+      "canonical_path": "C:\\Claude Code Projects\\empire-master\\modules\\content_engine\\skills\\research-pro.md",
+      "canonical_project": "content_engine",
+      "locations": [
+        "content_engine",
+        "zimm-command-center",
+        "zimm-command-center-archived"
+      ]
+    },
+    {
+      "skill_name": "schema-markup",
+      "instances": 3,
+      "identical": true,
+      "canonical_path": "C:\\Claude Code Projects\\empire-master\\modules\\content_engine\\skills\\schema-markup.md",
+      "canonical_project": "content_engine",
+      "locations": [
+        "content_engine",
+        "zimm-command-center",
+        "zimm-command-center-archived"
+      ]
+    },
+    {
+      "skill_name": "seo-ai-content-2025",
+      "instances": 3,
+      "identical": true,
+      "canonical_path": "C:\\Claude Code Projects\\empire-master\\modules\\content_engine\\skills\\seo-ai-content-2025.md",
+      "canonical_project": "content_engine",
+      "locations": [
+        "content_engine",
+        "zimm-command-center",
+        "zimm-command-center-archived"
+      ]
+    },
+    {
+      "skill_name": "seo-master",
+      "instances": 3,
+      "identical": true,
+      "canonical_path": "C:\\Claude Code Projects\\empire-master\\modules\\content_engine\\skills\\seo-master.md",
+      "canonical_project": "content_engine",
+      "locations": [
+        "content_engine",
+        "zimm-command-center",
+        "zimm-command-center-archived"
+      ]
+    },
+    {
+      "skill_name": "topical-authority",
+      "instances": 3,
+      "identical": true,
+      "canonical_path": "C:\\Claude Code Projects\\empire-master\\modules\\content_engine\\skills\\topical-authority.md",
+      "canonical_project": "content_engine",
+      "locations": [
+        "content_engine",
+        "zimm-command-center",
+        "zimm-command-center-archived"
+      ]
+    },
+    {
+      "skill_name": "topical-authority-map",
+      "instances": 3,
+      "identical": true,
+      "canonical_path": "C:\\Claude Code Projects\\empire-master\\modules\\content_engine\\skills\\topical-authority-map.md",
+      "canonical_project": "content_engine",
+      "locations": [
+        "content_engine",
+        "zimm-command-center",
+        "zimm-command-center-archived"
+      ]
+    },
+    {
+      "skill_name": "viral-hooks",
+      "instances": 3,
+      "identical": true,
+      "canonical_path": "C:\\Claude Code Projects\\empire-master\\modules\\content_engine\\skills\\viral-hooks.md",
+      "canonical_project": "content_engine",
+      "locations": [
+        "content_engine",
+        "zimm-command-center",
+        "zimm-command-center-archived"
+      ]
+    },
+    {
+      "skill_name": "visual_regression_skill",
+      "instances": 3,
+      "identical": true,
+      "canonical_path": "C:\\Claude Code Projects\\empire-master\\skills\\visual_regression_skill.md",
+      "canonical_project": "empire-master",
+      "locations": [
+        "empire-master",
+        "design-consistency-system",
+        "design-consistency-system-archived"
+      ]
+    }
+  ]
+}

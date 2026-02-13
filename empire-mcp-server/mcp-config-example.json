@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "empire-architect": {
+      "command": "python",
+      "args": ["C:\\Claude Code Projects\\empire-mcp-server\\server.py"],
+      "env": {}
+    }
+  }
+}
