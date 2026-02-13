@@ -1,0 +1,21 @@
+{
+  "screenpipe": {
+    "api_url": "http://localhost:3030",
+    "fps": 0.5,
+    "ocr_engine": "windows-native",
+    "disable_audio": false,
+    "retention_days": 30,
+    "data_dir": "D:\\screenpipe-data",
+    "excluded_windows": [
+      "1Password",
+      "KeePass",
+      "Windows Security"
+    ],
+    "included_windows": [],
+    "alert_keywords": {
+      "wordpress_errors": ["500 Internal Server Error", "database error", "fatal error", "Error establishing a database connection"],
+      "geelark_failures": ["profile failed", "rate limit", "captcha detected", "account suspended"],
+      "n8n_failures": ["workflow failed", "execution error", "timeout"]
+    }
+  }
+}

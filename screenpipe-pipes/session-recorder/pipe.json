@@ -1,0 +1,20 @@
+{
+  "name": "session-recorder",
+  "version": "1.0.0",
+  "description": "Correlates Screenpipe screen captures with GeeLark automation job IDs for post-mortem debugging.",
+  "crons": ["0 * * * * *"],
+  "fields": [
+    {
+      "name": "automation_api_url",
+      "type": "string",
+      "default": "http://localhost:8001",
+      "description": "GeeLark automation API base URL"
+    },
+    {
+      "name": "session_log_dir",
+      "type": "string",
+      "default": "D:\\Claude Code Projects\\geelark-automation\\logs\\sessions",
+      "description": "Directory for session correlation logs"
+    }
+  ]
+}

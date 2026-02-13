@@ -1,0 +1,82 @@
+{
+  "folders": [
+    {
+      "name": "geelark-automation",
+      "path": "geelark-automation"
+    },
+    {
+      "name": "empire-mcp-server",
+      "path": "empire-mcp-server"
+    },
+    {
+      "name": "empire-dashboard",
+      "path": "empire-dashboard"
+    },
+    {
+      "name": "article-audit-system",
+      "path": "article-audit-system"
+    },
+    {
+      "name": "empire-master",
+      "path": "empire-master"
+    },
+    {
+      "name": "nick-seo-content-engine",
+      "path": "nick-seo-content-engine"
+    },
+    {
+      "name": "canva-image-factory",
+      "path": "canva-image-factory-v2.1"
+    },
+    {
+      "name": "VelvetVeilPrintables",
+      "path": "VelvetVeilPrintables-ClaudeCode"
+    },
+    {
+      "name": "mysticpress",
+      "path": "mysticpress-project"
+    },
+    {
+      "name": "screenpipe-pipes",
+      "path": "screenpipe-pipes"
+    },
+    {
+      "name": "config",
+      "path": "config"
+    }
+  ],
+  "settings": {
+    "search.exclude": {
+      "**/_archive": true,
+      "**/__pycache__": true,
+      "**/screenshots": true,
+      "**/.venv*": true,
+      "**/node_modules": true,
+      "**/.env": true,
+      "**/*.pyc": true
+    },
+    "files.exclude": {
+      "**/__pycache__": true,
+      "**/*.pyc": true
+    },
+    "files.watcherExclude": {
+      "**/_archive/**": true,
+      "**/__pycache__/**": true,
+      "**/screenshots/**": true,
+      "**/.venv*/**": true,
+      "**/node_modules/**": true
+    },
+    "python.defaultInterpreterPath": "python",
+    "editor.formatOnSave": true,
+    "[python]": {
+      "editor.defaultFormatter": "ms-python.black-formatter"
+    }
+  },
+  "extensions": {
+    "recommendations": [
+      "ms-python.python",
+      "ms-python.black-formatter",
+      "augment.augment-vscode"
+    ]
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "empire-monitor",
+  "version": "1.0.0",
+  "description": "Monitors screen for WordPress errors, GeeLark failures, and n8n workflow issues. Sends alerts to empire-dashboard.",
+  "crons": ["*/30 * * * * *"],
+  "fields": [
+    {
+      "name": "dashboard_url",
+      "type": "string",
+      "default": "http://localhost:8000",
+      "description": "Empire dashboard base URL for alerts"
+    },
+    {
+      "name": "alert_cooldown_minutes",
+      "type": "number",
+      "default": 5,
+      "description": "Minimum minutes between duplicate alerts"
+    }
+  ]
+}

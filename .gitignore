@@ -1,0 +1,51 @@
+# Subdirectory projects (each has its own git repo)
+geelark-automation/
+empire-dashboard/
+nick-seo-content-engine/
+article-audit-system/
+design-consistency-system/
+canva-image-factory-v2.1/
+UnifiedDesignEmpire/
+VelvetVeilPrintables-ClaudeCode/
+3d-print-forge/
+ai-design-brain-v2-claude-code-project/
+vision-auditor-project/
+etsy-agent-v2/
+etsy agent/
+mysticpress/
+mysticpress-project/
+ecss/
+zimm-command-center/
+empire-intelligence-hub/
+...master controller/
+SEO link building agents*/
+_archive/
+
+# Environment & secrets
+*.env
+.env.*
+config/sites.json
+
+# Python
+__pycache__/
+*.pyc
+.venv*/
+*.egg-info/
+
+# Node
+node_modules/
+
+# Temp & generated
+*.log
+*.db
+/tmp/
+exports/
+nul
+
+# OS & IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.cursor/
+*.swp
