@@ -1,20 +1,28 @@
 {
   "folders": [
     {
-      "name": "geelark-automation",
-      "path": "geelark-automation"
-    },
-    {
-      "name": "empire-mcp-server",
-      "path": "empire-mcp-server"
+      "name": "empire-infrastructure",
+      "path": "."
     },
     {
       "name": "empire-dashboard",
       "path": "empire-dashboard"
     },
     {
+      "name": "empire-mcp-server",
+      "path": "empire-mcp-server"
+    },
+    {
+      "name": "geelark-automation",
+      "path": "geelark-automation"
+    },
+    {
       "name": "article-audit-system",
       "path": "article-audit-system"
+    },
+    {
+      "name": "screenpipe-pipes",
+      "path": "screenpipe-pipes"
     },
     {
       "name": "empire-master",
@@ -29,6 +37,14 @@
       "path": "canva-image-factory-v2.1"
     },
     {
+      "name": "empire-skill-library",
+      "path": "empire-skill-library"
+    },
+    {
+      "name": "empire-templates",
+      "path": "empire-templates"
+    },
+    {
       "name": "VelvetVeilPrintables",
       "path": "VelvetVeilPrintables-ClaudeCode"
     },
@@ -37,12 +53,76 @@
       "path": "mysticpress-project"
     },
     {
-      "name": "screenpipe-pipes",
-      "path": "screenpipe-pipes"
-    },
-    {
       "name": "config",
       "path": "config"
+    },
+    {
+      "name": "witchcraftforbeginners",
+      "path": "witchcraftforbeginners"
+    },
+    {
+      "name": "smarthomewizards",
+      "path": "smarthomewizards"
+    },
+    {
+      "name": "mythicalarchives",
+      "path": "mythicalarchives"
+    },
+    {
+      "name": "bulletjournals",
+      "path": "bulletjournals"
+    },
+    {
+      "name": "wealthfromai",
+      "path": "wealthfromai"
+    },
+    {
+      "name": "aidiscoverydigest",
+      "path": "aidiscoverydigest"
+    },
+    {
+      "name": "aiinactionhub",
+      "path": "aiinactionhub"
+    },
+    {
+      "name": "pulsegearreviews",
+      "path": "pulsegearreviews"
+    },
+    {
+      "name": "wearablegearreviews",
+      "path": "wearablegearreviews"
+    },
+    {
+      "name": "smarthomegearreviews",
+      "path": "smarthomegearreviews"
+    },
+    {
+      "name": "clearainews",
+      "path": "clearainews"
+    },
+    {
+      "name": "theconnectedhaven",
+      "path": "theconnectedhaven"
+    },
+    {
+      "name": "manifestandalign",
+      "path": "manifestandalign"
+    },
+    {
+      "name": "family-flourish",
+      "path": "family-flourish"
+    },
+    {
+      "name": "celebrationseason",
+      "path": "celebrationseason"
+    },
+    {
+      "name": "3d-print-forge",
+      "path": "3d-print-forge"
+    },
+    {
+      "name": "Sprout-and-Spruce",
+      "path": "Sprout-and-Spruce"
     }
   ],
   "settings": {
@@ -53,11 +133,14 @@
       "**/.venv*": true,
       "**/node_modules": true,
       "**/.env": true,
-      "**/*.pyc": true
+      "**/*.pyc": true,
+      "**/*.min.js": true,
+      "**/*.min.css": true
     },
     "files.exclude": {
       "**/__pycache__": true,
-      "**/*.pyc": true
+      "**/*.pyc": true,
+      "**/.venv*": true
     },
     "files.watcherExclude": {
       "**/_archive/**": true,
@@ -66,6 +149,17 @@
       "**/.venv*/**": true,
       "**/node_modules/**": true
     },
+    "augment.advanced.excludePatterns": [
+      "_archive/**",
+      "**/__pycache__/**",
+      "**/.venv*/**",
+      "**/node_modules/**",
+      "**/screenshots/**",
+      "**/.env",
+      "**/.env.*",
+      "**/credentials*",
+      "**/*.pyc"
+    ],
     "python.defaultInterpreterPath": "python",
     "editor.formatOnSave": true,
     "[python]": {

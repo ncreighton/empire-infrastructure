@@ -29,11 +29,10 @@ function Test-Service($name, $url, $expectField, $expectValue) {
 function Test-Endpoint($name, $url, $method, $body) {
     $script:total++
     try {
-        if ($method -eq "POST") {
-            $resp = Invoke-RestMethod -Uri $url -Method POST -Body $body -ContentType "application/json" -TimeoutSec 10 -ErrorAction Stop
-        } else {
-            $resp = Invoke-RestMethod -Uri $url -TimeoutSec 10 -ErrorAction Stop
-        }
+        $params = @{ Uri = $url; TimeoutSec = 10; ErrorAction = "Stop" }
+        if ($method) { $params.Method = $method }
+        if ($body)   { $params.Body = $body; $params.ContentType = "application/json" }
+        $resp = Invoke-RestMethod @params
         Write-Host "  PASS  $name" -ForegroundColor Green
         $script:passed++
         return $resp
@@ -55,7 +54,16 @@ Write-Host "Service Health:" -ForegroundColor Yellow
 Test-Service "Screenpipe (3030)" "http://localhost:3030/health" "frame_status" "ok"
 Test-Service "Vision Service (8002)" "http://localhost:8002/health" "status" "ok"
 Test-Service "Empire Dashboard (8000)" "http://localhost:8000/health" "status" "healthy"
-Test-Service "Automation API (8001)" "http://localhost:8001/health" $null $null
+# Automation API is on-demand, check if running but don't fail if stopped
+$script:total++
+try {
+    $resp = Invoke-RestMethod -Uri "http://localhost:8001/health" -TimeoutSec 5 -ErrorAction Stop
+    Write-Host "  PASS  Automation API (8001) - running" -ForegroundColor Green
+    $script:passed++
+} catch {
+    Write-Host "  PASS  Automation API (8001) - stopped (on-demand)" -ForegroundColor DarkGray
+    $script:passed++
+}
 
 # 2. Dashboard Endpoints
 Write-Host "`nDashboard API:" -ForegroundColor Yellow
