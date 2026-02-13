@@ -27,9 +27,20 @@ if (Test-Path $bunPath) {
     $env:Path = "$bunPath;$env:Path"
 }
 
-# Start Screenpipe with pipe manager enabled
+# Start Screenpipe with pipe manager and optimized settings
+# --fps 1: 1 frame/sec = ~30GB/month (default, lowest storage)
+# --video-chunk-duration 120: 2-min chunks (fewer files)
+# --ignored-windows: skip noisy/private apps from OCR
 try {
-    & $screenpipeBin --enable-pipe-manager
+    & $screenpipeBin `
+        --enable-pipe-manager `
+        --fps 1 `
+        --video-chunk-duration 120 `
+        --ignored-windows "Bitwarden" `
+        --ignored-windows "1Password" `
+        --ignored-windows "KeePass" `
+        --ignored-windows "Private" `
+        --ignored-windows "Incognito"
 }
 catch {
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
