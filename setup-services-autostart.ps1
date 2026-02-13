@@ -1,5 +1,5 @@
-# Setup Screenpipe + Vision Service Auto-Start Tasks
-# Creates scheduled tasks to start both services at Windows login
+# Setup Empire Services Auto-Start Tasks
+# Creates scheduled tasks to start all services at Windows login
 # Run: powershell -ExecutionPolicy Bypass -File setup-services-autostart.ps1
 
 $services = @(
@@ -12,6 +12,11 @@ $services = @(
         Name = "Vision Service"
         Description = "Starts Vision AI service at login (port 8002)"
         VbsPath = "D:\Claude Code Projects\launchers\launch-vision-service.vbs"
+    },
+    @{
+        Name = "Empire Dashboard"
+        Description = "Starts Empire Dashboard at login (port 8000)"
+        VbsPath = "D:\Claude Code Projects\launchers\launch-empire-dashboard.vbs"
     }
 )
 
@@ -64,13 +69,14 @@ Write-Host "  Auto-Start Tasks Created!" -ForegroundColor Green
 Write-Host "================================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Services will start automatically at login:" -ForegroundColor White
-Write-Host "  - Screenpipe     -> http://localhost:3030" -ForegroundColor White
-Write-Host "  - Vision Service -> http://localhost:8002" -ForegroundColor White
+Write-Host "  - Screenpipe        -> http://localhost:3030" -ForegroundColor White
+Write-Host "  - Vision Service    -> http://localhost:8002" -ForegroundColor White
+Write-Host "  - Empire Dashboard  -> http://localhost:8000" -ForegroundColor White
 Write-Host ""
 Write-Host "Logs at: $env:LOCALAPPDATA\EmpireArchitect\" -ForegroundColor Gray
 Write-Host ""
 
 # Show task status
-Get-ScheduledTask -TaskName "Screenpipe", "Vision Service" -ErrorAction SilentlyContinue |
+Get-ScheduledTask -TaskName "Screenpipe", "Vision Service", "Empire Dashboard" -ErrorAction SilentlyContinue |
     Select-Object TaskName, State |
     Format-Table -AutoSize
