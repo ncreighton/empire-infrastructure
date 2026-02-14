@@ -556,18 +556,24 @@ class ZimmWriterController:
         """
         hwnd = combo.handle
 
+        # Ensure SendMessageW has correct argtypes (critical for 64-bit Python
+        # calling into 32-bit apps — without this, pointer args get truncated)
+        _SendMsg = ctypes.windll.user32.SendMessageW
+        _SendMsg.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+        _SendMsg.restype = ctypes.c_long
+
         # Strategy 1: Win32 CB_FINDSTRINGEXACT + CB_SETCURSEL
         try:
             text_buf = ctypes.create_unicode_buffer(value)
-            idx = ctypes.windll.user32.SendMessageW(
+            idx = _SendMsg(
                 hwnd, 0x0158, -1, ctypes.addressof(text_buf)  # CB_FINDSTRINGEXACT
             )
             if idx >= 0:
-                ctypes.windll.user32.SendMessageW(
-                    hwnd, 0x014E, idx, 0  # CB_SETCURSEL
-                )
+                _SendMsg(hwnd, 0x014E, idx, 0)  # CB_SETCURSEL
                 logger.debug(f"Combo selected via CB_SETCURSEL: index={idx}")
                 return True
+            else:
+                logger.debug(f"CB_FINDSTRINGEXACT found no match for '{value}'")
         except Exception as e:
             logger.debug(f"CB_SETCURSEL failed: {e}")
 
@@ -1542,6 +1548,7 @@ class ZimmWriterController:
             voice=config.get("voice"),
             intro=config.get("intro"),
             faq=config.get("faq"),
+            audience_personality=config.get("audience_personality"),
             ai_model=config.get("ai_model"),
             style_of=config.get("style_of"),
             featured_image=config.get("featured_image"),
