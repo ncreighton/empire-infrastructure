@@ -22,26 +22,19 @@ function Run-Cmd {
     }
 }
 
-# scp on Windows doesn't expand * globs — use PowerShell to resolve them
-function Scp-Dir {
+# Pipe a tar stream over SSH — single connection per directory
+# Use Git's GNU tar (Windows System32 bsdtar produces incompatible streams)
+$gnuTar = "C:\Program Files\Git\usr\bin\tar.exe"
+function Tar-Upload {
     param([string]$LocalDir, [string]$RemotePath)
     if (-not (Test-Path $LocalDir)) {
         Write-Host "  SKIP: $LocalDir not found" -ForegroundColor DarkGray
         return
     }
-    $exclude = @('.git', '__pycache__', 'nul', '.claude', '*.pyc', 'node_modules')
-    $items = Get-ChildItem -Path $LocalDir | Where-Object {
-        $name = $_.Name
-        -not ($exclude | Where-Object { $name -like $_ })
-    }
-    Write-Host "  $($items.Count) items from $LocalDir" -ForegroundColor DarkGray
-    foreach ($item in $items) {
-        if ($item.PSIsContainer) {
-            Run-Cmd "scp -r `"$($item.FullName)`" `"${RemotePath}`""
-        } else {
-            Run-Cmd "scp `"$($item.FullName)`" `"${RemotePath}`""
-        }
-    }
+    $excludes = "--exclude=.git --exclude=__pycache__ --exclude=.claude --exclude=*.pyc --exclude=node_modules --exclude=.venv --exclude=nul"
+    $cmd = "& `"$gnuTar`" -cf - -C `"$LocalDir`" $excludes . | ssh `"$dest`" `"mkdir -p $RemotePath && tar -xf - -C $RemotePath`""
+    Write-Host "  tar+ssh: $LocalDir -> $RemotePath" -ForegroundColor DarkGray
+    Run-Cmd $cmd
 }
 
 $mode = if ($DryRun) { "DRY RUN" } else { "LIVE" }
@@ -59,32 +52,32 @@ Run-Cmd "scp `"$projectRoot\server\nginx-empire.conf`" `"${dest}:/opt/empire/`""
 
 # Upload dashboard
 Write-Host "[2/7] Uploading dashboard..." -ForegroundColor Yellow
-Scp-Dir "$projectRoot\empire-dashboard" "${dest}:/opt/empire/dashboard/"
+Tar-Upload "$projectRoot\empire-dashboard" "/opt/empire/dashboard"
 Run-Cmd "scp `"$projectRoot\server\dashboard\Dockerfile`" `"${dest}:/opt/empire/dashboard/`""
 
 # Upload article-audit
 Write-Host "[3/7] Uploading article-audit..." -ForegroundColor Yellow
-Scp-Dir "$projectRoot\article-audit-system" "${dest}:/opt/empire/article-audit/"
+Tar-Upload "$projectRoot\article-audit-system" "/opt/empire/article-audit"
 Run-Cmd "scp `"$projectRoot\server\article-audit\Dockerfile`" `"${dest}:/opt/empire/article-audit/`""
 
 # Upload shared config
 Write-Host "[4/7] Uploading shared config..." -ForegroundColor Yellow
-Scp-Dir "$projectRoot\config" "${dest}:/opt/empire/config/"
+Tar-Upload "$projectRoot\config" "/opt/empire/config"
 
 # Upload skill library (FORGE/AMPLIFY intelligence)
 Write-Host "[5/7] Uploading skill library..." -ForegroundColor Yellow
 Run-Cmd "ssh `"$dest`" `"mkdir -p /opt/empire/skill-library/configs`""
 Run-Cmd "scp `"$projectRoot\empire-skill-library\skills\forge-amplify-intelligence\forge_amplify_engine.py`" `"${dest}:/opt/empire/skill-library/`""
 Run-Cmd "scp `"$projectRoot\empire-skill-library\skills\forge-amplify-intelligence\skill.json`" `"${dest}:/opt/empire/skill-library/`""
-Scp-Dir "$projectRoot\empire-skill-library\skills\forge-amplify-intelligence\configs" "${dest}:/opt/empire/skill-library/configs/"
+Tar-Upload "$projectRoot\empire-skill-library\skills\forge-amplify-intelligence\configs" "/opt/empire/skill-library/configs"
 
 # Upload n8n workflows (article-audit + empire-master)
 Write-Host "[6/7] Uploading n8n workflows..." -ForegroundColor Yellow
 Run-Cmd "ssh `"$dest`" `"mkdir -p /opt/empire/n8n-workflows`""
-Scp-Dir "$projectRoot\article-audit-system\n8n-workflows" "${dest}:/opt/empire/n8n-workflows/"
-Scp-Dir "$projectRoot\empire-master\workflows" "${dest}:/opt/empire/n8n-workflows/"
+Tar-Upload "$projectRoot\article-audit-system\n8n-workflows" "/opt/empire/n8n-workflows"
+Tar-Upload "$projectRoot\empire-master\workflows" "/opt/empire/n8n-workflows"
 if (Test-Path "$projectRoot\n8n") {
-    Scp-Dir "$projectRoot\n8n" "${dest}:/opt/empire/n8n-workflows/"
+    Tar-Upload "$projectRoot\n8n" "/opt/empire/n8n-workflows"
 }
 
 # Rebuild and restart containers
