@@ -46,11 +46,13 @@ services:
       - ./config:/app/config:ro
       - ./config:/config:ro
       - ./skill-library:/app/skill-library:ro
+      - article-audit-data:/app/data
     networks:
       - empire
 
 volumes:
   n8n-data:
+  article-audit-data:
 
 networks:
   empire:
