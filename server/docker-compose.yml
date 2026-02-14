@@ -45,6 +45,7 @@ services:
     volumes:
       - ./config:/app/config:ro
       - ./config:/config:ro
+      - ./skill-library:/app/skill-library:ro
     networks:
       - empire
 
