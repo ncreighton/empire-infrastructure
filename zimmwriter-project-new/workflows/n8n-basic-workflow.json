@@ -1,0 +1,48 @@
+{
+  "name": "ZimmWriter - Basic Job",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [{ "field": "hours", "hoursInterval": 6 }] } },
+      "name": "Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [250, 300]
+    },
+    {
+      "parameters": { "method": "POST", "url": "http://localhost:8765/connect", "options": {} },
+      "name": "Connect",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [470, 300]
+    },
+    {
+      "parameters": { "method": "POST", "url": "http://localhost:8765/presets/smarthomewizards.com/apply", "options": {} },
+      "name": "Apply Preset",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8765/load-csv",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{ \"csv_path\": \"C:\\\\ZimmWriter\\\\batches\\\\smart_home.csv\" }",
+        "options": {}
+      },
+      "name": "Load CSV",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [910, 300]
+    },
+    {
+      "parameters": { "method": "POST", "url": "http://localhost:8765/start", "options": {} },
+      "name": "Start",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1130, 300]
+    }
+  ],
+  "connections": {
+    "Schedule": { "main": [[{ "node": "Connect", "type": "main", "index": 0 }]] },
+    "Connect": { "main": [[{ "node": "Apply Preset", "type": "main", "index": 0 }]] },
+    "Apply Preset": { "main": [[{ "node": "Load CSV", "type": "main", "index": 0 }]] },
+    "Load CSV": { "main": [[{ "node": "Start", "type": "main", "index": 0 }]] }
+  }
+}

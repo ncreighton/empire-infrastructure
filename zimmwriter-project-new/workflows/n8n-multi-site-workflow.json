@@ -1,0 +1,27 @@
+{
+  "name": "ZimmWriter - Multi-Site Orchestration",
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "zimmwriter-orchestrate", "responseMode": "onReceived" },
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8765/orchestrate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ jobs: $json.body.jobs || [ { domain: 'smarthomewizards.com', csv_path: 'C:\\\\batches\\\\smart_home.csv' }, { domain: 'witchcraftforbeginners.com', csv_path: 'C:\\\\batches\\\\witchcraft.csv' }, { domain: 'mythicalarchives.com', csv_path: 'C:\\\\batches\\\\mythology.csv' } ], delay_between: $json.body.delay_between || 10 }) }}",
+        "options": { "timeout": 86400000 }
+      },
+      "name": "Run Orchestration",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [470, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": { "main": [[{ "node": "Run Orchestration", "type": "main", "index": 0 }]] }
+  }
+}

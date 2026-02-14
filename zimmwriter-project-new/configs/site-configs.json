@@ -1,0 +1,1014 @@
+{
+  "sites": {
+    "aiinactionhub.com": {
+      "niche": "AI & Technology",
+      "tone": "professional, authoritative, technical",
+      "word_count": {
+        "min": 2000,
+        "max": 2500,
+        "default": 2200
+      },
+      "seo": {
+        "keyword_density": "1-2%",
+        "keywords_per_subheading": "2-3",
+        "long_tail_focus": true
+      },
+      "structure": {
+        "h2_count": "automatic",
+        "h2_limit": 10,
+        "h3_enabled": true,
+        "enable_toc": true,
+        "enable_faq": true,
+        "enable_key_takeaways": true
+      },
+      "links": {
+        "internal_per_article": 3,
+        "external_per_article": 2,
+        "affiliate_enabled": true,
+        "affiliate_placement": "contextual"
+      },
+      "content_features": {
+        "enable_lists": true,
+        "enable_tables": true,
+        "enable_blockquotes": true,
+        "enable_literary_devices": false,
+        "section_length": "medium",
+        "voice": "second_person"
+      },
+      "wordpress": {
+        "default_category": "AI Technology",
+        "post_status": "draft",
+        "auto_publish": false
+      },
+      "ai_settings": {
+        "writing_model": "Claude-4.5 Sonnet (ANT)",
+        "image_model": "None",
+        "enable_serp_scraping": true,
+        "deep_research": false,
+        "style_mimic": false
+      },
+      "special_requirements": [
+        "Include technical depth and code examples where relevant",
+        "Add affiliate links for AI tools and software",
+        "Use industry terminology appropriately",
+        "Include practical implementation examples"
+      ]
+    },
+    "smarthomewizards.com": {
+      "niche": "Smart Home Automation",
+      "tone": "friendly, helpful, technical but accessible",
+      "word_count": {
+        "min": 1800,
+        "max": 2200,
+        "default": 2000
+      },
+      "seo": {
+        "keyword_density": "1.5-2%",
+        "keywords_per_subheading": "2-3",
+        "long_tail_focus": true
+      },
+      "structure": {
+        "h2_count": "automatic",
+        "h2_limit": 10,
+        "h3_enabled": true,
+        "enable_toc": true,
+        "enable_faq": true,
+        "enable_key_takeaways": true
+      },
+      "links": {
+        "internal_per_article": 4,
+        "external_per_article": 2,
+        "affiliate_enabled": true,
+        "affiliate_placement": "product_reviews"
+      },
+      "content_features": {
+        "enable_lists": true,
+        "enable_tables": true,
+        "enable_blockquotes": false,
+        "enable_literary_devices": false,
+        "section_length": "medium",
+        "voice": "second_person"
+      },
+      "wordpress": {
+        "default_category": "Smart Home Guides",
+        "post_status": "draft",
+        "auto_publish": false
+      },
+      "ai_settings": {
+        "writing_model": "Claude-4.5 Sonnet (ANT)",
+        "image_model": "None",
+        "enable_serp_scraping": true,
+        "deep_research": false,
+        "style_mimic": false
+      },
+      "special_requirements": [
+        "Include product compatibility information",
+        "Add setup/installation guides",
+        "Compare competing products",
+        "Include Amazon affiliate links for products"
+      ]
+    },
+    "witchcraftforbeginners.com": {
+      "niche": "Witchcraft & Spirituality",
+      "tone": "mystical, supportive, educational",
+      "word_count": {
+        "min": 1500,
+        "max": 2000,
+        "default": 1800
+      },
+      "seo": {
+        "keyword_density": "1-1.5%",
+        "keywords_per_subheading": "2-3",
+        "long_tail_focus": true
+      },
+      "structure": {
+        "h2_count": "automatic",
+        "h2_limit": 8,
+        "h3_enabled": true,
+        "enable_toc": true,
+        "enable_faq": true,
+        "enable_key_takeaways": true
+      },
+      "links": {
+        "internal_per_article": 5,
+        "external_per_article": 1,
+        "affiliate_enabled": true,
+        "affiliate_placement": "contextual"
+      },
+      "content_features": {
+        "enable_lists": true,
+        "enable_tables": false,
+        "enable_blockquotes": true,
+        "enable_literary_devices": true,
+        "section_length": "medium",
+        "voice": "second_person"
+      },
+      "wordpress": {
+        "default_category": "Witchcraft Basics",
+        "post_status": "draft",
+        "auto_publish": false
+      },
+      "ai_settings": {
+        "writing_model": "Claude-4.5 Sonnet (ANT)",
+        "image_model": "None",
+        "enable_serp_scraping": false,
+        "deep_research": false,
+        "style_mimic": false
+      },
+      "special_requirements": [
+        "Respectful and inclusive language",
+        "Historical context for practices",
+        "Safety warnings where appropriate",
+        "Beginner-friendly explanations"
+      ]
+    },
+    "family-flourish.com": {
+      "niche": "Family & Parenting",
+      "tone": "warm, supportive, practical",
+      "word_count": {
+        "min": 1500,
+        "max": 2000,
+        "default": 1750
+      },
+      "seo": {
+        "keyword_density": "1-1.5%",
+        "keywords_per_subheading": "2-3",
+        "long_tail_focus": true
+      },
+      "structure": {
+        "h2_count": "automatic",
+        "h2_limit": 8,
+        "h3_enabled": true,
+        "enable_toc": true,
+        "enable_faq": true,
+        "enable_key_takeaways": true
+      },
+      "links": {
+        "internal_per_article": 4,
+        "external_per_article": 2,
+        "affiliate_enabled": true,
+        "affiliate_placement": "product_recommendations"
+      },
+      "content_features": {
+        "enable_lists": true,
+        "enable_tables": false,
+        "enable_blockquotes": true,
+        "enable_literary_devices": false,
+        "section_length": "medium",
+        "voice": "second_person"
+      },
+      "wordpress": {
+        "default_category": "Family Life",
+        "post_status": "draft",
+        "auto_publish": false
+      },
+      "ai_settings": {
+        "writing_model": "Claude-4.5 Sonnet (ANT)",
+        "image_model": "None",
+        "enable_serp_scraping": false,
+        "deep_research": false,
+        "style_mimic": false
+      },
+      "special_requirements": [
+        "Age-appropriate advice",
+        "Empathetic tone",
+        "Practical actionable tips",
+        "Evidence-based where possible"
+      ]
+    },
+    "mythicalarchives.com": {
+      "niche": "Mythology & Folklore",
+      "tone": "scholarly, engaging, narrative",
+      "word_count": {
+        "min": 2000,
+        "max": 2500,
+        "default": 2200
+      },
+      "seo": {
+        "keyword_density": "1-2%",
+        "keywords_per_subheading": "2-3",
+        "long_tail_focus": true
+      },
+      "structure": {
+        "h2_count": "automatic",
+        "h2_limit": 10,
+        "h3_enabled": true,
+        "enable_toc": true,
+        "enable_faq": true,
+        "enable_key_takeaways": true
+      },
+      "links": {
+        "internal_per_article": 5,
+        "external_per_article": 2,
+        "affiliate_enabled": true,
+        "affiliate_placement": "book_recommendations"
+      },
+      "content_features": {
+        "enable_lists": true,
+        "enable_tables": true,
+        "enable_blockquotes": true,
+        "enable_literary_devices": true,
+        "section_length": "long",
+        "voice": "third_person"
+      },
+      "wordpress": {
+        "default_category": "Mythology",
+        "post_status": "draft",
+        "auto_publish": false
+      },
+      "ai_settings": {
+        "writing_model": "Claude-4.5 Sonnet (ANT)",
+        "image_model": "None",
+        "enable_serp_scraping": true,
+        "deep_research": false,
+        "style_mimic": false
+      },
+      "special_requirements": [
+        "Historical accuracy",
+        "Cultural sensitivity",
+        "Source citations",
+        "Engaging storytelling"
+      ]
+    },
+    "smarthomegearreviews.com": {
+      "niche": "Smart Home Product Reviews",
+      "tone": "trustworthy, analytical, comparison-focused",
+      "word_count": {
+        "min": 2000,
+        "max": 2500,
+        "default": 2200
+      },
+      "seo": {
+        "keyword_density": "1.5-2%",
+        "keywords_per_subheading": "3-4",
+        "long_tail_focus": true
+      },
+      "structure": {
+        "h2_count": "automatic",
+        "h2_limit": 10,
+        "h3_enabled": true,
+        "enable_toc": true,
+        "enable_faq": true,
+        "enable_key_takeaways": true
+      },
+      "links": {
+        "internal_per_article": 4,
+        "external_per_article": 1,
+        "affiliate_enabled": true,
+        "affiliate_placement": "product_reviews"
+      },
+      "content_features": {
+        "enable_lists": true,
+        "enable_tables": true,
+        "enable_blockquotes": false,
+        "enable_literary_devices": false,
+        "section_length": "medium",
+        "voice": "second_person"
+      },
+      "wordpress": {
+        "default_category": "Product Reviews",
+        "post_status": "draft",
+        "auto_publish": false
+      },
+      "ai_settings": {
+        "writing_model": "Claude-4.5 Sonnet (ANT)",
+        "image_model": "None",
+        "enable_serp_scraping": true,
+        "deep_research": false,
+        "style_mimic": false
+      },
+      "special_requirements": [
+        "Detailed specs and comparisons",
+        "Hands-on testing perspective",
+        "Pros/cons tables required",
+        "Amazon affiliate links for all products"
+      ]
+    },
+    "theconnectedhaven.com": {
+      "niche": "Smart Home Lifestyle & Wellness",
+      "tone": "aspirational, lifestyle-focused, modern",
+      "word_count": {
+        "min": 1600,
+        "max": 2000,
+        "default": 1800
+      },
+      "seo": {
+        "keyword_density": "1-1.5%",
+        "keywords_per_subheading": "2-3",
+        "long_tail_focus": true
+      },
+      "structure": {
+        "h2_count": "automatic",
+        "h2_limit": 8,
+        "h3_enabled": true,
+        "enable_toc": true,
+        "enable_faq": true,
+        "enable_key_takeaways": true
+      },
+      "links": {
+        "internal_per_article": 4,
+        "external_per_article": 2,
+        "affiliate_enabled": true,
+        "affiliate_placement": "contextual"
+      },
+      "content_features": {
+        "enable_lists": true,
+        "enable_tables": false,
+        "enable_blockquotes": true,
+        "enable_literary_devices": true,
+        "section_length": "medium",
+        "voice": "second_person"
+      },
+      "wordpress": {
+        "default_category": "Connected Living",
+        "post_status": "draft",
+        "auto_publish": false
+      },
+      "ai_settings": {
+        "writing_model": "Claude-4.5 Sonnet (ANT)",
+        "image_model": "None",
+        "enable_serp_scraping": false,
+        "deep_research": false,
+        "style_mimic": false
+      },
+      "special_requirements": [
+        "Lifestyle and wellness angle",
+        "Interior design integration",
+        "Sustainability focus",
+        "Aspirational but achievable tone"
+      ]
+    },
+    "clearainews.com": {
+      "niche": "AI News & Tech Journalism",
+      "tone": "journalistic, authoritative, clear",
+      "word_count": {
+        "min": 1200,
+        "max": 1800,
+        "default": 1500
+      },
+      "seo": {
+        "keyword_density": "1-1.5%",
+        "keywords_per_subheading": "2-3",
+        "long_tail_focus": false
+      },
+      "structure": {
+        "h2_count": "automatic",
+        "h2_limit": 8,
+        "h3_enabled": true,
+        "enable_toc": false,
+        "enable_faq": false,
+        "enable_key_takeaways": true
+      },
+      "links": {
+        "internal_per_article": 3,
+        "external_per_article": 4,
+        "affiliate_enabled": false,
+        "affiliate_placement": "none"
+      },
+      "content_features": {
+        "enable_lists": true,
+        "enable_tables": false,
+        "enable_blockquotes": true,
+        "enable_literary_devices": false,
+        "section_length": "short",
+        "voice": "third_person"
+      },
+      "wordpress": {
+        "default_category": "AI News",
+        "post_status": "draft",
+        "auto_publish": false
+      },
+      "ai_settings": {
+        "writing_model": "Claude-4.5 Sonnet (ANT)",
+        "image_model": "None",
+        "enable_serp_scraping": true,
+        "deep_research": true,
+        "style_mimic": false
+      },
+      "special_requirements": [
+        "News-style inverted pyramid",
+        "MIT Tech Review / The Verge style",
+        "Fact-check all claims",
+        "Source attribution required"
+      ]
+    },
+    "aidiscoverydigest.com": {
+      "niche": "AI Research & Analysis",
+      "tone": "research-focused, analytical, high-authority",
+      "word_count": {
+        "min": 2200,
+        "max": 3000,
+        "default": 2500
+      },
+      "seo": {
+        "keyword_density": "1-2%",
+        "keywords_per_subheading": "2-3",
+        "long_tail_focus": true
+      },
+      "structure": {
+        "h2_count": "automatic",
+        "h2_limit": 12,
+        "h3_enabled": true,
+        "enable_toc": true,
+        "enable_faq": true,
+        "enable_key_takeaways": true
+      },
+      "links": {
+        "internal_per_article": 5,
+        "external_per_article": 4,
+        "affiliate_enabled": false,
+        "affiliate_placement": "none"
+      },
+      "content_features": {
+        "enable_lists": true,
+        "enable_tables": true,
+        "enable_blockquotes": true,
+        "enable_literary_devices": false,
+        "section_length": "long",
+        "voice": "third_person"
+      },
+      "wordpress": {
+        "default_category": "AI Research",
+        "post_status": "draft",
+        "auto_publish": false
+      },
+      "ai_settings": {
+        "writing_model": "Claude-4.5 Sonnet (ANT)",
+        "image_model": "None",
+        "enable_serp_scraping": true,
+        "deep_research": true,
+        "style_mimic": false
+      },
+      "special_requirements": [
+        "Deep technical analysis",
+        "Research paper citations",
+        "Model comparisons with data",
+        "Ethical considerations included"
+      ]
+    },
+    "wearablegearreviews.com": {
+      "niche": "Wearable Tech Reviews",
+      "tone": "hands-on, comparison-focused, fitness-oriented",
+      "word_count": {
+        "min": 1800,
+        "max": 2300,
+        "default": 2000
+      },
+      "seo": {
+        "keyword_density": "1.5-2%",
+        "keywords_per_subheading": "3-4",
+        "long_tail_focus": true
+      },
+      "structure": {
+        "h2_count": "automatic",
+        "h2_limit": 10,
+        "h3_enabled": true,
+        "enable_toc": true,
+        "enable_faq": true,
+        "enable_key_takeaways": true
+      },
+      "links": {
+        "internal_per_article": 4,
+        "external_per_article": 1,
+        "affiliate_enabled": true,
+        "affiliate_placement": "product_reviews"
+      },
+      "content_features": {
+        "enable_lists": true,
+        "enable_tables": true,
+        "enable_blockquotes": false,
+        "enable_literary_devices": false,
+        "section_length": "medium",
+        "voice": "second_person"
+      },
+      "wordpress": {
+        "default_category": "Wearable Reviews",
+        "post_status": "draft",
+        "auto_publish": false
+      },
+      "ai_settings": {
+        "writing_model": "Claude-4.5 Sonnet (ANT)",
+        "image_model": "None",
+        "enable_serp_scraping": true,
+        "deep_research": false,
+        "style_mimic": false
+      },
+      "special_requirements": [
+        "Detailed spec comparisons",
+        "Real-world testing scenarios",
+        "Battery life emphasis",
+        "Amazon affiliate links"
+      ]
+    },
+    "pulsegearreviews.com": {
+      "niche": "EDC & Tactical Gear Reviews",
+      "tone": "rugged, field-tested, reliability-focused",
+      "word_count": {
+        "min": 1800,
+        "max": 2200,
+        "default": 2000
+      },
+      "seo": {
+        "keyword_density": "1.5-2%",
+        "keywords_per_subheading": "3-4",
+        "long_tail_focus": true
+      },
+      "structure": {
+        "h2_count": "automatic",
+        "h2_limit": 10,
+        "h3_enabled": true,
+        "enable_toc": true,
+        "enable_faq": true,
+        "enable_key_takeaways": true
+      },
+      "links": {
+        "internal_per_article": 4,
+        "external_per_article": 1,
+        "affiliate_enabled": true,
+        "affiliate_placement": "product_reviews"
+      },
+      "content_features": {
+        "enable_lists": true,
+        "enable_tables": true,
+        "enable_blockquotes": false,
+        "enable_literary_devices": false,
+        "section_length": "medium",
+        "voice": "second_person"
+      },
+      "wordpress": {
+        "default_category": "EDC Reviews",
+        "post_status": "draft",
+        "auto_publish": false
+      },
+      "ai_settings": {
+        "writing_model": "Claude-4.5 Sonnet (ANT)",
+        "image_model": "None",
+        "enable_serp_scraping": true,
+        "deep_research": false,
+        "style_mimic": false
+      },
+      "special_requirements": [
+        "Durability testing emphasis",
+        "Field-use scenarios",
+        "Materials and build quality",
+        "Tactical/outdoor focus"
+      ]
+    },
+    "aiinactionblueprint.com": {
+      "niche": "AI Automation & Workflows",
+      "tone": "technical, actionable, systems-focused",
+      "word_count": {
+        "min": 2000,
+        "max": 2800,
+        "default": 2400
+      },
+      "seo": {
+        "keyword_density": "1-2%",
+        "keywords_per_subheading": "2-3",
+        "long_tail_focus": true
+      },
+      "structure": {
+        "h2_count": "automatic",
+        "h2_limit": 12,
+        "h3_enabled": true,
+        "enable_toc": true,
+        "enable_faq": true,
+        "enable_key_takeaways": true
+      },
+      "links": {
+        "internal_per_article": 5,
+        "external_per_article": 2,
+        "affiliate_enabled": true,
+        "affiliate_placement": "tool_recommendations"
+      },
+      "content_features": {
+        "enable_lists": true,
+        "enable_tables": true,
+        "enable_blockquotes": false,
+        "enable_literary_devices": false,
+        "section_length": "long",
+        "voice": "second_person"
+      },
+      "wordpress": {
+        "default_category": "Automation Blueprints",
+        "post_status": "draft",
+        "auto_publish": false
+      },
+      "ai_settings": {
+        "writing_model": "Claude-4.5 Sonnet (ANT)",
+        "image_model": "None",
+        "enable_serp_scraping": false,
+        "deep_research": false,
+        "style_mimic": false
+      },
+      "special_requirements": [
+        "Step-by-step workflows",
+        "Make.com/Zapier focus",
+        "Screenshots/diagrams mentioned",
+        "Repeatable templates"
+      ]
+    },
+    "wealthfromai.com": {
+      "niche": "AI-Powered Income Strategies",
+      "tone": "entrepreneurial, practical, opportunity-focused",
+      "word_count": {
+        "min": 1800,
+        "max": 2400,
+        "default": 2100
+      },
+      "seo": {
+        "keyword_density": "1.5-2%",
+        "keywords_per_subheading": "3-4",
+        "long_tail_focus": true
+      },
+      "structure": {
+        "h2_count": "automatic",
+        "h2_limit": 10,
+        "h3_enabled": true,
+        "enable_toc": true,
+        "enable_faq": true,
+        "enable_key_takeaways": true
+      },
+      "links": {
+        "internal_per_article": 4,
+        "external_per_article": 2,
+        "affiliate_enabled": true,
+        "affiliate_placement": "tool_recommendations"
+      },
+      "content_features": {
+        "enable_lists": true,
+        "enable_tables": true,
+        "enable_blockquotes": true,
+        "enable_literary_devices": false,
+        "section_length": "medium",
+        "voice": "second_person"
+      },
+      "wordpress": {
+        "default_category": "AI Income Strategies",
+        "post_status": "draft",
+        "auto_publish": false
+      },
+      "ai_settings": {
+        "writing_model": "Claude-4.5 Sonnet (ANT)",
+        "image_model": "None",
+        "enable_serp_scraping": false,
+        "deep_research": false,
+        "style_mimic": false
+      },
+      "special_requirements": [
+        "Actionable income strategies",
+        "Real monetization examples",
+        "Tool and platform recommendations",
+        "Ethical emphasis"
+      ]
+    },
+    "celebrationseason.net": {
+      "niche": "Holiday & Celebration Guides",
+      "tone": "festive, inspiring, tradition-focused",
+      "word_count": {
+        "min": 1400,
+        "max": 1900,
+        "default": 1650
+      },
+      "seo": {
+        "keyword_density": "1-1.5%",
+        "keywords_per_subheading": "2-3",
+        "long_tail_focus": true
+      },
+      "structure": {
+        "h2_count": "automatic",
+        "h2_limit": 8,
+        "h3_enabled": true,
+        "enable_toc": true,
+        "enable_faq": true,
+        "enable_key_takeaways": true
+      },
+      "links": {
+        "internal_per_article": 5,
+        "external_per_article": 1,
+        "affiliate_enabled": true,
+        "affiliate_placement": "product_recommendations"
+      },
+      "content_features": {
+        "enable_lists": true,
+        "enable_tables": false,
+        "enable_blockquotes": true,
+        "enable_literary_devices": true,
+        "section_length": "medium",
+        "voice": "second_person"
+      },
+      "wordpress": {
+        "default_category": "Holiday Guides",
+        "post_status": "draft",
+        "auto_publish": false
+      },
+      "ai_settings": {
+        "writing_model": "Claude-4.5 Sonnet (ANT)",
+        "image_model": "None",
+        "enable_serp_scraping": false,
+        "deep_research": false,
+        "style_mimic": false
+      },
+      "special_requirements": [
+        "Seasonal and timely content",
+        "Cultural sensitivity",
+        "DIY and decoration ideas",
+        "Family-friendly tone"
+      ]
+    },
+    "sprout-and-spruce.com": {
+      "niche": "Gardening & Plant Care",
+      "tone": "encouraging, educational, green-thumb friendly",
+      "word_count": {
+        "min": 1600,
+        "max": 2100,
+        "default": 1850
+      },
+      "seo": {
+        "keyword_density": "1-1.5%",
+        "keywords_per_subheading": "2-3",
+        "long_tail_focus": true
+      },
+      "structure": {
+        "h2_count": "automatic",
+        "h2_limit": 9,
+        "h3_enabled": true,
+        "enable_toc": true,
+        "enable_faq": true,
+        "enable_key_takeaways": true
+      },
+      "links": {
+        "internal_per_article": 4,
+        "external_per_article": 2,
+        "affiliate_enabled": true,
+        "affiliate_placement": "product_recommendations"
+      },
+      "content_features": {
+        "enable_lists": true,
+        "enable_tables": true,
+        "enable_blockquotes": false,
+        "enable_literary_devices": false,
+        "section_length": "medium",
+        "voice": "second_person"
+      },
+      "wordpress": {
+        "default_category": "Plant Care",
+        "post_status": "draft",
+        "auto_publish": false
+      },
+      "ai_settings": {
+        "writing_model": "Claude-4.5 Sonnet (ANT)",
+        "image_model": "None",
+        "enable_serp_scraping": false,
+        "deep_research": false,
+        "style_mimic": false
+      },
+      "special_requirements": [
+        "Beginner-friendly approach",
+        "Seasonal gardening tips",
+        "Indoor and outdoor focus",
+        "Sustainability emphasis"
+      ]
+    },
+    "flavors-and-forks.com": {
+      "niche": "Recipes & Cooking Guides",
+      "tone": "inviting, flavor-focused, accessible",
+      "word_count": {
+        "min": 1200,
+        "max": 1800,
+        "default": 1500
+      },
+      "seo": {
+        "keyword_density": "1-1.5%",
+        "keywords_per_subheading": "2-3",
+        "long_tail_focus": true
+      },
+      "structure": {
+        "h2_count": "automatic",
+        "h2_limit": 8,
+        "h3_enabled": true,
+        "enable_toc": true,
+        "enable_faq": true,
+        "enable_key_takeaways": false
+      },
+      "links": {
+        "internal_per_article": 4,
+        "external_per_article": 1,
+        "affiliate_enabled": true,
+        "affiliate_placement": "kitchen_tools"
+      },
+      "content_features": {
+        "enable_lists": true,
+        "enable_tables": true,
+        "enable_blockquotes": false,
+        "enable_literary_devices": true,
+        "section_length": "short",
+        "voice": "second_person"
+      },
+      "wordpress": {
+        "default_category": "Recipes",
+        "post_status": "draft",
+        "auto_publish": false
+      },
+      "ai_settings": {
+        "writing_model": "Claude-4.5 Sonnet (ANT)",
+        "image_model": "None",
+        "enable_serp_scraping": false,
+        "deep_research": false,
+        "style_mimic": false
+      },
+      "special_requirements": [
+        "Clear recipe format",
+        "Ingredient lists and steps",
+        "Cooking tips and variations",
+        "Comfort food focus"
+      ]
+    },
+    "bulletjournals.net": {
+      "niche": "Bullet Journaling & Productivity",
+      "tone": "creative, organized, minimalist-friendly",
+      "word_count": {
+        "min": 1400,
+        "max": 1900,
+        "default": 1650
+      },
+      "seo": {
+        "keyword_density": "1-1.5%",
+        "keywords_per_subheading": "2-3",
+        "long_tail_focus": true
+      },
+      "structure": {
+        "h2_count": "automatic",
+        "h2_limit": 8,
+        "h3_enabled": true,
+        "enable_toc": true,
+        "enable_faq": true,
+        "enable_key_takeaways": true
+      },
+      "links": {
+        "internal_per_article": 5,
+        "external_per_article": 1,
+        "affiliate_enabled": true,
+        "affiliate_placement": "product_recommendations"
+      },
+      "content_features": {
+        "enable_lists": true,
+        "enable_tables": false,
+        "enable_blockquotes": true,
+        "enable_literary_devices": false,
+        "section_length": "medium",
+        "voice": "second_person"
+      },
+      "wordpress": {
+        "default_category": "Bullet Journal Ideas",
+        "post_status": "draft",
+        "auto_publish": false
+      },
+      "ai_settings": {
+        "writing_model": "Claude-4.5 Sonnet (ANT)",
+        "image_model": "None",
+        "enable_serp_scraping": false,
+        "deep_research": false,
+        "style_mimic": false
+      },
+      "special_requirements": [
+        "Visual layout descriptions",
+        "Template and spread ideas",
+        "Minimalist and aesthetic options",
+        "Habit tracking focus"
+      ]
+    },
+    "manifestandalign.com": {
+      "niche": "Manifestation & Spiritual Growth",
+      "tone": "uplifting, intentional, high-vibration",
+      "word_count": {
+        "min": 1500,
+        "max": 2000,
+        "default": 1750
+      },
+      "seo": {
+        "keyword_density": "1-1.5%",
+        "keywords_per_subheading": "2-3",
+        "long_tail_focus": true
+      },
+      "structure": {
+        "h2_count": "automatic",
+        "h2_limit": 8,
+        "h3_enabled": true,
+        "enable_toc": true,
+        "enable_faq": true,
+        "enable_key_takeaways": true
+      },
+      "links": {
+        "internal_per_article": 5,
+        "external_per_article": 1,
+        "affiliate_enabled": true,
+        "affiliate_placement": "spiritual_tools"
+      },
+      "content_features": {
+        "enable_lists": true,
+        "enable_tables": false,
+        "enable_blockquotes": true,
+        "enable_literary_devices": true,
+        "section_length": "medium",
+        "voice": "second_person"
+      },
+      "wordpress": {
+        "default_category": "Manifestation Guides",
+        "post_status": "draft",
+        "auto_publish": false
+      },
+      "ai_settings": {
+        "writing_model": "Claude-4.5 Sonnet (ANT)",
+        "image_model": "None",
+        "enable_serp_scraping": false,
+        "deep_research": false,
+        "style_mimic": false
+      },
+      "special_requirements": [
+        "Empowering language",
+        "Law of attraction principles",
+        "Journaling prompts included",
+        "Intention-setting practices"
+      ]
+    }
+  },
+  "default_bulk_settings": {
+    "h2_count": "automatic",
+    "h2_auto_limit": 10,
+    "section_length": "medium",
+    "voice": "second_person",
+    "enable_literary_devices": false,
+    "enable_lists": true,
+    "enable_tables": true,
+    "enable_blockquotes": false,
+    "enable_h3": true,
+    "enable_bold": true,
+    "enable_key_takeaways": true,
+    "enable_faq": true,
+    "enable_conclusion": true,
+    "ai_model_writing": "Claude-4.5 Sonnet (ANT)",
+    "ai_model_ancillary": "GPT-4o Mini (OA)",
+    "intro_style": "Standard Intro",
+    "faq_style": "No FAQ",
+    "audience_personality": "None",
+    "enable_auto_style": false,
+    "enable_automatic_keywords": false,
+    "enable_serp_scraping": false,
+    "enable_deep_research": false,
+    "enable_style_mimic": false,
+    "enable_progress_indicator": true,
+    "overwrite_url_merge_cache": false
+  },
+  "wordpress_defaults": {
+    "post_status": "draft",
+    "auto_publish_schedule": false,
+    "disable_meta_description": false,
+    "disable_automatic_tags": false,
+    "category_auto_create": true
+  },
+  "output_settings": {
+    "output_html": true,
+    "output_directory": "C:\\Users\\ncreighton\\Downloads\\zimmwriter_v10.831\\zimmwriter\\output"
+  }
+}
