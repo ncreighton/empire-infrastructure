@@ -1,0 +1,238 @@
+{
+  "name": "Weekly Content Digest",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": 0,
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "id": "trigger-weekly",
+      "name": "Weekly Sunday 8 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/gsc_performance",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_KEY }}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "select",
+              "value": "site_id,clicks,impressions,position,ctr,date"
+            },
+            {
+              "name": "date",
+              "value": "=gte.{{ new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] }}"
+            },
+            {
+              "name": "order",
+              "value": "position.asc"
+            },
+            {
+              "name": "limit",
+              "value": "100"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-opportunities",
+      "name": "Get Opportunities",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [500, 150]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://empire-dashboard:8000/api/pipeline/stats",
+        "options": {}
+      },
+      "id": "get-pipeline-stats",
+      "name": "Get Pipeline Stats",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://empire-dashboard:8000/api/analytics/summary",
+        "options": {}
+      },
+      "id": "get-analytics-summary",
+      "name": "Get Analytics Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [500, 450]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://empire-article-audit:8001/forge/health",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "get-forge-health",
+      "name": "Get FORGE Health",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [500, 600],
+      "continueOnFail": true,
+      "notes": "Get empire-wide health intelligence from FORGE CODEX"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aggregate weekly data into digest format\n// Pull data from all three parallel input nodes by name\nconst opportunitiesRaw = $('Get Opportunities').first().json;\nconst pipelineStats = $('Get Pipeline Stats').first().json;\nconst analyticsSummary = $('Get Analytics Summary').first().json;\nconst forgeHealth = $('Get FORGE Health').first().json || {};\n\n// Opportunities from Supabase are returned as an array\nconst opportunities = Array.isArray(opportunitiesRaw) ? opportunitiesRaw : (opportunitiesRaw.data || []);\n\n// Striking distance keywords (positions 8-20)\nconst strikingDistance = opportunities.filter(o => o.position >= 8 && o.position <= 20);\n\n// Group by site\nconst bySite = {};\nfor (const opp of opportunities) {\n  if (!bySite[opp.site_id]) {\n    bySite[opp.site_id] = { count: 0, total_clicks: 0, total_impressions: 0 };\n  }\n  bySite[opp.site_id].count++;\n  bySite[opp.site_id].total_clicks += (opp.clicks || 0);\n  bySite[opp.site_id].total_impressions += (opp.impressions || 0);\n}\n\n// Average position and CTR\nconst avgPosition = opportunities.length > 0\n  ? (opportunities.reduce((sum, o) => sum + (o.position || 0), 0) / opportunities.length).toFixed(1)\n  : 'N/A';\nconst avgCtr = opportunities.length > 0\n  ? (opportunities.reduce((sum, o) => sum + (o.ctr || 0), 0) / opportunities.length * 100).toFixed(2)\n  : 'N/A';\n\nconst totalClicks = opportunities.reduce((sum, o) => sum + (o.clicks || 0), 0);\nconst totalImpressions = opportunities.reduce((sum, o) => sum + (o.impressions || 0), 0);\n\nconst weekNumber = Math.ceil((new Date() - new Date(new Date().getFullYear(), 0, 1)) / 604800000);\n\n// Build digest summary text\nconst lines = [\n  `Weekly Content Digest - Week ${weekNumber}`,\n  `Generated: ${new Date().toISOString()}`,\n  '',\n  '=== GSC Performance (Last 7 Days) ===',\n  `Total Keywords Tracked: ${opportunities.length}`,\n  `Striking Distance (pos 8-20): ${strikingDistance.length}`,\n  `Total Clicks: ${totalClicks}`,\n  `Total Impressions: ${totalImpressions}`,\n  `Average Position: ${avgPosition}`,\n  `Average CTR: ${avgCtr}%`,\n  '',\n  '--- By Site ---'\n];\n\nfor (const [site, stats] of Object.entries(bySite)) {\n  lines.push(`  ${site}: ${stats.count} keywords, ${stats.total_clicks} clicks, ${stats.total_impressions} impressions`);\n}\n\nlines.push('');\nlines.push('=== Pipeline Stats ===');\nif (pipelineStats) {\n  for (const [key, value] of Object.entries(pipelineStats)) {\n    if (typeof value !== 'object') {\n      lines.push(`  ${key}: ${value}`);\n    }\n  }\n}\n\nlines.push('');\nlines.push('=== Analytics Summary ===');\nif (analyticsSummary) {\n  for (const [key, value] of Object.entries(analyticsSummary)) {\n    if (typeof value !== 'object') {\n      lines.push(`  ${key}: ${value}`);\n    }\n  }\n}\n\nlines.push('');\nlines.push('=== FORGE Intelligence ===');\nif (forgeHealth && forgeHealth.total_audits) {\n  lines.push(`  Total Audits Ingested: ${forgeHealth.total_audits}`);\n  lines.push(`  Sites Tracked: ${forgeHealth.sites_tracked}`);\n  lines.push(`  Empire Avg Score: ${forgeHealth.empire_avg_score || 'N/A'}`);\n  if (forgeHealth.top_issues) {\n    lines.push('  Top Issues:');\n    for (const [issue, count] of Object.entries(forgeHealth.top_issues).slice(0, 5)) {\n      lines.push(`    - ${issue}: ${count} occurrences`);\n    }\n  }\n} else {\n  lines.push('  No FORGE data available yet (audits will populate this)');\n}\n\nlines.push('');\nlines.push('=== Top Striking Distance Keywords ===');\nconst topStriking = strikingDistance.slice(0, 10);\nfor (const kw of topStriking) {\n  lines.push(`  [${kw.site_id}] pos ${kw.position} | clicks: ${kw.clicks} | impressions: ${kw.impressions} | CTR: ${(kw.ctr * 100).toFixed(2)}%`);\n}\n\n// Build recommendations\nconst recommendations = [];\nif (strikingDistance.length > 5) {\n  recommendations.push(`${strikingDistance.length} keywords in striking distance (pos 8-20) - focus on pushing to page 1`);\n}\nif (pipelineStats && pipelineStats.pending > 10) {\n  recommendations.push(`${pipelineStats.pending} items pending in pipeline - review queue`);\n}\nif (opportunities.length > 0 && parseFloat(avgCtr) < 2) {\n  recommendations.push(`Average CTR is ${avgCtr}% - consider title/meta description optimization`);\n}\nif (recommendations.length === 0) {\n  recommendations.push('All metrics look healthy. Keep up the current strategy.');\n}\n\nlines.push('');\nlines.push('=== Recommendations ===');\nfor (const rec of recommendations) {\n  lines.push(`  - ${rec}`);\n}\n\nconst digestMessage = lines.join('\\n');\n\nreturn {\n  week_number: weekNumber,\n  digest_date: new Date().toISOString(),\n  message: digestMessage,\n  opportunities_count: opportunities.length,\n  striking_distance_count: strikingDistance.length,\n  total_clicks: totalClicks,\n  total_impressions: totalImpressions,\n  avg_position: avgPosition,\n  avg_ctr: avgCtr,\n  by_site: bySite,\n  recommendations: recommendations\n};"
+      },
+      "id": "aggregate-digest",
+      "name": "Aggregate Weekly Digest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://empire-dashboard:8000/api/alerts",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"severity\": \"info\",\n  \"title\": \"Weekly Content Digest - Week {{ $json.week_number }}\",\n  \"message\": {{ JSON.stringify($json.message) }},\n  \"source\": \"n8n-weekly-digest\",\n  \"category\": \"weekly_digest\"\n}",
+        "options": {}
+      },
+      "id": "send-to-dashboard",
+      "name": "Send to Dashboard",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1050, 300]
+    }
+  ],
+  "connections": {
+    "Weekly Sunday 8 AM": {
+      "main": [
+        [
+          {
+            "node": "Get Opportunities",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Pipeline Stats",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Analytics Summary",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get FORGE Health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Opportunities": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Weekly Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Pipeline Stats": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Weekly Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Analytics Summary": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Weekly Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get FORGE Health": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Weekly Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Weekly Digest": {
+      "main": [
+        [
+          {
+            "node": "Send to Dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "SEO",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "name": "Weekly Digest",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2025-02-13T00:00:00.000Z",
+  "versionId": "2"
+}

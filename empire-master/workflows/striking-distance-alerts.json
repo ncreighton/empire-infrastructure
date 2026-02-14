@@ -1,0 +1,245 @@
+{
+  "name": "Striking Distance Alerts",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 7 * * 1,4"
+            }
+          ]
+        }
+      },
+      "id": "trigger",
+      "name": "Monday/Thursday 7 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/gsc_performance?select=site_id,clicks,impressions,position,ctr,date&position=gte.8&position=lte.20&impressions=gt.100&date=gte.{{ $now.minus(7, 'days').toFormat('yyyy-MM-dd') }}&order=position.asc&limit=200",
+        "method": "GET",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "get-striking",
+      "name": "Get Striking Distance Keywords",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-results",
+              "leftValue": "={{ $json.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-found",
+      "name": "Keywords Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const opportunities = $input.first().json || [];\n\n// Filter for positions 8-12 (very close to page 1)\nconst highPriority = opportunities.filter(o =>\n  o.position >= 8 && o.position <= 12 && o.impressions > 100\n);\n\n// Group by site\nconst bySite = {};\nfor (const opp of highPriority) {\n  const site = opp.site_id || 'unknown';\n  if (!bySite[site]) bySite[site] = [];\n  bySite[site].push(opp);\n}\n\nreturn {\n  high_priority_count: highPriority.length,\n  by_site: bySite,\n  top_5: highPriority.slice(0, 5)\n};"
+      },
+      "id": "filter-priority",
+      "name": "Filter High Priority",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-high-count",
+              "leftValue": "={{ $json.high_priority_count }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-alert",
+      "name": "Should Alert?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1050, 200]
+    },
+    {
+      "parameters": {
+        "url": "http://empire-dashboard:8000/api/alerts",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"severity\": \"warning\",\n  \"source\": \"n8n-striking-distance\",\n  \"category\": \"striking_distance\",\n  \"message\": \"{{ $json.high_priority_count }} keywords at positions 8-12. Top: {{ $json.top_5.map(o => o.site_id + ' pos ' + o.position).join(', ') }}\",\n  \"data\": {{ JSON.stringify($json) }}\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "alert-dashboard",
+      "name": "Dashboard Striking Distance Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1250, 100]
+    },
+    {
+      "parameters": {
+        "url": "http://empire-dashboard:8000/api/alerts",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"severity\": \"info\",\n  \"source\": \"n8n-striking-distance\",\n  \"category\": \"seo_digest\",\n  \"message\": \"SEO striking distance digest: {{ $json.high_priority_count }} high-priority keywords found across {{ Object.keys($json.by_site).length }} sites\",\n  \"data\": {{ JSON.stringify($json) }}\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "queue-digest",
+      "name": "Queue SEO Digest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {},
+      "id": "no-results",
+      "name": "No Keywords Found",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [850, 400]
+    }
+  ],
+  "connections": {
+    "Monday/Thursday 7 AM": {
+      "main": [
+        [
+          {
+            "node": "Get Striking Distance Keywords",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Striking Distance Keywords": {
+      "main": [
+        [
+          {
+            "node": "Keywords Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keywords Found?": {
+      "main": [
+        [
+          {
+            "node": "Filter High Priority",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Keywords Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter High Priority": {
+      "main": [
+        [
+          {
+            "node": "Should Alert?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Alert?": {
+      "main": [
+        [
+          {
+            "node": "Dashboard Striking Distance Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Queue SEO Digest",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Queue SEO Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "SEO"
+    },
+    {
+      "name": "Alerts"
+    }
+  ],
+  "versionId": "2"
+}

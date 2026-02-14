@@ -1,0 +1,425 @@
+{
+  "name": "Update Impact Tracker",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24,
+              "triggerAtHour": 4
+            }
+          ]
+        }
+      },
+      "id": "trigger-daily",
+      "name": "Daily 4 AM Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/audit_log?select=*&status=eq.completed&fixed_at=gte.{{ $now.minus(7, 'days').toFormat('yyyy-MM-dd') }}&order=fixed_at.desc",
+        "method": "GET",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "get-7day-updates",
+      "name": "Get Updates from 7 Days Ago",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/audit_log?select=*&status=eq.completed&fixed_at=gte.{{ $now.minus(28, 'days').toFormat('yyyy-MM-dd') }}&order=fixed_at.desc",
+        "method": "GET",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "get-28day-updates",
+      "name": "Get Updates from 28 Days Ago",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 400]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "id": "merge-updates",
+      "name": "Merge All Updates",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {
+          "reset": false
+        }
+      },
+      "id": "process-each",
+      "name": "Process Each Update",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/gsc_performance?select=*&site_id=eq.{{ $json.site_slug }}&date=gte.{{ $now.minus(7, 'days').toFormat('yyyy-MM-dd') }}&order=date.desc&limit=7",
+        "method": "GET",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "fetch-current-metrics",
+      "name": "Fetch Current GSC Metrics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compare current metrics to pre-update baseline\nconst update = $input.first().json;\nconst current = update.current_metrics || {};\nconst baseline = update.baseline || {};\n\n// Calculate changes\nconst positionChange = (baseline.position || 0) - (current.position || 0);\nconst clicksChange = current.clicks - (baseline.clicks || 0);\nconst clicksChangePct = baseline.clicks > 0 \n  ? ((current.clicks - baseline.clicks) / baseline.clicks * 100)\n  : 0;\nconst impressionsChange = current.impressions - (baseline.impressions || 0);\n\n// Calculate impact score (-100 to +100)\nlet impactScore = 0;\n\n// Position improvement is good (negative change = improvement)\nif (positionChange > 0) impactScore += Math.min(positionChange * 10, 40);\nelse impactScore += Math.max(positionChange * 10, -40);\n\n// Traffic improvement\nif (clicksChangePct > 0) impactScore += Math.min(clicksChangePct * 0.5, 30);\nelse impactScore += Math.max(clicksChangePct * 0.5, -30);\n\n// Impressions change\nif (impressionsChange > 0) impactScore += Math.min(impressionsChange / 10, 20);\nelse impactScore += Math.max(impressionsChange / 10, -20);\n\n// Determine status\nlet status = 'neutral';\nif (impactScore >= 20) status = positionChange >= 5 ? 'success_major' : 'success';\nelse if (impactScore <= -20) status = impactScore <= -50 ? 'regression_severe' : 'regression_minor';\n\nconst isRegression = impactScore < -15;\nconst isSuccess = impactScore > 15;\n\nreturn {\n  update_id: update.id,\n  site_id: update.site_id,\n  page_url: update.page_url,\n  update_type: update.update_type,\n  days_since_update: update.days_since || 7,\n  baseline: {\n    position: baseline.position,\n    clicks: baseline.clicks,\n    impressions: baseline.impressions\n  },\n  current: {\n    position: current.position,\n    clicks: current.clicks,\n    impressions: current.impressions\n  },\n  changes: {\n    position: positionChange,\n    clicks: clicksChange,\n    clicks_pct: clicksChangePct.toFixed(1),\n    impressions: impressionsChange\n  },\n  impact_score: impactScore.toFixed(1),\n  status: status,\n  is_regression: isRegression,\n  is_success: isSuccess\n};"
+      },
+      "id": "calculate-impact",
+      "name": "Compare to Pre-Update Baseline",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "id": "collect-all",
+      "name": "Collect All Results",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Analyze all impact results\nconst items = $input.all().map(i => i.json);\n\nconst regressions = items.filter(i => i.is_regression);\nconst successes = items.filter(i => i.is_success);\n\n// Flag severe regressions (position +3 or traffic -20%)\nconst severeRegressions = regressions.filter(r => \n  r.changes.position < -3 || parseFloat(r.changes.clicks_pct) < -20\n);\n\n// Celebrate big wins (position -5 or traffic +50%)\nconst bigWins = successes.filter(s =>\n  s.changes.position >= 5 || parseFloat(s.changes.clicks_pct) >= 50\n);\n\nreturn {\n  analyzed_at: new Date().toISOString(),\n  summary: {\n    total_analyzed: items.length,\n    successes: successes.length,\n    regressions: regressions.length,\n    neutral: items.length - successes.length - regressions.length,\n    success_rate: items.length > 0 ? ((successes.length / items.length) * 100).toFixed(1) : 0,\n    avg_impact_score: items.length > 0 \n      ? (items.reduce((sum, i) => sum + parseFloat(i.impact_score), 0) / items.length).toFixed(1)\n      : 0\n  },\n  severe_regressions: severeRegressions,\n  big_wins: bigWins,\n  all_regressions: regressions,\n  all_successes: successes,\n  has_severe_regressions: severeRegressions.length > 0,\n  has_big_wins: bigWins.length > 0\n};"
+      },
+      "id": "analyze-results",
+      "name": "Analyze Impact Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1650, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-severe",
+              "leftValue": "={{ $json.has_severe_regressions }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-regressions",
+      "name": "Severe Regressions?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1850, 200]
+    },
+    {
+      "parameters": {
+        "url": "http://empire-dashboard:8000/api/alerts",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"severity\": \"critical\",\n  \"source\": \"n8n-update-impact-tracker\",\n  \"category\": \"seo_regression\",\n  \"message\": \"{{ $json.severe_regressions.length }} updates showing severe regression. {{ $json.severe_regressions.slice(0, 3).map(r => r.page_url + ': pos ' + r.changes.position + ', clicks ' + r.changes.clicks_pct + '%').join('; ') }}\",\n  \"data\": {{ JSON.stringify({ severe_regressions: $json.severe_regressions, summary: $json.summary }) }}\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "alert-regressions",
+      "name": "Alert on Regressions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2050, 100]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-wins",
+              "leftValue": "={{ $json.has_big_wins }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-wins",
+      "name": "Big Wins?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1850, 400]
+    },
+    {
+      "parameters": {
+        "url": "http://empire-dashboard:8000/api/alerts",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"severity\": \"info\",\n  \"source\": \"n8n-update-impact-tracker\",\n  \"category\": \"seo_win\",\n  \"message\": \"{{ $json.big_wins.length }} updates showing major improvement! {{ $json.big_wins.slice(0, 3).map(w => w.page_url + ': pos ' + w.changes.position + ', clicks +' + w.changes.clicks_pct + '%').join('; ') }}. Overall success rate: {{ $json.summary.success_rate }}%\",\n  \"data\": {{ JSON.stringify({ big_wins: $json.big_wins, summary: $json.summary }) }}\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "celebrate-wins",
+      "name": "Celebrate Wins",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2050, 400]
+    },
+    {
+      "parameters": {},
+      "id": "no-regressions",
+      "name": "No Severe Regressions",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [2050, 200]
+    },
+    {
+      "parameters": {},
+      "id": "no-wins",
+      "name": "No Big Wins",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [2050, 500]
+    }
+  ],
+  "connections": {
+    "Daily 4 AM Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Updates from 7 Days Ago",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Updates from 28 Days Ago",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Updates from 7 Days Ago": {
+      "main": [
+        [
+          {
+            "node": "Merge All Updates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Updates from 28 Days Ago": {
+      "main": [
+        [
+          {
+            "node": "Merge All Updates",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge All Updates": {
+      "main": [
+        [
+          {
+            "node": "Process Each Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Each Update": {
+      "main": [
+        [
+          {
+            "node": "Fetch Current GSC Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Current GSC Metrics": {
+      "main": [
+        [
+          {
+            "node": "Compare to Pre-Update Baseline",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compare to Pre-Update Baseline": {
+      "main": [
+        [
+          {
+            "node": "Collect All Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect All Results": {
+      "main": [
+        [
+          {
+            "node": "Analyze Impact Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Impact Results": {
+      "main": [
+        [
+          {
+            "node": "Severe Regressions?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Big Wins?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Severe Regressions?": {
+      "main": [
+        [
+          {
+            "node": "Alert on Regressions",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Severe Regressions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Big Wins?": {
+      "main": [
+        [
+          {
+            "node": "Celebrate Wins",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Big Wins",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "SEO"
+    },
+    {
+      "name": "Impact Tracking"
+    }
+  ],
+  "versionId": "2"
+}

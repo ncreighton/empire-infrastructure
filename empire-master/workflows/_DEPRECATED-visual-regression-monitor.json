@@ -1,0 +1,135 @@
+{
+  "name": "Design Consistency Monitor",
+  "active": false,
+  "description": "DEPRECATED: Duplicate of Visual QA workflow. Deactivated 2026-02-13. Original: Daily visual regression monitoring for all 14 WordPress sites",
+  "nodes": [
+    {
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.cron",
+      "position": [250, 300],
+      "parameters": {
+        "rule": {
+          "interval": [{"field": "hours", "hour": 2}]
+        }
+      },
+      "notes": "Runs at 2 AM daily"
+    },
+    {
+      "name": "Get Sites List",
+      "type": "n8n-nodes-base.function",
+      "position": [450, 300],
+      "parameters": {
+        "functionCode": "const sites = [\n  'smarthomewizards',\n  'mythicalarchives',\n  'bulletjournals',\n  'witchcraftforbeginners',\n  'wealthfromai',\n  'aidiscoverydigest',\n  'aiinactionhub',\n  'pulsegearreviews',\n  'wearablegearreviews',\n  'smarthomegearreviews',\n  'clearainews',\n  'theconnectedhaven',\n  'manifestandalign',\n  'familyflourish'\n];\n\nreturn sites.map(site => ({json: {site_id: site}}));"
+      }
+    },
+    {
+      "name": "Split Sites",
+      "type": "n8n-nodes-base.splitInBatches",
+      "position": [650, 300],
+      "parameters": {
+        "batchSize": 1
+      }
+    },
+    {
+      "name": "Take Screenshot",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [850, 200],
+      "parameters": {
+        "url": "={{ 'https://' + $json.site_id + '.com' }}",
+        "method": "GET",
+        "responseFormat": "file"
+      },
+      "notes": "Capture homepage - in production use Browserless or Playwright"
+    },
+    {
+      "name": "Compare to Baseline",
+      "type": "n8n-nodes-base.function",
+      "position": [1050, 200],
+      "parameters": {
+        "functionCode": "// Placeholder for image comparison logic\n// In production, use pixel-match or Resemble.js\n\nconst threshold = 0.01; // 1% difference allowed\nconst difference = Math.random() * 0.05; // Simulated\n\nreturn [{\n  json: {\n    site_id: $json.site_id,\n    difference_percent: difference,\n    passed: difference < threshold,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      }
+    },
+    {
+      "name": "Filter Failed",
+      "type": "n8n-nodes-base.filter",
+      "position": [1250, 200],
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.passed }}",
+              "value2": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Send Slack Alert",
+      "type": "n8n-nodes-base.slack",
+      "position": [1450, 100],
+      "parameters": {
+        "channel": "#website-alerts",
+        "message": "Visual Regression Detected!\n\nSite: {{ $json.site_id }}\nDifference: {{ ($json.difference_percent * 100).toFixed(2) }}%\nTime: {{ $json.timestamp }}\n\nPlease review and fix if needed."
+      }
+    },
+    {
+      "name": "Log to Airtable",
+      "type": "n8n-nodes-base.airtable",
+      "position": [1450, 300],
+      "parameters": {
+        "operation": "create",
+        "application": "YOUR_AIRTABLE_BASE",
+        "table": "Visual Regressions",
+        "additionalFields": {
+          "fields": [
+            {"name": "Site", "value": "={{ $json.site_id }}"},
+            {"name": "Difference", "value": "={{ $json.difference_percent }}"},
+            {"name": "Detected", "value": "={{ $json.timestamp }}"},
+            {"name": "Status", "value": "Pending Review"}
+          ]
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [{"node": "Get Sites List", "type": "main", "index": 0}]
+      ]
+    },
+    "Get Sites List": {
+      "main": [
+        [{"node": "Split Sites", "type": "main", "index": 0}]
+      ]
+    },
+    "Split Sites": {
+      "main": [
+        [{"node": "Take Screenshot", "type": "main", "index": 0}]
+      ]
+    },
+    "Take Screenshot": {
+      "main": [
+        [{"node": "Compare to Baseline", "type": "main", "index": 0}]
+      ]
+    },
+    "Compare to Baseline": {
+      "main": [
+        [{"node": "Filter Failed", "type": "main", "index": 0}]
+      ]
+    },
+    "Filter Failed": {
+      "main": [
+        [
+          {"node": "Send Slack Alert", "type": "main", "index": 0},
+          {"node": "Log to Airtable", "type": "main", "index": 0}
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all"
+  },
+  "notes": "This is a template workflow for n8n. To use:\n1. Import into n8n\n2. Configure Slack and Airtable credentials\n3. Replace screenshot capture with Browserless or Steel.dev\n4. Add actual image comparison logic\n5. Test with one site first"
+}

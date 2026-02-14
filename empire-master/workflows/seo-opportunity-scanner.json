@@ -1,0 +1,273 @@
+{
+  "name": "SEO Opportunity Scanner",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24,
+              "triggerAtHour": 3
+            }
+          ]
+        }
+      },
+      "id": "trigger-daily",
+      "name": "Daily 3 AM Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Hardcoded list of 14 empire sites\nconst sites = [\n  'smarthomewizards', 'mythicalarchives', 'witchcraftforbeginners',\n  'bulletjournals', 'wealthfromai', 'aidiscoverydigest',\n  'aiinactionhub', 'pulsegearreviews', 'wearablegearreviews',\n  'smarthomegearreviews', 'clearainews', 'theconnectedhaven',\n  'manifestandalign', 'familyflourish'\n];\n\nreturn sites.map(site => ({ json: { site_id: site } }));"
+      },
+      "id": "get-sites",
+      "name": "Get All Sites",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {
+          "reset": false
+        }
+      },
+      "id": "split-sites",
+      "name": "Process Each Site",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/gsc_performance",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "select",
+              "value": "site_id,clicks,impressions,position,ctr,date"
+            },
+            {
+              "name": "site_id",
+              "value": "=eq.{{ $json.site_id }}"
+            },
+            {
+              "name": "date",
+              "value": "=gte.{{ $now.minus(28, 'days').format('yyyy-MM-dd') }}"
+            },
+            {
+              "name": "order",
+              "value": "position.asc"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "fetch-gsc-data",
+      "name": "Get GSC Data (28 days)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Unified SEO opportunity analysis: striking distance, low CTR, decay, scoring\nconst rows = $input.first().json;\nconst siteId = $('Process Each Site').first().json.site_id;\n\nif (!Array.isArray(rows) || rows.length === 0) {\n  return { json: { opportunities: [], site_id: siteId, has_critical: false } };\n}\n\nconst opportunities = [];\n\n// Expected CTR by position (industry averages)\nconst expectedCtr = {\n  1: 0.30, 2: 0.15, 3: 0.10, 4: 0.07, 5: 0.05\n};\n\n// Group rows by query/page to aggregate per-keyword metrics\nconst byQuery = {};\nfor (const row of rows) {\n  const key = row.query || row.page || row.site_id + '_' + row.position;\n  if (!byQuery[key]) {\n    byQuery[key] = { clicks: 0, impressions: 0, positions: [], ctrs: [], dates: [] };\n  }\n  byQuery[key].clicks += row.clicks || 0;\n  byQuery[key].impressions += row.impressions || 0;\n  byQuery[key].positions.push(row.position || 0);\n  byQuery[key].ctrs.push(row.ctr || 0);\n  byQuery[key].dates.push(row.date);\n}\n\nfor (const [query, data] of Object.entries(byQuery)) {\n  const avgPosition = data.positions.reduce((a, b) => a + b, 0) / data.positions.length;\n  const avgCtr = data.ctrs.reduce((a, b) => a + b, 0) / data.ctrs.length;\n  const totalImpressions = data.impressions;\n  const totalClicks = data.clicks;\n\n  // --- Striking Distance: position 8-20 with impressions > 50 ---\n  if (avgPosition >= 8 && avgPosition <= 20 && totalImpressions > 50) {\n    let score = 0;\n    // Closer to page 1 = higher score\n    score += Math.max(0, (20 - avgPosition)) * 4; // 0-48 points\n    // More impressions = more valuable\n    score += Math.min(totalImpressions / 50, 30); // 0-30 points\n    // Some clicks already = proven intent\n    score += Math.min(totalClicks * 2, 22); // 0-22 points\n    score = Math.min(Math.round(score), 100);\n\n    opportunities.push({\n      site_id: siteId,\n      query: query,\n      type: 'striking_distance',\n      position: parseFloat(avgPosition.toFixed(1)),\n      impressions: totalImpressions,\n      clicks: totalClicks,\n      ctr: parseFloat(avgCtr.toFixed(4)),\n      score: score,\n      severity: avgPosition <= 12 ? 'high' : 'medium',\n      recommendation: `Position ${avgPosition.toFixed(1)} - optimize content to push to page 1`\n    });\n  }\n\n  // --- Low CTR: position 1-5 but CTR below expected ---\n  if (avgPosition >= 1 && avgPosition <= 5 && totalImpressions > 50) {\n    const posKey = Math.round(avgPosition);\n    const expected = expectedCtr[posKey] || 0.05;\n    if (avgCtr < expected) {\n      const ctrGap = expected - avgCtr;\n      let score = 0;\n      // Bigger CTR gap = bigger opportunity\n      score += Math.min(ctrGap * 300, 50); // 0-50 points\n      // Higher position = more impactful\n      score += (6 - avgPosition) * 8; // 8-40 points\n      // More impressions = more potential clicks\n      score += Math.min(totalImpressions / 100, 10); // 0-10 points\n      score = Math.min(Math.round(score), 100);\n\n      opportunities.push({\n        site_id: siteId,\n        query: query,\n        type: 'low_ctr',\n        position: parseFloat(avgPosition.toFixed(1)),\n        impressions: totalImpressions,\n        clicks: totalClicks,\n        ctr: parseFloat(avgCtr.toFixed(4)),\n        expected_ctr: expected,\n        ctr_gap: parseFloat(ctrGap.toFixed(4)),\n        score: score,\n        severity: ctrGap > 0.10 ? 'high' : 'medium',\n        recommendation: `CTR ${(avgCtr * 100).toFixed(1)}% vs expected ${(expected * 100).toFixed(0)}% - improve title/meta description`\n      });\n    }\n  }\n\n  // --- Decay Check: compare first half vs second half of 28-day window ---\n  if (data.dates.length >= 4) {\n    const sortedDates = [...data.dates].sort();\n    const midpoint = Math.floor(sortedDates.length / 2);\n    const earlierPositions = data.positions.slice(0, midpoint);\n    const laterPositions = data.positions.slice(midpoint);\n\n    const earlierAvg = earlierPositions.reduce((a, b) => a + b, 0) / earlierPositions.length;\n    const laterAvg = laterPositions.reduce((a, b) => a + b, 0) / laterPositions.length;\n    const positionDrift = laterAvg - earlierAvg;\n\n    // Decaying if position increased by 3+ (worse ranking)\n    if (positionDrift >= 3) {\n      let score = 0;\n      score += Math.min(positionDrift * 8, 50); // 0-50 points\n      score += Math.min(totalImpressions / 50, 25); // 0-25 points\n      score += Math.min(totalClicks * 2, 25); // 0-25 points\n      score = Math.min(Math.round(score), 100);\n\n      const isCritical = positionDrift >= 5 || (earlierAvg <= 10 && laterAvg > 15);\n\n      opportunities.push({\n        site_id: siteId,\n        query: query,\n        type: 'content_decay',\n        position: parseFloat(laterAvg.toFixed(1)),\n        previous_position: parseFloat(earlierAvg.toFixed(1)),\n        position_drift: parseFloat(positionDrift.toFixed(1)),\n        impressions: totalImpressions,\n        clicks: totalClicks,\n        ctr: parseFloat(avgCtr.toFixed(4)),\n        score: score,\n        severity: isCritical ? 'critical' : 'warning',\n        recommendation: `Position dropped ${positionDrift.toFixed(1)} places (${earlierAvg.toFixed(1)} -> ${laterAvg.toFixed(1)}) - content refresh needed`\n      });\n    }\n  }\n}\n\nconst hasCritical = opportunities.some(o => o.severity === 'critical');\n\nreturn { json: { opportunities: opportunities, site_id: siteId, has_critical: hasCritical } };"
+      },
+      "id": "analyze-opportunities",
+      "name": "Analyze Opportunities",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-has-opportunities",
+              "leftValue": "={{ $json.opportunities.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-opportunities",
+      "name": "Has Opportunities?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Sort by score descending and take top 20\nconst input = $input.first().json;\nconst opportunities = input.opportunities || [];\n\nconst top20 = opportunities\n  .sort((a, b) => b.score - a.score)\n  .slice(0, 20);\n\nconst criticalCount = top20.filter(o => o.severity === 'critical').length;\nconst highCount = top20.filter(o => o.severity === 'high').length;\nconst types = {\n  striking_distance: top20.filter(o => o.type === 'striking_distance').length,\n  low_ctr: top20.filter(o => o.type === 'low_ctr').length,\n  content_decay: top20.filter(o => o.type === 'content_decay').length\n};\n\nreturn {\n  json: {\n    site_id: input.site_id,\n    has_critical: input.has_critical,\n    total_found: opportunities.length,\n    top_opportunities: top20,\n    summary: {\n      critical: criticalCount,\n      high: highCount,\n      by_type: types\n    }\n  }\n};"
+      },
+      "id": "filter-top-20",
+      "name": "Filter Top 20",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1450, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://empire-dashboard:8000/api/alerts",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ severity: $json.has_critical ? 'critical' : 'info', title: 'SEO Opportunities: ' + $json.site_id + ' (' + $json.total_found + ' found, top 20 reported)', message: 'Site: ' + $json.site_id + '. Types: ' + $json.summary.by_type.striking_distance + ' striking distance, ' + $json.summary.by_type.low_ctr + ' low CTR, ' + $json.summary.by_type.content_decay + ' decay. Critical: ' + $json.summary.critical + ', High: ' + $json.summary.high + '. Top opportunity: ' + ($json.top_opportunities.length > 0 ? $json.top_opportunities[0].query + ' (score ' + $json.top_opportunities[0].score + ', ' + $json.top_opportunities[0].type + ')' : 'none'), source: 'n8n-seo-scanner', category: 'seo_opportunity', metadata: { site_id: $json.site_id, total_found: $json.total_found, summary: $json.summary, top_opportunities: $json.top_opportunities } }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "send-alert",
+      "name": "Send Dashboard Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1650, 200]
+    },
+    {
+      "parameters": {},
+      "id": "no-opportunities",
+      "name": "No Opportunities",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1450, 400]
+    }
+  ],
+  "connections": {
+    "Daily 3 AM Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get All Sites",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get All Sites": {
+      "main": [
+        [
+          {
+            "node": "Process Each Site",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Each Site": {
+      "main": [
+        [
+          {
+            "node": "Get GSC Data (28 days)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get GSC Data (28 days)": {
+      "main": [
+        [
+          {
+            "node": "Analyze Opportunities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Opportunities": {
+      "main": [
+        [
+          {
+            "node": "Has Opportunities?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Opportunities?": {
+      "main": [
+        [
+          {
+            "node": "Filter Top 20",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Opportunities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Top 20": {
+      "main": [
+        [
+          {
+            "node": "Send Dashboard Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "SEO",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "name": "Content Intelligence",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "2"
+}

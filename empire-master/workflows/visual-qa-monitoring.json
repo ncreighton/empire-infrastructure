@@ -1,0 +1,274 @@
+{
+  "name": "Design Consistency Visual QA",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Daily 2am Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300],
+      "notes": "Runs daily at 2am to check all sites"
+    },
+    {
+      "parameters": {
+        "jsCode": "// List of all 14 sites to monitor\nconst sites = [\n  {id: 'smarthomewizards', url: 'https://smarthomewizards.com'},\n  {id: 'mythicalarchives', url: 'https://mythicalarchives.com'},\n  {id: 'bulletjournals', url: 'https://bulletjournals.net'},\n  {id: 'witchcraftforbeginners', url: 'https://witchcraftforbeginners.com'},\n  {id: 'wealthfromai', url: 'https://wealthfromai.com'},\n  {id: 'aidiscoverydigest', url: 'https://aidiscoverydigest.com'},\n  {id: 'aiinactionhub', url: 'https://aiinactionhub.com'},\n  {id: 'pulsegearreviews', url: 'https://pulsegearreviews.com'},\n  {id: 'wearablegearreviews', url: 'https://wearablegearreviews.com'},\n  {id: 'smarthomegearreviews', url: 'https://smarthomegearreviews.com'},\n  {id: 'clearainews', url: 'https://clearainews.com'},\n  {id: 'theconnectedhaven', url: 'https://theconnectedhaven.com'},\n  {id: 'manifestandalign', url: 'https://manifestandalign.com'},\n  {id: 'familyflourish', url: 'https://family-flourish.com'}\n];\n\nreturn sites.map(site => ({json: site}));"
+      },
+      "id": "get-sites",
+      "name": "Get Site List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://empire-article-audit:8001/audit/recent/{{ $json.id }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "count",
+              "value": "1"
+            },
+            {
+              "name": "workflow_type",
+              "value": "zimm_standard"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "run-audit",
+      "name": "Run Real Audit",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [640, 300],
+      "continueOnFail": true,
+      "notes": "Calls article-audit-system for a real audit instead of fake screenshot comparison"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract audit score and determine pass/fail\nconst input = $input.first().json;\nconst siteId = $('Get Site List').first().json.id;\nconst siteUrl = $('Get Site List').first().json.url;\n\n// Handle audit failure (service down, timeout, etc)\nif (input.error || input.statusCode >= 400) {\n  return {\n    siteId: siteId,\n    siteUrl: siteUrl,\n    score: 0,\n    status: 'error',\n    message: 'Audit service unavailable: ' + (input.error || input.message || 'unknown error'),\n    issuesCount: 0,\n    criticalCount: 0,\n    timestamp: new Date().toISOString()\n  };\n}\n\n// Parse audit results\nconst summary = input.summary || {};\nconst byStatus = summary.by_status || {};\nconst avgScore = summary.average_score || 0;\nconst totalIssues = summary.total_issues || 0;\nconst failCount = byStatus.fail || 0;\nconst criticalCount = summary.critical_issues || 0;\n\n// Score below 70 = alert\nconst passed = avgScore >= 70 && criticalCount === 0;\n\nreturn {\n  siteId: siteId,\n  siteUrl: siteUrl,\n  score: avgScore,\n  status: passed ? 'pass' : 'fail',\n  message: passed\n    ? `${siteId}: Score ${avgScore}/100 - All good`\n    : `${siteId}: Score ${avgScore}/100 - ${totalIssues} issues (${criticalCount} critical)`,\n  issuesCount: totalIssues,\n  criticalCount: criticalCount,\n  failCount: failCount,\n  timestamp: new Date().toISOString()\n};"
+      },
+      "id": "evaluate-results",
+      "name": "Evaluate Audit Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [840, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "score-check",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "pass",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-status",
+      "name": "Issues Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1040, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://empire-dashboard:8000/api/alerts",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ severity: $json.criticalCount > 0 ? 'critical' : ($json.score < 50 ? 'warning' : 'info'), title: 'Visual QA: ' + $json.siteId + ' scored ' + $json.score + '/100', message: $json.message, source: 'n8n-visual-qa', category: 'visual_qa' }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "send-alert",
+      "name": "Alert Dashboard",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1240, 200],
+      "notes": "Send quality alert to Empire Dashboard"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/audit_log",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ site_slug: $json.siteId, post_id: 0, post_url: $json.siteUrl, post_title: 'Visual QA Check', score: $json.score, status: $json.status, workflow_type: 'visual_qa', issues_count: $json.issuesCount, critical_count: $json.criticalCount }) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_KEY }}"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "log-to-supabase",
+      "name": "Log to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1240, 400],
+      "notes": "Log audit result to Supabase audit_log table"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log successful check\nconst data = $input.first().json;\nconsole.log(`OK ${data.siteId}: Score ${data.score}/100 - No issues`);\nreturn [{ json: { siteId: data.siteId, status: 'ok', score: data.score, timestamp: new Date().toISOString() } }];"
+      },
+      "id": "log-success",
+      "name": "Log Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1240, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://empire-article-audit:8001/forge/learn",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ site: $json.siteId, results: { score: $json.score, issues: [], status: $json.status, issues_count: $json.issuesCount || 0, critical_count: $json.criticalCount || 0 } }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "forge-learn",
+      "name": "Feed FORGE",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1040, 500],
+      "continueOnFail": true,
+      "notes": "Ingest visual QA results into FORGE CODEX for learning"
+    }
+  ],
+  "connections": {
+    "Daily 2am Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Site List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Site List": {
+      "main": [
+        [
+          {
+            "node": "Run Real Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Real Audit": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Audit Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Audit Results": {
+      "main": [
+        [
+          {
+            "node": "Issues Found?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Feed FORGE",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Issues Found?": {
+      "main": [
+        [
+          {
+            "node": "Alert Dashboard",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log to Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "visual-qa"
+    },
+    {
+      "name": "monitoring"
+    }
+  ],
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "id": "visual-qa-workflow"
+}

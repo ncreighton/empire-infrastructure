@@ -1,0 +1,295 @@
+{
+  "name": "Content Decay Monitor",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": 0,
+              "triggerAtHour": 6
+            }
+          ]
+        }
+      },
+      "id": "trigger-weekly",
+      "name": "Weekly Sunday 6 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get list of sites to check for decay\nconst sites = [\n  'smarthomewizards', 'mythicalarchives', 'witchcraftforbeginners',\n  'bulletjournals', 'wealthfromai', 'aidiscoverydigest',\n  'aiinactionhub', 'pulsegearreviews', 'wearablegearreviews',\n  'smarthomegearreviews', 'clearainews', 'theconnectedhaven',\n  'manifestandalign', 'familyflourish'\n];\n\nreturn sites.map(site => ({ json: { site_id: site } }));"
+      },
+      "id": "get-sites",
+      "name": "Get All Sites",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 5,
+        "options": {
+          "reset": false
+        }
+      },
+      "id": "batch-sites",
+      "name": "Process in Batches of 5",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/gsc_performance",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "select",
+              "value": "site_id,clicks,impressions,position,ctr,date"
+            },
+            {
+              "name": "site_id",
+              "value": "=eq.{{ $json.site_id }}"
+            },
+            {
+              "name": "date",
+              "value": "=gte.{{ $now.minus(56, 'days').format('yyyy-MM-dd') }}"
+            },
+            {
+              "name": "order",
+              "value": "date.desc"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "get-gsc-data",
+      "name": "Get GSC Data (56 days)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compare last 28 days vs previous 28 days from gsc_performance\nconst rows = $input.first().json;\nconst siteId = $('Process in Batches of 5').first().json.site_id;\n\nif (!Array.isArray(rows) || rows.length === 0) {\n  return { site_id: siteId, is_decaying: false, severity: 'none', decay_score: 0, message: 'No GSC data available' };\n}\n\nconst now = new Date();\nconst day28ago = new Date(now.getTime() - 28 * 86400000);\nconst day56ago = new Date(now.getTime() - 56 * 86400000);\n\n// Split into recent (last 28d) and baseline (28-56d ago)\nconst recent = rows.filter(r => new Date(r.date) >= day28ago);\nconst baseline = rows.filter(r => new Date(r.date) < day28ago && new Date(r.date) >= day56ago);\n\nif (baseline.length === 0 || recent.length === 0) {\n  return { site_id: siteId, is_decaying: false, severity: 'none', decay_score: 0, message: 'Insufficient data for comparison' };\n}\n\n// Aggregate metrics\nconst avgRecent = {\n  clicks: recent.reduce((s, r) => s + (r.clicks || 0), 0) / recent.length,\n  impressions: recent.reduce((s, r) => s + (r.impressions || 0), 0) / recent.length,\n  position: recent.reduce((s, r) => s + (r.position || 0), 0) / recent.length\n};\nconst avgBaseline = {\n  clicks: baseline.reduce((s, r) => s + (r.clicks || 0), 0) / baseline.length,\n  impressions: baseline.reduce((s, r) => s + (r.impressions || 0), 0) / baseline.length,\n  position: baseline.reduce((s, r) => s + (r.position || 0), 0) / baseline.length\n};\n\n// Calculate changes\nconst positionChange = avgRecent.position - avgBaseline.position;\nconst impressionChange = avgBaseline.impressions > 0\n  ? ((avgRecent.impressions - avgBaseline.impressions) / avgBaseline.impressions * 100) : 0;\nconst clickChange = avgBaseline.clicks > 0\n  ? ((avgRecent.clicks - avgBaseline.clicks) / avgBaseline.clicks * 100) : 0;\n\n// Calculate decay score (0-100, higher = worse)\nlet decayScore = 0;\nif (positionChange > 0) decayScore += Math.min(positionChange * 10, 50);\nif (impressionChange < -20) decayScore += Math.abs(impressionChange) * 0.5;\nif (clickChange < -20) decayScore += Math.abs(clickChange) * 0.3;\n\nlet severity = 'none';\nif (decayScore >= 70 || positionChange >= 5) severity = 'critical';\nelse if (decayScore >= 40 || positionChange >= 3) severity = 'warning';\nelse if (decayScore >= 20) severity = 'watch';\n\nreturn {\n  site_id: siteId,\n  current: { position: avgRecent.position.toFixed(1), impressions: Math.round(avgRecent.impressions), clicks: Math.round(avgRecent.clicks) },\n  baseline: { position: avgBaseline.position.toFixed(1), impressions: Math.round(avgBaseline.impressions), clicks: Math.round(avgBaseline.clicks) },\n  changes: { position: positionChange.toFixed(1), impressions_pct: impressionChange.toFixed(1), clicks_pct: clickChange.toFixed(1) },\n  decay_score: decayScore.toFixed(1),\n  severity: severity,\n  is_decaying: severity !== 'none'\n};"
+      },
+      "id": "calculate-decay",
+      "name": "Calculate Decay Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-decaying",
+              "leftValue": "={{ $json.is_decaying }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "filter-decaying",
+      "name": "Filter Decaying Sites",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "id": "collect-decay",
+      "name": "Collect All Decay",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [1450, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate decay report\nconst items = $input.all().map(i => i.json);\nconst allItems = Array.isArray(items[0]) ? items[0] : items;\n\nconst critical = allItems.filter(i => i.severity === 'critical');\nconst warning = allItems.filter(i => i.severity === 'warning');\nconst watch = allItems.filter(i => i.severity === 'watch');\n\nreturn {\n  report_date: new Date().toISOString(),\n  summary: {\n    total_decaying: allItems.length,\n    critical_count: critical.length,\n    warning_count: warning.length,\n    watch_count: watch.length\n  },\n  critical_sites: critical.map(s => `${s.site_id} (score: ${s.decay_score}, pos change: +${s.changes.position})`),\n  warning_sites: warning.map(s => `${s.site_id} (score: ${s.decay_score})`),\n  action_required: critical.length > 0 || warning.length > 3\n};"
+      },
+      "id": "generate-report",
+      "name": "Generate Decay Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1650, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://empire-dashboard:8000/api/alerts",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ severity: $json.action_required ? 'critical' : 'warning', title: 'Content Decay Report: ' + $json.summary.critical_count + ' critical, ' + $json.summary.warning_count + ' warning', message: 'Total decaying: ' + $json.summary.total_decaying + '. Critical sites: ' + ($json.critical_sites || []).join(', ') + '. Warning sites: ' + ($json.warning_sites || []).join(', '), source: 'n8n-content-decay', category: 'content_decay' }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "send-alert",
+      "name": "Send to Dashboard",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1850, 200]
+    },
+    {
+      "parameters": {},
+      "id": "no-decay",
+      "name": "No Decay Detected",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1450, 400]
+    }
+  ],
+  "connections": {
+    "Weekly Sunday 6 AM": {
+      "main": [
+        [
+          {
+            "node": "Get All Sites",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get All Sites": {
+      "main": [
+        [
+          {
+            "node": "Process in Batches of 5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process in Batches of 5": {
+      "main": [
+        [
+          {
+            "node": "Get GSC Data (56 days)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get GSC Data (56 days)": {
+      "main": [
+        [
+          {
+            "node": "Calculate Decay Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Decay Score": {
+      "main": [
+        [
+          {
+            "node": "Filter Decaying Sites",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Decaying Sites": {
+      "main": [
+        [
+          {
+            "node": "Collect All Decay",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Decay Detected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect All Decay": {
+      "main": [
+        [
+          {
+            "node": "Generate Decay Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Decay Report": {
+      "main": [
+        [
+          {
+            "node": "Send to Dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "SEO",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "name": "Content Decay",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "2"
+}
