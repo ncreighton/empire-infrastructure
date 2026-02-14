@@ -178,13 +178,108 @@ class ZimmWriterController:
         "seo_csv":        "Set Bulk SEO CSV",
     }
 
-    def __init__(self, exe_path: Optional[str] = None, backend: str = "uia"):
+    def __init__(self, exe_path: Optional[str] = None, backend: str = "win32"):
         self.exe_path = exe_path or find_zimmwriter_exe()
         self.backend = backend
         self.app: Optional[Application] = None
         self.main_window = None
         self._connected = False
         self._control_cache: Dict[str, Any] = {}
+
+    # ═══════════════════════════════════════════
+    # WIN32/UIA COMPATIBILITY HELPERS
+    # ═══════════════════════════════════════════
+
+    def _find_child(self, parent=None, control_type: str = None,
+                    auto_id: str = None, title: str = None,
+                    title_re: str = None):
+        """
+        Find a child window using either UIA or win32 backend.
+        Translates UIA-style parameters to win32 equivalents.
+
+        For win32: uses control_id (int) + title. class_name is NOT used
+        because AutoIt maps CheckBox/Button to the same Windows class.
+        """
+        win = parent or self.main_window
+        if self.backend == "win32":
+            criteria = {}
+            # Don't pass class_name — AutoIt uses "Button" for both
+            # buttons and checkboxes, making class_name unreliable.
+            # control_id is sufficient for precise lookups.
+            if auto_id:
+                criteria["control_id"] = int(auto_id)
+            if title:
+                criteria["title"] = title
+            if title_re:
+                criteria["title_re"] = title_re
+            return win.child_window(**criteria)
+        else:
+            criteria = {}
+            if control_type:
+                criteria["control_type"] = control_type
+            if auto_id:
+                criteria["auto_id"] = auto_id
+            if title:
+                criteria["title"] = title
+            if title_re:
+                criteria["title_re"] = title_re
+            return win.child_window(**criteria)
+
+    def _get_descendants(self, parent=None, control_type: str = None) -> list:
+        """Get descendants filtered by control type (works on both backends)."""
+        win = parent or self.main_window
+        if self.backend == "win32":
+            children = win.children()
+            if control_type:
+                return [c for c in children
+                        if c.friendly_class_name() == control_type]
+            return children
+        else:
+            if control_type:
+                return win.descendants(control_type=control_type)
+            return win.descendants()
+
+    def _get_auto_id(self, ctrl) -> str:
+        """Get the automation/control ID as a string."""
+        if self.backend == "win32":
+            return str(ctrl.control_id())
+        try:
+            return ctrl.automation_id()
+        except Exception:
+            return str(ctrl.control_id())
+
+    def _click(self, ctrl):
+        """Click a control (backend-agnostic)."""
+        try:
+            if self.backend != "win32":
+                ctrl.invoke()
+                return
+        except Exception:
+            pass
+        try:
+            ctrl.click()
+        except Exception:
+            ctrl.click_input()
+
+    def _get_checkbox_state(self, ctrl) -> int:
+        """Get checkbox state (0=unchecked, 1=checked)."""
+        if self.backend == "win32":
+            return ctrl.get_check_state()
+        return ctrl.get_toggle_state()
+
+    def _set_checkbox_state(self, ctrl, checked: bool):
+        """Set checkbox to checked/unchecked."""
+        if self.backend == "win32":
+            if checked:
+                ctrl.check()
+            else:
+                ctrl.uncheck()
+        else:
+            current = ctrl.get_toggle_state()
+            if checked and current == 0:
+                ctrl.toggle()
+            elif not checked and current == 1:
+                ctrl.toggle()
 
     # ═══════════════════════════════════════════
     # CONNECTION & LIFECYCLE
@@ -281,9 +376,9 @@ class ZimmWriterController:
         """Navigate from Menu screen to Bulk Writer screen."""
         self.ensure_connected()
         try:
-            btn = self.main_window.child_window(title="Bulk Writer", control_type="Button")
-            btn.invoke()
-            time.sleep(2)
+            btn = self._find_child(control_type="Button", title="Bulk Writer")
+            self._click(btn)
+            time.sleep(3)
             # Refresh window reference after screen change
             self.main_window = self.app.top_window()
             self._control_cache.clear()
@@ -295,8 +390,8 @@ class ZimmWriterController:
         """Navigate from Menu screen to Options Menu screen."""
         self.ensure_connected()
         try:
-            btn = self.main_window.child_window(title="Options Menu", control_type="Button")
-            btn.invoke()
+            btn = self._find_child(control_type="Button", title="Options Menu")
+            self._click(btn)
             time.sleep(2)
             self.main_window = self.app.top_window()
             self._control_cache.clear()
@@ -353,62 +448,84 @@ class ZimmWriterController:
 
     def get_all_buttons(self) -> List[Dict[str, str]]:
         self.ensure_connected()
-        return [
-            {"name": b.window_text(), "auto_id": b.automation_id(), "visible": b.is_visible()}
-            for b in self.main_window.descendants(control_type="Button")
-        ]
+        results = []
+        for b in self._get_descendants(control_type="Button"):
+            try:
+                results.append({
+                    "name": b.window_text(),
+                    "auto_id": self._get_auto_id(b),
+                    "visible": b.is_visible(),
+                })
+            except Exception:
+                pass
+        return results
 
     def get_all_checkboxes(self) -> List[Dict[str, Any]]:
         self.ensure_connected()
         results = []
-        for cb in self.main_window.descendants(control_type="CheckBox"):
+        for cb in self._get_descendants(control_type="CheckBox"):
             try:
-                checked = cb.get_toggle_state() == 1
+                checked = self._get_checkbox_state(cb) == 1
             except Exception:
                 checked = None
-            results.append({
-                "name": cb.window_text(),
-                "auto_id": cb.automation_id(),
-                "checked": checked,
-                "visible": cb.is_visible(),
-            })
+            try:
+                results.append({
+                    "name": cb.window_text(),
+                    "auto_id": self._get_auto_id(cb),
+                    "checked": checked,
+                    "visible": cb.is_visible(),
+                })
+            except Exception:
+                pass
         return results
 
     def get_all_dropdowns(self) -> List[Dict[str, Any]]:
         self.ensure_connected()
+        SendMsg = ctypes.windll.user32.SendMessageW
+        SendMsg.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+        SendMsg.restype = ctypes.c_long
         results = []
-        for combo in self.main_window.descendants(control_type="ComboBox"):
+        for combo in self._get_descendants(control_type="ComboBox"):
             try:
-                selected = combo.selected_text()
-            except Exception:
+                hwnd = combo.handle
+                # Read selected text via Win32 CB messages
+                cur = SendMsg(hwnd, 0x0147, 0, 0)  # CB_GETCURSEL
                 selected = "unknown"
-            try:
-                items = combo.item_texts()
+                if cur >= 0:
+                    length = SendMsg(hwnd, 0x0149, cur, 0)  # CB_GETLBTEXTLEN
+                    if length >= 0:
+                        buf = ctypes.create_unicode_buffer(length + 2)
+                        SendMsg(hwnd, 0x0148, cur, ctypes.addressof(buf))  # CB_GETLBTEXT
+                        selected = buf.value
+                results.append({
+                    "name": combo.window_text(),
+                    "auto_id": self._get_auto_id(combo),
+                    "selected": selected,
+                    "items": [],  # Skip item enumeration for speed
+                    "visible": combo.is_visible(),
+                })
             except Exception:
-                items = []
-            results.append({
-                "name": combo.window_text(),
-                "auto_id": combo.automation_id(),
-                "selected": selected,
-                "items": items,
-                "visible": combo.is_visible(),
-            })
+                pass
         return results
 
     def get_all_text_fields(self) -> List[Dict[str, str]]:
         self.ensure_connected()
         results = []
-        for e in self.main_window.descendants(control_type="Edit"):
+        for e in self._get_descendants(control_type="Edit"):
             try:
-                val = e.get_value()[:200] if hasattr(e, "get_value") else ""
-            except Exception:
                 val = ""
-            results.append({
-                "name": e.window_text(),
-                "auto_id": e.automation_id(),
-                "value": val,
-                "visible": e.is_visible(),
-            })
+                try:
+                    val = e.window_text()[:200]
+                except Exception:
+                    pass
+                results.append({
+                    "name": e.window_text(),
+                    "auto_id": self._get_auto_id(e),
+                    "value": val,
+                    "visible": e.is_visible(),
+                })
+            except Exception:
+                pass
         return results
 
     # ═══════════════════════════════════════════
@@ -419,39 +536,17 @@ class ZimmWriterController:
     def click_button(self, name: str = None, auto_id: str = None, title_re: str = None):
         """Click a button by name, auto_id, or regex."""
         self.ensure_connected()
-        criteria = {"control_type": "Button"}
-        if name:
-            criteria["title"] = name
-        if auto_id:
-            criteria["auto_id"] = auto_id
-        if title_re:
-            criteria["title_re"] = title_re
-
-        btn = self.main_window.child_window(**criteria)
-        try:
-            btn.invoke()
-        except Exception:
-            btn.click_input()
+        btn = self._find_child(control_type="Button", auto_id=auto_id,
+                               title=name, title_re=title_re)
+        self._click(btn)
         logger.info(f"Clicked: {name or auto_id or title_re}")
 
     @retry(max_attempts=2, delay=0.5)
     def set_checkbox(self, name: str = None, auto_id: str = None, checked: bool = True):
         """Set checkbox to checked/unchecked."""
         self.ensure_connected()
-        criteria = {"control_type": "CheckBox"}
-        if name:
-            criteria["title"] = name
-        if auto_id:
-            criteria["auto_id"] = auto_id
-
-        cb = self.main_window.child_window(**criteria)
-        current = cb.get_toggle_state()
-
-        if checked and current == 0:
-            cb.toggle()
-        elif not checked and current == 1:
-            cb.toggle()
-
+        cb = self._find_child(control_type="CheckBox", auto_id=auto_id, title=name)
+        self._set_checkbox_state(cb, checked)
         logger.debug(f"Checkbox '{name or auto_id}' -> {checked}")
 
     def _select_combo_value(self, combo, value: str) -> bool:
@@ -497,13 +592,7 @@ class ZimmWriterController:
     def set_dropdown(self, name: str = None, auto_id: str = None, value: str = ""):
         """Set dropdown/combobox value (Win32 messages + keyboard fallback)."""
         self.ensure_connected()
-        criteria = {"control_type": "ComboBox"}
-        if name:
-            criteria["title"] = name
-        if auto_id:
-            criteria["auto_id"] = auto_id
-
-        combo = self.main_window.child_window(**criteria)
+        combo = self._find_child(control_type="ComboBox", auto_id=auto_id, title=name)
         self._select_combo_value(combo, value)
         logger.debug(f"Dropdown '{name or auto_id}' -> {value}")
 
@@ -511,13 +600,7 @@ class ZimmWriterController:
                        clear_first: bool = True):
         """Set text via keystrokes (slow but reliable for short text)."""
         self.ensure_connected()
-        criteria = {"control_type": "Edit"}
-        if name:
-            criteria["title"] = name
-        if auto_id:
-            criteria["auto_id"] = auto_id
-
-        edit = self.main_window.child_window(**criteria)
+        edit = self._find_child(control_type="Edit", auto_id=auto_id, title=name)
         if clear_first:
             edit.set_edit_text("")
         edit.type_keys(value, with_spaces=True)
@@ -525,13 +608,7 @@ class ZimmWriterController:
     def set_text_fast(self, name: str = None, auto_id: str = None, value: str = ""):
         """Set text via clipboard paste (fast, for large text). Uses pyperclip."""
         self.ensure_connected()
-        criteria = {"control_type": "Edit"}
-        if name:
-            criteria["title"] = name
-        if auto_id:
-            criteria["auto_id"] = auto_id
-
-        edit = self.main_window.child_window(**criteria)
+        edit = self._find_child(control_type="Edit", auto_id=auto_id, title=name)
         edit.set_focus()
         time.sleep(0.1)
 
@@ -570,9 +647,8 @@ class ZimmWriterController:
             raise FileNotFoundError(f"CSV not found: {csv_path}")
 
         # Enable SEO CSV toggle if disabled
-        seo_btn = self.main_window.child_window(
-            auto_id=self.FEATURE_TOGGLE_IDS["seo_csv"], control_type="Button"
-        )
+        seo_btn = self._find_child(control_type="Button",
+                                   auto_id=self.FEATURE_TOGGLE_IDS["seo_csv"])
         if "Disabled" in seo_btn.window_text():
             seo_btn.click_input()
             time.sleep(1.5)
@@ -581,10 +657,10 @@ class ZimmWriterController:
         time.sleep(1)
         try:
             dlg = self.app.window(title_re=".*Open.*|.*Select.*|.*CSV.*")
-            fname = dlg.child_window(control_type="Edit", title="File name:")
+            fname = self._find_child(dlg, control_type="Edit", title="File name:")
             fname.set_edit_text(csv_path)
             time.sleep(0.5)
-            dlg.child_window(title="Open", control_type="Button").click_input()
+            self._click(self._find_child(dlg, control_type="Button", title="Open"))
             time.sleep(1)
             logger.info(f"Loaded CSV: {csv_path}")
         except Exception as e:
@@ -742,11 +818,10 @@ class ZimmWriterController:
 
         try:
             if auto_id:
-                btn = self.main_window.child_window(auto_id=auto_id, control_type="Button")
+                btn = self._find_child(control_type="Button", auto_id=auto_id)
             else:
-                btn = self.main_window.child_window(
-                    title_re=f".*{feature_name}.*", control_type="Button"
-                )
+                btn = self._find_child(control_type="Button",
+                                       title_re=f".*{feature_name}.*")
 
             text = btn.window_text()
             is_enabled = "Enabled" in text
@@ -826,7 +901,7 @@ class ZimmWriterController:
         if not auto_id:
             raise ValueError(f"Unknown feature: {feature_name}")
 
-        btn = self.main_window.child_window(auto_id=auto_id, control_type="Button")
+        btn = self._find_child(control_type="Button", auto_id=auto_id)
         btn.click_input()
         time.sleep(1)
 
@@ -853,7 +928,7 @@ class ZimmWriterController:
     def _set_config_dropdown(self, win, auto_id: str, value: str):
         """Select a value in a config window ComboBox via Win32 CB messages."""
         try:
-            combo = win.child_window(auto_id=auto_id, control_type="ComboBox")
+            combo = self._find_child(win, control_type="ComboBox", auto_id=auto_id)
             hwnd = combo.handle
             text_buf = ctypes.create_unicode_buffer(value)
             idx = ctypes.windll.user32.SendMessageW(
@@ -877,12 +952,8 @@ class ZimmWriterController:
     def _set_config_checkbox(self, win, auto_id: str, checked: bool):
         """Toggle a checkbox in a config window."""
         try:
-            cb = win.child_window(auto_id=auto_id, control_type="CheckBox")
-            current = cb.get_toggle_state()
-            if checked and current == 0:
-                cb.toggle()
-            elif not checked and current == 1:
-                cb.toggle()
+            cb = self._find_child(win, control_type="CheckBox", auto_id=auto_id)
+            self._set_checkbox_state(cb, checked)
             logger.debug(f"Config checkbox {auto_id} -> {checked}")
         except Exception as e:
             logger.warning(f"Could not set config checkbox {auto_id}: {e}")
@@ -890,7 +961,7 @@ class ZimmWriterController:
     def _set_config_text(self, win, auto_id: str, value: str):
         """Set text in a config window Edit field via clipboard paste."""
         try:
-            edit = win.child_window(auto_id=auto_id, control_type="Edit")
+            edit = self._find_child(win, control_type="Edit", auto_id=auto_id)
             edit.set_focus()
             time.sleep(0.1)
             if pyperclip:
@@ -909,16 +980,9 @@ class ZimmWriterController:
     def _click_config_button(self, win, auto_id: str = None, title: str = None):
         """Click a button in a config window."""
         try:
-            criteria = {"control_type": "Button"}
-            if auto_id:
-                criteria["auto_id"] = auto_id
-            if title:
-                criteria["title"] = title
-            btn = win.child_window(**criteria)
-            try:
-                btn.invoke()
-            except Exception:
-                btn.click_input()
+            btn = self._find_child(win, control_type="Button",
+                                   auto_id=auto_id, title=title)
+            self._click(btn)
             logger.debug(f"Config button clicked: {auto_id or title}")
         except Exception as e:
             logger.warning(f"Could not click config button {auto_id or title}: {e}")
@@ -933,10 +997,11 @@ class ZimmWriterController:
                     # Skip known windows
                     if any(k in title for k in ["ZimmWriter v10", "Bulk", "Menu", "Option"]):
                         continue
-                    # Look for OK/Yes buttons
+                    # Look for OK/Yes buttons in child controls
                     for btn_title in ["OK", "Yes", "&OK", "&Yes"]:
                         try:
-                            btn = w.child_window(title=btn_title, control_type="Button")
+                            btn = self._find_child(w, control_type="Button",
+                                                   title=btn_title)
                             if btn.exists(timeout=0.5):
                                 btn.click_input()
                                 time.sleep(0.5)
@@ -1305,10 +1370,10 @@ class ZimmWriterController:
             # Handle file dialog
             try:
                 dlg = self.app.window(title_re=".*Open.*|.*Select.*|.*CSV.*")
-                fname = dlg.child_window(control_type="Edit", title="File name:")
+                fname = self._find_child(dlg, control_type="Edit", title="File name:")
                 fname.set_edit_text(csv_path)
                 time.sleep(0.5)
-                dlg.child_window(title="Open", control_type="Button").click_input()
+                self._click(self._find_child(dlg, control_type="Button", title="Open"))
                 time.sleep(1)
             except Exception:
                 send_keys(csv_path.replace("\\", "\\\\"), with_spaces=True)

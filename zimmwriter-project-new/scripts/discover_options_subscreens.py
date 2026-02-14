@@ -49,17 +49,32 @@ SUBSCREENS = [
 ]
 
 
-def connect():
-    """Connect to ZimmWriter via PID."""
+def find_pid():
+    """Find ZimmWriter's AutoIt3 PID."""
     result = subprocess.run(
         ["powershell", "-Command",
          "Get-Process -Name 'AutoIt3*' -ErrorAction SilentlyContinue | "
          "Select-Object -First 1 -ExpandProperty Id"],
         capture_output=True, text=True, timeout=10
     )
-    pid = int(result.stdout.strip())
-    app = Application(backend="uia").connect(process=pid)
+    return int(result.stdout.strip())
+
+
+def connect(backend="win32"):
+    """Connect to ZimmWriter via PID with specified backend."""
+    pid = find_pid()
+    app = Application(backend=backend).connect(process=pid)
     return pid, app
+
+
+def connect_uia():
+    """Connect with UIA backend (for detailed control scanning)."""
+    return connect(backend="uia")
+
+
+def connect_win32():
+    """Connect with win32 backend (reliable for all screens)."""
+    return connect(backend="win32")
 
 
 def find_window_by_title(app, keyword):
@@ -92,9 +107,17 @@ def discover_screen(window, screen_name):
     for ctrl in all_ctrls:
         try:
             ct = ctrl.friendly_class_name()
+            # automation_id() only exists on UIA; use control_id() for win32
+            try:
+                aid = ctrl.automation_id()
+            except (AttributeError, Exception):
+                try:
+                    aid = str(ctrl.control_id())
+                except Exception:
+                    aid = ""
             info = {
                 "name": ctrl.window_text()[:300],
-                "auto_id": ctrl.automation_id(),
+                "auto_id": aid,
                 "control_type": ct,
                 "visible": ctrl.is_visible(),
                 "enabled": ctrl.is_enabled(),
@@ -164,8 +187,9 @@ def discover_screen(window, screen_name):
     return report
 
 
-def navigate_to_options_menu(app):
-    """Navigate to Options Menu from wherever we are."""
+def navigate_to_options_menu():
+    """Navigate to Options Menu from wherever we are. Uses win32 backend."""
+    _, app = connect_win32()
     window = app.top_window()
     title = window.window_text()
 
@@ -173,18 +197,18 @@ def navigate_to_options_menu(app):
     if "Bulk" in title:
         print("Closing Bulk Writer to get to Menu...", flush=True)
         close_window_by_handle(window.handle)
-        time.sleep(2)
-        _, app = connect()
+        time.sleep(3)
+        _, app = connect_win32()
         window = app.top_window()
         title = window.window_text()
 
     # If on Menu, click Options Menu
     if "Menu" in title and "Option" not in title:
         print("On Menu screen, clicking 'Options Menu'...", flush=True)
-        btn = window.child_window(title="Options Menu", control_type="Button")
-        btn.invoke()
-        time.sleep(2)
-        _, app = connect()
+        btn = window["Options Menu"]
+        btn.click()
+        time.sleep(3)
+        _, app = connect_win32()
         window = app.top_window()
 
     print(f"Current screen: {window.window_text()}", flush=True)
@@ -196,11 +220,11 @@ def main():
     print("  OPTIONS MENU SUB-SCREEN DISCOVERY")
     print("=" * 70)
 
-    pid, app = connect()
+    pid = find_pid()
     print(f"Connected to PID {pid}", flush=True)
 
-    # Navigate to Options Menu
-    app, options_window = navigate_to_options_menu(app)
+    # Navigate to Options Menu (uses win32 backend)
+    app, options_window = navigate_to_options_menu()
     options_handle = options_window.handle
     options_title = options_window.window_text()
 
@@ -211,60 +235,114 @@ def main():
     all_reports = {}
 
     for auto_id, screen_name in SUBSCREENS:
-        print(f"\n{'─'*60}")
+        print(f"\n{'-'*60}")
         print(f"[{screen_name}] Clicking button auto_id={auto_id}...", flush=True)
 
         try:
-            # Reconnect each time (window handles can go stale)
-            _, app = connect()
-            options_win = app.window(handle=options_handle)
+            # Use win32 for navigation (reliable on all screens)
+            _, app32 = connect_win32()
+            options_win = app32.window(handle=options_handle)
 
-            # Click the sub-screen button
-            btn = options_win.child_window(auto_id=auto_id, control_type="Button")
+            # Find and click the sub-screen button by iterating children
+            children = options_win.children()
+            btn = None
+            for child in children:
+                try:
+                    if child.friendly_class_name() == "Button":
+                        text = child.window_text()
+                        # Match by position in button list or by text
+                        cid = child.control_id()
+                        if str(cid) == auto_id:
+                            btn = child
+                            break
+                except Exception:
+                    pass
+
+            if btn is None:
+                # Fallback: try by title text matching
+                button_map = {
+                    "56": "Text API", "57": "Image API", "58": "Scraping API",
+                    "59": "Scraping Surgeon", "60": "Scraping Domain",
+                    "61": "AI Image Prompt", "62": "AI Words to Nuke",
+                    "63": "Secure Mode",
+                }
+                search_text = button_map.get(auto_id, "")
+                for child in children:
+                    try:
+                        if search_text.lower() in child.window_text().lower():
+                            btn = child
+                            break
+                    except Exception:
+                        pass
+
+            if btn is None:
+                print(f"  WARNING: Could not find button auto_id={auto_id}", flush=True)
+                all_reports[screen_name] = {"error": f"button auto_id={auto_id} not found"}
+                continue
+
             btn_text = btn.window_text()
             print(f"  Button text: '{btn_text}'", flush=True)
-            btn.invoke()
-            time.sleep(2)
+            btn.click()
+            time.sleep(3)
 
-            # Find the new window
-            _, app = connect()
+            # Try UIA backend first for richer control info, fall back to win32
             sub_window = None
             sub_handle = None
-            for w in app.windows():
-                h = w.handle
-                t = w.window_text()
-                if h != options_handle:
-                    sub_window = w
-                    sub_handle = h
-                    break
+            backend_used = None
+
+            # Try UIA
+            try:
+                _, app_uia = connect_uia()
+                for w in app_uia.windows():
+                    h = w.handle
+                    if h != options_handle:
+                        sub_window = w
+                        sub_handle = h
+                        backend_used = "uia"
+                        break
+            except Exception as e:
+                print(f"  UIA failed ({e}), trying win32...", flush=True)
+
+            # Fall back to win32
+            if sub_window is None:
+                _, app32b = connect_win32()
+                for w in app32b.windows():
+                    h = w.handle
+                    if h != options_handle:
+                        sub_window = w
+                        sub_handle = h
+                        backend_used = "win32"
+                        break
 
             if sub_window:
-                print(f"  Opened: '{sub_window.window_text()}'", flush=True)
+                print(f"  Opened: '{sub_window.window_text()}' (via {backend_used})", flush=True)
 
-                # Screenshot
+                # Screenshot via pyautogui (more reliable across backends)
                 try:
+                    import pyautogui
                     sub_window.set_focus()
                     time.sleep(0.5)
-                    img = sub_window.wrapper_object().capture_as_image()
-                    img.save(os.path.join(OUTPUT_DIR, f"options_{screen_name}.png"))
+                    screenshot = pyautogui.screenshot()
+                    screenshot.save(os.path.join(OUTPUT_DIR, f"options_{screen_name}.png"))
                     print(f"  Screenshot saved", flush=True)
                 except Exception as e:
                     print(f"  Screenshot error: {e}", flush=True)
 
                 # Discover controls
                 report = discover_screen(sub_window, screen_name)
+                report["backend_used"] = backend_used
                 all_reports[screen_name] = report
 
                 # Close the sub-screen
                 close_window_by_handle(sub_handle)
-                time.sleep(1)
+                time.sleep(2)
 
                 # Verify we're back on Options Menu
-                _, app = connect()
-                curr = app.top_window().window_text()
+                _, app32c = connect_win32()
+                curr = app32c.top_window().window_text()
                 if "Option" not in curr:
                     print(f"  WARNING: Not back on Options Menu (got '{curr}'), re-navigating...", flush=True)
-                    app, options_win = navigate_to_options_menu(app)
+                    _, options_win = navigate_to_options_menu()
                     options_handle = options_win.handle
             else:
                 print(f"  WARNING: No new window opened for {screen_name}", flush=True)
@@ -275,8 +353,8 @@ def main():
             all_reports[screen_name] = {"error": str(e)}
             # Try to recover
             try:
-                _, app = connect()
-                for w in app.windows():
+                _, app32r = connect_win32()
+                for w in app32r.windows():
                     h = w.handle
                     if h != options_handle:
                         close_window_by_handle(h)
