@@ -1,0 +1,25 @@
+{
+  "project_type": "seo_analysis",
+  "coverage_map": {
+    "keywords": {
+      "required": ["target_keyword_present", "keyword_in_title", "keyword_in_h1"],
+      "recommended": ["keyword_density_check", "lsi_keywords", "keyword_in_url"],
+      "optional": ["keyword_cannibalization", "serp_feature_opportunity"]
+    },
+    "positions": {
+      "required": ["current_position_tracked", "impression_data"],
+      "recommended": ["position_trend_28d", "position_volatility"],
+      "optional": ["competitor_positions", "featured_snippet_check"]
+    },
+    "ctr": {
+      "required": ["ctr_tracked", "ctr_vs_expected"],
+      "recommended": ["title_ctr_optimization", "meta_description_ctr"],
+      "optional": ["rich_snippet_impact", "sitelink_presence"]
+    },
+    "decay": {
+      "required": ["position_decline_check", "traffic_decline_check"],
+      "recommended": ["content_freshness", "competitor_movement"],
+      "optional": ["algorithm_update_correlation", "seasonal_adjustment"]
+    }
+  }
+}

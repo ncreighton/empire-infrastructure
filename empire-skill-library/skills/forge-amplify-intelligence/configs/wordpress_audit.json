@@ -1,0 +1,30 @@
+{
+  "project_type": "wordpress_audit",
+  "coverage_map": {
+    "content": {
+      "required": ["featured_image", "meta_title", "meta_description", "word_count", "heading_structure"],
+      "recommended": ["internal_links", "external_links", "image_alt_text", "schema_markup"],
+      "optional": ["table_of_contents", "author_bio", "related_posts"]
+    },
+    "seo": {
+      "required": ["title_tag", "meta_description", "canonical_url", "og_tags"],
+      "recommended": ["focus_keyword", "keyword_density", "url_structure", "breadcrumbs"],
+      "optional": ["twitter_cards", "json_ld", "hreflang"]
+    },
+    "images": {
+      "required": ["featured_image_exists", "alt_text_present", "image_loads"],
+      "recommended": ["image_dimensions", "lazy_loading", "webp_format"],
+      "optional": ["og_image", "pinterest_image", "image_compression"]
+    },
+    "links": {
+      "required": ["no_broken_links", "internal_link_count"],
+      "recommended": ["external_link_nofollow", "anchor_text_variety", "link_relevance"],
+      "optional": ["link_density", "deep_link_ratio"]
+    },
+    "technical": {
+      "required": ["page_loads", "no_console_errors", "mobile_responsive"],
+      "recommended": ["core_web_vitals", "ssl_valid", "sitemap_entry"],
+      "optional": ["amp_valid", "structured_data_test"]
+    }
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "wordpress_patterns": {
+    "theme_update_regression": {
+      "trigger": "theme_recently_updated",
+      "likely_issues": ["header_layout_shift", "footer_widget_spacing", "sidebar_collapse", "font_change"],
+      "confidence": 0.85,
+      "check_first": ["header", "footer", "sidebar", "navigation"]
+    },
+    "elementor_responsive": {
+      "trigger": "elementor_active",
+      "likely_issues": ["section_gap_mobile", "column_collapse", "widget_overflow", "custom_css_not_loading"],
+      "confidence": 0.78,
+      "check_first": ["mobile_375", "tablet_768"]
+    },
+    "woocommerce_grid": {
+      "trigger": "woocommerce_active",
+      "likely_issues": ["product_card_height_mismatch", "price_alignment", "add_to_cart_overflow"],
+      "confidence": 0.82,
+      "check_first": ["shop_page", "category_page", "mobile_product_grid"]
+    },
+    "dark_theme_contrast": {
+      "trigger": "dark_background_detected",
+      "likely_issues": ["text_contrast_failure", "link_invisibility", "form_field_borders"],
+      "confidence": 0.90,
+      "check_first": ["body_text", "links", "form_inputs"]
+    },
+    "long_content_overflow": {
+      "trigger": "variable_content_lengths",
+      "likely_issues": ["title_overflow_card", "excerpt_break_grid", "tag_list_wrap"],
+      "confidence": 0.84,
+      "check_first": ["blog_archive", "category_grid", "sidebar_posts"]
+    }
+  },
+  "seo_patterns": {
+    "seo_title_decay": {
+      "trigger": "position_declining",
+      "likely_issues": ["title_not_optimized", "meta_description_stale", "content_outdated"],
+      "confidence": 0.75,
+      "check_first": ["title_tag", "meta_description", "h1_tag"]
+    },
+    "content_thin": {
+      "trigger": "low_word_count",
+      "likely_issues": ["thin_content_penalty", "poor_topical_coverage", "missing_subtopics"],
+      "confidence": 0.80,
+      "check_first": ["word_count", "heading_count", "content_depth"]
+    },
+    "image_broken_pattern": {
+      "trigger": "missing_images_detected",
+      "likely_issues": ["broken_featured_image", "missing_alt_text", "external_image_hotlink_dead"],
+      "confidence": 0.88,
+      "check_first": ["featured_image", "content_images", "og_image"]
+    },
+    "internal_link_deficit": {
+      "trigger": "low_internal_links",
+      "likely_issues": ["orphan_page", "poor_link_equity_flow", "missing_contextual_links"],
+      "confidence": 0.72,
+      "check_first": ["internal_link_count", "anchor_text", "link_relevance"]
+    }
+  }
+}

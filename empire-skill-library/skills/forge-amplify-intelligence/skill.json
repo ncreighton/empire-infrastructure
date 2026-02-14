@@ -1,0 +1,32 @@
+{
+  "name": "forge-amplify-intelligence",
+  "version": "1.0.0",
+  "description": "Unified FORGE + AMPLIFY intelligence engine for empire-wide audit enhancement, gap detection, issue prediction, fix generation, and learning",
+  "author": "Empire Infrastructure",
+  "entry_points": {
+    "python": "forge_amplify_engine.py",
+    "documentation": "SKILL.md"
+  },
+  "modules": {
+    "forge": {
+      "scout": "Gap detector - finds blind spots in audit configurations",
+      "sentinel": "Prompt optimizer - scores and enhances Vision AI prompts",
+      "oracle": "Pattern predictor - predicts where issues will appear",
+      "smith": "Auto-fix generator - generates CSS/HTML/content fixes",
+      "codex": "Learning engine - persistent knowledge that improves over time"
+    },
+    "amplify": {
+      "enrich": "Adds site-specific context and historical data",
+      "expand": "Broadens scope with edge cases and viewports",
+      "fortify": "Error-proofs with retries and fallbacks",
+      "anticipate": "Thinks ahead for fix generation and patterns",
+      "optimize": "Routes to best tools and builds enhanced prompts",
+      "validate": "Final validation before execution"
+    }
+  },
+  "project_types": ["wordpress_audit", "seo_analysis", "content_pipeline"],
+  "installed_in": ["article-audit-system", "empire-dashboard", "empire-master"],
+  "dependencies": ["json", "pathlib", "dataclasses", "logging"],
+  "created_at": "2026-02-13",
+  "updated_at": "2026-02-13"
+}
