@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   n8n:
     image: n8nio/n8n:latest
@@ -46,6 +44,7 @@ services:
       - ./article-audit/.env
     volumes:
       - ./config:/app/config:ro
+      - ./config:/config:ro
     networks:
       - empire
 
