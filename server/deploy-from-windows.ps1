@@ -8,6 +8,23 @@ param(
 )
 
 $projectRoot = "D:\Claude Code Projects"
+$dest = "${User}@${VpsIp}"
+
+# scp on Windows doesn't expand * globs — use PowerShell to resolve them
+function Scp-Dir {
+    param([string]$LocalDir, [string]$RemotePath)
+    if (-not (Test-Path $LocalDir)) {
+        Write-Host "  SKIP: $LocalDir not found" -ForegroundColor DarkGray
+        return
+    }
+    Get-ChildItem -Path $LocalDir | ForEach-Object {
+        if ($_.PSIsContainer) {
+            scp -r $_.FullName "${RemotePath}"
+        } else {
+            scp $_.FullName "${RemotePath}"
+        }
+    }
+}
 
 Write-Host ""
 Write-Host "=========================================" -ForegroundColor Cyan
@@ -17,42 +34,42 @@ Write-Host ""
 
 # Upload docker-compose and configs
 Write-Host "[1/7] Uploading server configs..." -ForegroundColor Yellow
-scp "$projectRoot\server\docker-compose.yml" "${User}@${VpsIp}:/opt/empire/"
-scp "$projectRoot\server\nginx-empire.conf" "${User}@${VpsIp}:/opt/empire/"
+scp "$projectRoot\server\docker-compose.yml" "${dest}:/opt/empire/"
+scp "$projectRoot\server\nginx-empire.conf" "${dest}:/opt/empire/"
 
 # Upload dashboard
 Write-Host "[2/7] Uploading dashboard..." -ForegroundColor Yellow
-scp -r "$projectRoot\empire-dashboard\*" "${User}@${VpsIp}:/opt/empire/dashboard/"
-scp "$projectRoot\server\dashboard\Dockerfile" "${User}@${VpsIp}:/opt/empire/dashboard/"
+Scp-Dir "$projectRoot\empire-dashboard" "${dest}:/opt/empire/dashboard/"
+scp "$projectRoot\server\dashboard\Dockerfile" "${dest}:/opt/empire/dashboard/"
 
 # Upload article-audit
 Write-Host "[3/7] Uploading article-audit..." -ForegroundColor Yellow
-scp -r "$projectRoot\article-audit-system\*" "${User}@${VpsIp}:/opt/empire/article-audit/"
-scp "$projectRoot\server\article-audit\Dockerfile" "${User}@${VpsIp}:/opt/empire/article-audit/"
+Scp-Dir "$projectRoot\article-audit-system" "${dest}:/opt/empire/article-audit/"
+scp "$projectRoot\server\article-audit\Dockerfile" "${dest}:/opt/empire/article-audit/"
 
 # Upload shared config
 Write-Host "[4/7] Uploading shared config..." -ForegroundColor Yellow
-scp -r "$projectRoot\config\*" "${User}@${VpsIp}:/opt/empire/config/"
+Scp-Dir "$projectRoot\config" "${dest}:/opt/empire/config/"
 
 # Upload skill library (FORGE/AMPLIFY intelligence)
 Write-Host "[5/7] Uploading skill library..." -ForegroundColor Yellow
-ssh "${User}@${VpsIp}" "mkdir -p /opt/empire/skill-library/configs"
-scp "$projectRoot\empire-skill-library\skills\forge-amplify-intelligence\forge_amplify_engine.py" "${User}@${VpsIp}:/opt/empire/skill-library/"
-scp "$projectRoot\empire-skill-library\skills\forge-amplify-intelligence\skill.json" "${User}@${VpsIp}:/opt/empire/skill-library/"
-scp -r "$projectRoot\empire-skill-library\skills\forge-amplify-intelligence\configs\*" "${User}@${VpsIp}:/opt/empire/skill-library/configs/"
+ssh "$dest" "mkdir -p /opt/empire/skill-library/configs"
+scp "$projectRoot\empire-skill-library\skills\forge-amplify-intelligence\forge_amplify_engine.py" "${dest}:/opt/empire/skill-library/"
+scp "$projectRoot\empire-skill-library\skills\forge-amplify-intelligence\skill.json" "${dest}:/opt/empire/skill-library/"
+Scp-Dir "$projectRoot\empire-skill-library\skills\forge-amplify-intelligence\configs" "${dest}:/opt/empire/skill-library/configs/"
 
 # Upload n8n workflows (article-audit + empire-master)
 Write-Host "[6/7] Uploading n8n workflows..." -ForegroundColor Yellow
-ssh "${User}@${VpsIp}" "mkdir -p /opt/empire/n8n-workflows"
-scp -r "$projectRoot\article-audit-system\n8n-workflows\*" "${User}@${VpsIp}:/opt/empire/n8n-workflows/"
-scp -r "$projectRoot\empire-master\workflows\*" "${User}@${VpsIp}:/opt/empire/n8n-workflows/"
+ssh "$dest" "mkdir -p /opt/empire/n8n-workflows"
+Scp-Dir "$projectRoot\article-audit-system\n8n-workflows" "${dest}:/opt/empire/n8n-workflows/"
+Scp-Dir "$projectRoot\empire-master\workflows" "${dest}:/opt/empire/n8n-workflows/"
 if (Test-Path "$projectRoot\n8n") {
-    scp -r "$projectRoot\n8n\*" "${User}@${VpsIp}:/opt/empire/n8n-workflows/"
+    Scp-Dir "$projectRoot\n8n" "${dest}:/opt/empire/n8n-workflows/"
 }
 
 # Rebuild and restart containers
 Write-Host "[7/7] Rebuilding containers on VPS..." -ForegroundColor Yellow
-ssh "${User}@${VpsIp}" "cd /opt/empire && docker compose up -d --build"
+ssh "$dest" "cd /opt/empire && docker compose up -d --build"
 
 Write-Host ""
 Write-Host "=========================================" -ForegroundColor Cyan
