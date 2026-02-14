@@ -1,0 +1,29 @@
+[Unit]
+Description=OpenClaw Gateway — Nick's Empire AI
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/.openclaw/workspace
+Environment=NODE_ENV=production
+Environment=HOME=/root
+ExecStart=/usr/local/bin/openclaw gateway --port 18789 --verbose
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/openclaw-gateway.log
+StandardError=append:/var/log/openclaw-gateway-error.log
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/root/.openclaw /var/log /tmp
+PrivateTmp=true
+
+# Resource limits
+LimitNOFILE=65535
+MemoryMax=2G
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,394 @@
+{
+  "_description": "Android app registry — known apps with UI patterns for automation",
+  "_version": "1.0.0",
+  "apps": {
+    "facebook": {
+      "package": "com.facebook.katana",
+      "friendly_names": ["facebook", "fb"],
+      "category": "social_media",
+      "load_time_ms": 4000,
+      "auth_type": "persistent_session",
+      "screens": {
+        "feed": {"indicators": ["What's on your mind", "News Feed", "Stories"]},
+        "create_post": {"indicators": ["Create a post", "What's on your mind"], "nav_from_feed": "tap 'What's on your mind'"},
+        "profile": {"indicators": ["Edit profile", "Posts", "Friends"]},
+        "notifications": {"indicators": ["Notifications", "Earlier", "Today"]},
+        "messenger": {"indicators": ["Chats", "People", "Stories"]}
+      },
+      "quirks": [
+        "May show 'Rate this app' dialog on launch",
+        "Feed position resets on background/foreground",
+        "Photo upload can take 5-15s depending on size",
+        "Stories UI changes frequently with updates"
+      ]
+    },
+    "instagram": {
+      "package": "com.instagram.android",
+      "friendly_names": ["instagram", "ig", "insta"],
+      "category": "social_media",
+      "load_time_ms": 3500,
+      "auth_type": "persistent_session",
+      "screens": {
+        "feed": {"indicators": ["Instagram", "Home"]},
+        "create_post": {"indicators": ["New post", "Gallery", "Photo", "Video"]},
+        "stories": {"indicators": ["Your story", "Add to story"]},
+        "reels": {"indicators": ["Reels", "Audio"]},
+        "profile": {"indicators": ["Edit profile", "Posts", "Followers"]},
+        "search": {"indicators": ["Search", "Explore"]}
+      },
+      "quirks": [
+        "Bottom nav icons change with updates (no text labels)",
+        "Create button is '+' in center of bottom nav",
+        "Story creation has multiple modes (Normal, Create, Boomerang)",
+        "Reels editor is complex — many sub-screens"
+      ]
+    },
+    "twitter": {
+      "package": "com.twitter.android",
+      "friendly_names": ["twitter", "x", "tweet"],
+      "category": "social_media",
+      "load_time_ms": 3000,
+      "auth_type": "persistent_session",
+      "screens": {
+        "feed": {"indicators": ["Home", "For you", "Following"]},
+        "compose": {"indicators": ["What's happening", "Post", "Everyone can reply"]},
+        "profile": {"indicators": ["Posts", "Replies", "Likes"]},
+        "search": {"indicators": ["Search", "Trending"]}
+      },
+      "quirks": [
+        "Compose button is floating action button (bottom right)",
+        "Character limit: 280 (or 25000 for premium)",
+        "Media upload can be slow on large images/videos"
+      ]
+    },
+    "tiktok": {
+      "package": "com.zhiliaoapp.musically",
+      "friendly_names": ["tiktok", "tt"],
+      "category": "social_media",
+      "load_time_ms": 4500,
+      "auth_type": "persistent_session",
+      "screens": {
+        "feed": {"indicators": ["For You", "Following"]},
+        "create": {"indicators": ["Record", "Upload", "Effects", "Sounds"]},
+        "profile": {"indicators": ["Following", "Followers", "Likes"]},
+        "inbox": {"indicators": ["Inbox", "Activity"]}
+      },
+      "quirks": [
+        "Auto-plays videos on feed (can trigger audio)",
+        "Create flow is multi-step with many options",
+        "Upload processing can take 30s-2min"
+      ]
+    },
+    "pinterest": {
+      "package": "com.pinterest",
+      "friendly_names": ["pinterest", "pin"],
+      "category": "social_media",
+      "load_time_ms": 3500,
+      "auth_type": "persistent_session",
+      "screens": {
+        "home": {"indicators": ["Home", "Today", "Explore"]},
+        "create_pin": {"indicators": ["Create Pin", "Add image", "Title", "Description"]},
+        "boards": {"indicators": ["Boards", "Pins", "Tried"]},
+        "search": {"indicators": ["Search for ideas"]}
+      },
+      "quirks": [
+        "Pin creation requires image upload first",
+        "Board selection can have many boards to scroll through",
+        "SEO fields: title, description, alt text, link"
+      ]
+    },
+    "linkedin": {
+      "package": "com.linkedin.android",
+      "friendly_names": ["linkedin", "li"],
+      "category": "social_media",
+      "load_time_ms": 4000,
+      "auth_type": "persistent_session",
+      "screens": {
+        "feed": {"indicators": ["Home", "Start a post"]},
+        "create_post": {"indicators": ["Start a post", "Anyone", "Add a photo"]},
+        "profile": {"indicators": ["Experience", "Education", "Skills"]},
+        "messaging": {"indicators": ["Messaging", "Compose"]}
+      },
+      "quirks": [
+        "Professional context — content should match",
+        "Post visibility: Anyone, Connections only, Group",
+        "Article editor is separate from regular posts"
+      ]
+    },
+    "whatsapp": {
+      "package": "com.whatsapp",
+      "friendly_names": ["whatsapp", "wa"],
+      "category": "messaging",
+      "load_time_ms": 2000,
+      "auth_type": "persistent_session",
+      "screens": {
+        "chats": {"indicators": ["Chats", "Status", "Calls"]},
+        "conversation": {"indicators": ["Type a message", "camera icon"]},
+        "status": {"indicators": ["My status", "Recent updates"]},
+        "calls": {"indicators": ["Calls", "Recent"]}
+      },
+      "quirks": [
+        "End-to-end encrypted — screenshots may be restricted",
+        "Status = Stories equivalent",
+        "Message field always at bottom of conversation"
+      ]
+    },
+    "telegram": {
+      "package": "org.telegram.messenger",
+      "friendly_names": ["telegram", "tg"],
+      "category": "messaging",
+      "load_time_ms": 2000,
+      "auth_type": "persistent_session",
+      "screens": {
+        "chats": {"indicators": ["Telegram", "Chats"]},
+        "conversation": {"indicators": ["Write a message"]},
+        "channels": {"indicators": ["Channel", "Subscribers"]}
+      },
+      "quirks": [
+        "Bots have inline keyboards (custom button layouts)",
+        "Channels vs Groups have different UI",
+        "Secret chats block screenshots"
+      ]
+    },
+    "chrome": {
+      "package": "com.android.chrome",
+      "friendly_names": ["chrome", "browser", "google chrome"],
+      "category": "browser",
+      "load_time_ms": 2500,
+      "auth_type": "google_account",
+      "screens": {
+        "new_tab": {"indicators": ["Search or type URL", "Discover", "Most visited"]},
+        "webpage": {"indicators": ["url bar at top"]},
+        "tabs": {"indicators": ["tabs count", "New tab"]},
+        "settings": {"indicators": ["Settings", "Search engine", "Privacy"]}
+      },
+      "quirks": [
+        "URL bar can be at top or bottom depending on settings",
+        "Cookie consent banners on most sites",
+        "Downloads go to /sdcard/Download/",
+        "Can use intent to open specific URL: am start -a android.intent.action.VIEW -d 'https://url'"
+      ]
+    },
+    "gmail": {
+      "package": "com.google.android.gm",
+      "friendly_names": ["gmail", "email", "mail"],
+      "category": "productivity",
+      "load_time_ms": 3000,
+      "auth_type": "google_account",
+      "screens": {
+        "inbox": {"indicators": ["Primary", "Social", "Promotions", "Inbox"]},
+        "compose": {"indicators": ["Compose", "From", "To", "Subject"]},
+        "read": {"indicators": ["Reply", "Forward", "Archive"]}
+      },
+      "quirks": [
+        "Multiple accounts — check which is active",
+        "Compose attaches files from recent menu",
+        "Swipe actions configurable (archive, delete, etc.)"
+      ]
+    },
+    "wordpress": {
+      "package": "org.wordpress.android",
+      "friendly_names": ["wordpress", "wp"],
+      "category": "empire_tools",
+      "load_time_ms": 4000,
+      "auth_type": "wordpress_account",
+      "screens": {
+        "my_sites": {"indicators": ["My Site", "Stats", "Posts"]},
+        "posts": {"indicators": ["Posts", "Published", "Drafts"]},
+        "editor": {"indicators": ["Title", "Start writing", "Publish"]},
+        "stats": {"indicators": ["Stats", "Views", "Visitors"]}
+      },
+      "quirks": [
+        "Multiple sites — must select correct one first",
+        "Block editor (Gutenberg) on mobile is limited",
+        "Media uploads can be slow on large images",
+        "Prefer REST API for bulk operations over app UI"
+      ]
+    },
+    "youtube": {
+      "package": "com.google.android.youtube",
+      "friendly_names": ["youtube", "yt"],
+      "category": "media",
+      "load_time_ms": 3000,
+      "auth_type": "google_account",
+      "screens": {
+        "home": {"indicators": ["Home", "Shorts", "Subscriptions"]},
+        "search": {"indicators": ["Search YouTube"]},
+        "player": {"indicators": ["play/pause", "Subscribe"]},
+        "studio": {"indicators": ["YouTube Studio", "Dashboard"]}
+      },
+      "quirks": [
+        "Auto-plays videos — can trigger audio/data usage",
+        "Upload via YouTube Studio app (separate app for creators)",
+        "Shorts have different creation flow than regular videos"
+      ]
+    },
+    "settings": {
+      "package": "com.android.settings",
+      "friendly_names": ["settings", "phone settings", "system settings"],
+      "category": "system",
+      "load_time_ms": 1000,
+      "auth_type": "none",
+      "screens": {
+        "main": {"indicators": ["Settings", "Network", "Display", "Sound"]},
+        "wifi": {"indicators": ["Wi-Fi", "Connected", "Available networks"]},
+        "bluetooth": {"indicators": ["Bluetooth", "Paired devices"]},
+        "developer": {"indicators": ["Developer options", "USB debugging", "Wireless debugging"]},
+        "apps": {"indicators": ["Apps", "Default apps", "App info"]}
+      },
+      "quirks": [
+        "Layout varies significantly by manufacturer (Samsung, Pixel, OnePlus, etc.)",
+        "Some settings require scrolling to find",
+        "Developer options may be hidden (tap build number 7 times)"
+      ]
+    },
+    "camera": {
+      "package": "com.android.camera",
+      "friendly_names": ["camera", "take photo", "take picture"],
+      "category": "media",
+      "load_time_ms": 2000,
+      "auth_type": "none",
+      "screens": {
+        "viewfinder": {"indicators": ["shutter button", "photo/video toggle"]},
+        "gallery_preview": {"indicators": ["thumbnail", "share", "delete"]}
+      },
+      "quirks": [
+        "Package name varies by manufacturer (com.samsung.android.camera2, etc.)",
+        "Shutter button position varies",
+        "Mode switching (photo, video, portrait, night) varies by device",
+        "Alternative: use termux-camera-photo for headless capture"
+      ]
+    },
+    "files": {
+      "package": "com.google.android.documentsui",
+      "friendly_names": ["files", "file manager", "documents"],
+      "category": "productivity",
+      "load_time_ms": 1500,
+      "auth_type": "none",
+      "screens": {
+        "browse": {"indicators": ["Downloads", "Images", "Videos", "Audio"]},
+        "recent": {"indicators": ["Recent", "Modified"]}
+      },
+      "quirks": [
+        "Package varies: com.google.android.documentsui (stock), com.samsung.android.myfiles (Samsung)",
+        "File picker dialog is separate from file manager app"
+      ]
+    },
+    "play_store": {
+      "package": "com.android.vending",
+      "friendly_names": ["play store", "google play", "app store"],
+      "category": "system",
+      "load_time_ms": 3000,
+      "auth_type": "google_account",
+      "screens": {
+        "home": {"indicators": ["Games", "Apps", "Books"]},
+        "search": {"indicators": ["Search for apps & games"]},
+        "app_detail": {"indicators": ["Install", "Uninstall", "Open", "Update"]}
+      },
+      "quirks": [
+        "Install prompts may require Google account verification",
+        "Large app installs need WiFi",
+        "Update All can take a long time"
+      ]
+    },
+    "etsy": {
+      "package": "com.etsy.android",
+      "friendly_names": ["etsy"],
+      "category": "empire_tools",
+      "load_time_ms": 4000,
+      "auth_type": "etsy_account",
+      "screens": {
+        "home": {"indicators": ["Etsy", "Search for anything"]},
+        "shop_manager": {"indicators": ["Shop Manager", "Listings", "Orders"]},
+        "listing": {"indicators": ["Title", "Description", "Price", "Photos"]}
+      },
+      "quirks": [
+        "Seller dashboard vs buyer home are different entry points",
+        "Photo upload for listings supports up to 10 images",
+        "SEO fields: title (140 char), tags (13 max), description"
+      ]
+    },
+    "google_analytics": {
+      "package": "com.google.android.apps.giant",
+      "friendly_names": ["analytics", "google analytics", "ga"],
+      "category": "empire_tools",
+      "load_time_ms": 4000,
+      "auth_type": "google_account",
+      "screens": {
+        "home": {"indicators": ["Analytics", "Users", "Sessions", "Revenue"]},
+        "realtime": {"indicators": ["Real-time", "Users right now"]},
+        "reports": {"indicators": ["Reports", "Acquisition", "Engagement"]}
+      },
+      "quirks": [
+        "Multiple properties — must select correct site",
+        "Data can be delayed up to 24-48 hours",
+        "GA4 interface is different from Universal Analytics"
+      ]
+    },
+    "adsense": {
+      "package": "com.google.android.apps.ads.publisher",
+      "friendly_names": ["adsense", "google adsense", "ads"],
+      "category": "empire_tools",
+      "load_time_ms": 3500,
+      "auth_type": "google_account",
+      "screens": {
+        "home": {"indicators": ["AdSense", "Estimated earnings", "Today"]},
+        "reports": {"indicators": ["Reports", "Date range", "Sites"]}
+      },
+      "quirks": [
+        "Earnings data delayed by a few hours",
+        "Reports can be filtered by site"
+      ]
+    }
+  },
+  "global_edge_cases": [
+    {
+      "name": "system_update_dialog",
+      "indicators": ["System update available", "Install now", "Remind me later"],
+      "action": "dismiss",
+      "method": "tap 'Remind me later' or 'Not now'"
+    },
+    {
+      "name": "low_battery_warning",
+      "indicators": ["Battery low", "Low battery", "Connect charger"],
+      "action": "dismiss_and_warn",
+      "method": "dismiss dialog, report to user"
+    },
+    {
+      "name": "storage_full_warning",
+      "indicators": ["Storage full", "Running out of space", "Free up space"],
+      "action": "abort_and_warn",
+      "method": "abort task, report to user"
+    },
+    {
+      "name": "app_crash_dialog",
+      "indicators": ["has stopped", "keeps stopping", "isn't responding"],
+      "action": "force_close_and_retry",
+      "method": "tap 'Close app', wait 2s, relaunch"
+    },
+    {
+      "name": "permission_dialog",
+      "indicators": ["Allow", "Deny", "While using the app", "Only this time"],
+      "action": "grant_if_safe",
+      "method": "tap 'Allow' or 'While using the app' for camera/storage/location"
+    },
+    {
+      "name": "cookie_consent",
+      "indicators": ["Accept cookies", "Cookie policy", "I agree", "Accept all"],
+      "action": "accept",
+      "method": "tap 'Accept all' or 'I agree'"
+    },
+    {
+      "name": "notification_overlay",
+      "indicators": ["notification shade pulled down"],
+      "action": "dismiss",
+      "method": "swipe up from top"
+    },
+    {
+      "name": "rate_app_dialog",
+      "indicators": ["Rate this app", "Enjoying", "Rate us", "stars"],
+      "action": "dismiss",
+      "method": "tap 'Not now' or 'Later' or 'No thanks'"
+    }
+  ]
+}

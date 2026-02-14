@@ -1,0 +1,85 @@
+{
+  "name": "Empire Site Monitor",
+  "nodes": [
+    {
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [250, 300],
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "hours", "hoursInterval": 6 }]
+        }
+      },
+      "notes": "Run every 6 hours to check all sites"
+    },
+    {
+      "name": "Site List",
+      "type": "n8n-nodes-base.code",
+      "position": [450, 300],
+      "parameters": {
+        "jsCode": "const sites = [\n  'witchcraftforbeginners.com',\n  'smarthomewizards.com',\n  'aiinactionhub.com',\n  'aidiscoverydigest.com',\n  'wealthfromai.com',\n  'family-flourish.com',\n  'mythicalarchives.com',\n  'bulletjournals.net',\n  'crystalwitchcraft.com',\n  'herbalwitchery.com',\n  'moonphasewitch.com',\n  'tarotforbeginners.net',\n  'spellsandrituals.com',\n  'paganpathways.net',\n  'witchyhomedecor.com',\n  'seasonalwitchcraft.com'\n];\n\nreturn sites.map(domain => ({ json: { domain } }));"
+      }
+    },
+    {
+      "name": "Check Site Health",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [650, 300],
+      "parameters": {
+        "url": "=https://{{ $json.domain }}",
+        "method": "GET",
+        "options": {
+          "timeout": 15000,
+          "fullResponse": true
+        }
+      },
+      "continueOnFail": true,
+      "notes": "HTTP GET each site, capture status code and response time"
+    },
+    {
+      "name": "Check Results",
+      "type": "n8n-nodes-base.code",
+      "position": [850, 300],
+      "parameters": {
+        "jsCode": "const results = $input.all();\nconst issues = [];\nconst healthy = [];\n\nfor (const item of results) {\n  const domain = item.json.domain || 'unknown';\n  const statusCode = item.json.statusCode || 0;\n  const responseTime = item.json.headers?.['x-response-time'] || 'unknown';\n  \n  if (statusCode >= 200 && statusCode < 400) {\n    healthy.push({ domain, statusCode });\n  } else {\n    issues.push({ domain, statusCode, error: item.json.error || 'Non-2xx response' });\n  }\n}\n\nreturn [{\n  json: {\n    timestamp: new Date().toISOString(),\n    total: results.length,\n    healthy: healthy.length,\n    issues: issues.length,\n    issueDetails: issues,\n    healthyDetails: healthy\n  }\n}];"
+      }
+    },
+    {
+      "name": "Has Issues?",
+      "type": "n8n-nodes-base.if",
+      "position": [1050, 300],
+      "parameters": {
+        "conditions": {
+          "number": [{ "value1": "={{ $json.issues }}", "operation": "larger", "value2": 0 }]
+        }
+      }
+    },
+    {
+      "name": "Alert OpenClaw",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1250, 250],
+      "parameters": {
+        "url": "http://localhost:18789/webhook/site-alert",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ type: 'site-down', issues: $json.issueDetails, timestamp: $json.timestamp }) }}"
+      },
+      "notes": "Notify OpenClaw of any site issues — will forward to WhatsApp"
+    },
+    {
+      "name": "Log Health",
+      "type": "n8n-nodes-base.code",
+      "position": [1250, 400],
+      "parameters": {
+        "jsCode": "// Log results for historical tracking\nconst fs = require('fs');\nconst logDir = '/home/node/.n8n/health-logs';\ntry { fs.mkdirSync(logDir, { recursive: true }); } catch(e) {}\nconst filename = `${logDir}/${new Date().toISOString().split('T')[0]}.json`;\n\nlet existing = [];\ntry { existing = JSON.parse(fs.readFileSync(filename, 'utf8')); } catch(e) {}\nexisting.push($json);\nfs.writeFileSync(filename, JSON.stringify(existing, null, 2));\n\nreturn [{ json: { logged: true } }];"
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": { "main": [[{ "node": "Site List" }]] },
+    "Site List": { "main": [[{ "node": "Check Site Health" }]] },
+    "Check Site Health": { "main": [[{ "node": "Check Results" }]] },
+    "Check Results": { "main": [[{ "node": "Has Issues?" }]] },
+    "Has Issues?": { "main": [[{ "node": "Alert OpenClaw" }], [{ "node": "Log Health" }]] }
+  }
+}

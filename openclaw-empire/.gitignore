@@ -1,0 +1,35 @@
+# Environment
+.env
+.env.local
+
+# Memory
+.memory/
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Credentials (never commit)
+credentials/
+*.pem
+*.key
+
+# Intelligence data (runtime learning — large, machine-specific)
+data/forge/*.json
+data/amplify/*.json
+data/vision/*.json
+data/screenshots/
+data/ui_dumps/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/

@@ -1,0 +1,140 @@
+{
+  "name": "OpenClaw Content Pipeline",
+  "nodes": [
+    {
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "position": [250, 300],
+      "parameters": {
+        "path": "openclaw-content",
+        "httpMethod": "POST",
+        "responseMode": "responseNode"
+      },
+      "notes": "Triggered by OpenClaw with: {site, topic, keywords, voice, length}"
+    },
+    {
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.if",
+      "position": [450, 300],
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.body.site }}",
+              "operation": "isNotEmpty"
+            },
+            {
+              "value1": "={{ $json.body.topic }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Load Site Config",
+      "type": "n8n-nodes-base.code",
+      "position": [650, 250],
+      "parameters": {
+        "jsCode": "// Load site-specific configuration\nconst siteConfigs = {\n  witchcraft: {\n    domain: 'witchcraftforbeginners.com',\n    voice: 'mystical-warmth',\n    defaultLength: 2500,\n    categories: ['spells', 'crystals', 'herbs', 'moon-phases']\n  },\n  smarthome: {\n    domain: 'smarthomewizards.com',\n    voice: 'tech-authority',\n    defaultLength: 2000,\n    categories: ['reviews', 'how-to', 'smart-speakers', 'security']\n  }\n  // Add all 16 sites\n};\n\nconst site = $input.first().json.body.site;\nconst config = siteConfigs[site] || siteConfigs.witchcraft;\n\nreturn [{\n  json: {\n    ...($input.first().json.body),\n    siteConfig: config\n  }\n}];"
+      }
+    },
+    {
+      "name": "Research Topic",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [850, 250],
+      "parameters": {
+        "url": "https://api.exa.ai/search",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.EXA_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "query", "value": "={{ $json.topic }}" },
+            { "name": "numResults", "value": "5" },
+            { "name": "type", "value": "auto" }
+          ]
+        }
+      },
+      "notes": "Research the topic for current information and sources"
+    },
+    {
+      "name": "Generate Article",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1050, 250],
+      "parameters": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY }}" },
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'claude-sonnet-4-5-20250514', max_tokens: 8000, messages: [{ role: 'user', content: `Write a ${$json.siteConfig.defaultLength}-word article about: ${$json.topic}\\n\\nVoice: ${$json.siteConfig.voice}\\nKeywords: ${$json.keywords}\\nFormat: WordPress HTML with H2/H3 headings, bullet points, internal link placeholders.\\nSEO: Include focus keyword in first paragraph, meta description, FAQ section.` }] }) }}"
+      },
+      "notes": "Generate article content using Claude"
+    },
+    {
+      "name": "Publish to WordPress",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1250, 250],
+      "parameters": {
+        "url": "=https://{{ $json.siteConfig.domain }}/wp-json/wp/v2/posts",
+        "method": "POST",
+        "authentication": "genericCredentialType",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ title: $json.topic, content: $json.article_content, status: 'draft' }) }}"
+      },
+      "notes": "Create draft post in WordPress"
+    },
+    {
+      "name": "Log to Calendar",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1450, 250],
+      "parameters": {
+        "url": "http://localhost:18789/webhook/content-logged",
+        "method": "POST",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "site", "value": "={{ $json.site }}" },
+            { "name": "title", "value": "={{ $json.topic }}" },
+            { "name": "wp_post_id", "value": "={{ $json.id }}" },
+            { "name": "status", "value": "draft" }
+          ]
+        }
+      },
+      "notes": "Notify OpenClaw that content was generated and drafted"
+    },
+    {
+      "name": "Send Confirmation",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [1650, 250],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, site: $json.site, title: $json.topic, post_id: $json.id, status: 'draft' }) }}"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": { "main": [[{ "node": "Validate Input" }]] },
+    "Validate Input": { "main": [[{ "node": "Load Site Config" }], []] },
+    "Load Site Config": { "main": [[{ "node": "Research Topic" }]] },
+    "Research Topic": { "main": [[{ "node": "Generate Article" }]] },
+    "Generate Article": { "main": [[{ "node": "Publish to WordPress" }]] },
+    "Publish to WordPress": { "main": [[{ "node": "Log to Calendar" }]] },
+    "Log to Calendar": { "main": [[{ "node": "Send Confirmation" }]] }
+  }
+}
