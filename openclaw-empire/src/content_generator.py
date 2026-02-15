@@ -2111,6 +2111,106 @@ def get_generator() -> ContentGenerator:
     return _generator
 
 
+# Alias for MODULE_IMPORTS compatibility
+get_content_generator = get_generator
+
+
+# ---------------------------------------------------------------------------
+# Phase 6: Quality Scoring + Pipeline Integration
+# ---------------------------------------------------------------------------
+
+async def generate_with_quality_gate(
+    config: "ContentConfig",
+    voice_profile: Optional[dict] = None,
+    min_quality_score: float = 6.0,
+    max_retries: int = 2,
+) -> "GeneratedArticle":
+    """
+    Generate an article with automatic quality scoring gate.
+
+    After generation, runs ContentQualityScorer. If score is below threshold,
+    regenerates with enhanced instructions up to max_retries times.
+
+    Args:
+        config: Content generation configuration.
+        voice_profile: Brand voice profile for the site.
+        min_quality_score: Minimum quality score (0-10) to accept. Default 6.0.
+        max_retries: Max regeneration attempts.
+
+    Returns:
+        GeneratedArticle that passed the quality gate.
+    """
+    generator = get_generator()
+    article = await generator.generate_full_article(config, voice_profile)
+
+    # Try quality scoring
+    try:
+        from src.content_quality_scorer import get_scorer
+        scorer = get_scorer()
+
+        for attempt in range(max_retries + 1):
+            score_result = scorer.score_sync(article.html_content, site_id=config.site_id)
+            overall_score = score_result.get("overall_score", 10.0)
+
+            if overall_score >= min_quality_score:
+                logger.info(
+                    "Article '%s' passed quality gate: %.1f >= %.1f (attempt %d)",
+                    config.title, overall_score, min_quality_score, attempt + 1,
+                )
+                article.seo_score = overall_score
+                break
+
+            if attempt < max_retries:
+                logger.warning(
+                    "Article '%s' scored %.1f < %.1f — regenerating (attempt %d/%d)",
+                    config.title, overall_score, min_quality_score,
+                    attempt + 1, max_retries,
+                )
+                # Enhance prompt with quality feedback
+                feedback = score_result.get("feedback", [])
+                if feedback:
+                    extra_instructions = "Improve these areas: " + "; ".join(feedback[:3])
+                    config.extra_instructions = getattr(config, "extra_instructions", "") + " " + extra_instructions
+                article = await generator.generate_full_article(config, voice_profile)
+            else:
+                logger.warning(
+                    "Article '%s' scored %.1f after %d attempts — accepting as-is",
+                    config.title, overall_score, max_retries + 1,
+                )
+                article.seo_score = overall_score
+
+    except ImportError:
+        logger.debug("ContentQualityScorer not available — skipping quality gate")
+    except Exception as exc:
+        logger.warning("Quality scoring failed: %s — accepting article as-is", exc)
+
+    return article
+
+
+def generate_with_quality_gate_sync(
+    config: "ContentConfig",
+    voice_profile: Optional[dict] = None,
+    min_quality_score: float = 6.0,
+    max_retries: int = 2,
+) -> "GeneratedArticle":
+    """Sync wrapper for generate_with_quality_gate."""
+    import asyncio as _asyncio
+    try:
+        loop = _asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop and loop.is_running():
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(1) as pool:
+            return pool.submit(
+                _asyncio.run,
+                generate_with_quality_gate(config, voice_profile, min_quality_score, max_retries),
+            ).result()
+    return _asyncio.run(
+        generate_with_quality_gate(config, voice_profile, min_quality_score, max_retries)
+    )
+
+
 # ---------------------------------------------------------------------------
 # CLI Entry Point
 # ---------------------------------------------------------------------------

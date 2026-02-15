@@ -2376,6 +2376,111 @@ def get_manager() -> EtsyPODManager:
     return _manager_instance
 
 
+# Alias for MODULE_IMPORTS compatibility
+get_etsy_manager = get_manager
+
+
+# ===================================================================
+# Phase 6: MarketplaceOptimizer + Printify Integration
+# ===================================================================
+
+def optimize_product_listing(product_id: str, shop_id: str = "") -> dict:
+    """
+    Optimize an Etsy product listing using the MarketplaceOptimizer.
+
+    Analyzes title, description, tags, and images for the product
+    and returns optimization suggestions.
+
+    Args:
+        product_id: Etsy product identifier.
+        shop_id: Optional shop filter.
+
+    Returns:
+        Dict with optimization suggestions and scores.
+    """
+    result: dict = {
+        "product_id": product_id,
+        "optimized": False,
+        "suggestions": [],
+    }
+
+    manager = get_manager()
+    product = manager.get_product(product_id, shop_id=shop_id)
+    if not product:
+        result["error"] = f"Product {product_id} not found"
+        return result
+
+    try:
+        from src.marketplace_optimizer import get_optimizer
+        optimizer = get_optimizer()
+
+        listing_data = {
+            "platform": "etsy",
+            "title": product.title,
+            "description": product.description,
+            "tags": product.tags,
+            "niche": product.niche,
+            "price": product.price,
+            "images": product.image_urls if hasattr(product, "image_urls") else [],
+        }
+
+        suggestions = optimizer.optimize_listing_sync(listing_data)
+        result["suggestions"] = suggestions if isinstance(suggestions, list) else [suggestions]
+        result["optimized"] = True
+
+    except ImportError:
+        result["error"] = "MarketplaceOptimizer not available"
+    except Exception as exc:
+        result["error"] = f"Optimization failed: {exc}"
+
+    return result
+
+
+def batch_optimize_products(shop_id: str = "", niche: str = "") -> list:
+    """
+    Optimize all Etsy products, optionally filtered by shop/niche.
+
+    Returns list of optimization results.
+    """
+    manager = get_manager()
+    products = manager.list_products(shop_id=shop_id, niche=niche)
+    results = []
+    for product in products:
+        pid = product.get("product_id", "") if isinstance(product, dict) else getattr(product, "product_id", "")
+        if pid:
+            result = optimize_product_listing(pid, shop_id=shop_id)
+            results.append(result)
+    return results
+
+
+def sync_printify_products(shop_id: str) -> dict:
+    """
+    Stub for Printify product synchronization.
+
+    When implemented, this will:
+    1. Fetch all products from Printify API
+    2. Sync inventory/pricing with Etsy listings
+    3. Update fulfillment status
+
+    Args:
+        shop_id: Etsy shop identifier.
+
+    Returns:
+        Dict with sync results.
+    """
+    import logging as _logging
+    _logging.getLogger("etsy_manager").info(
+        "Printify sync stub called for shop %s — not yet implemented", shop_id,
+    )
+    return {
+        "shop_id": shop_id,
+        "synced": False,
+        "message": "Printify integration not yet implemented — stub only",
+        "products_checked": 0,
+        "products_updated": 0,
+    }
+
+
 # ===================================================================
 # CLI Entry Point
 # ===================================================================

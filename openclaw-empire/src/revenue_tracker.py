@@ -132,9 +132,11 @@ SEASONAL_DEFAULT: dict[int, float] = {m: 1.0 for m in range(1, 13)}
 # JSON helpers (atomic writes)
 # ---------------------------------------------------------------------------
 
-def _load_json(path: Path, default: Any = None) -> Any:
+_SENTINEL = object()  # sentinel to distinguish explicit None from missing arg
+
+def _load_json(path: Path, default: Any = _SENTINEL) -> Any:
     """Load JSON from *path*, returning *default* when the file is missing or corrupt."""
-    if default is None:
+    if default is _SENTINEL:
         default = {}
     try:
         with open(path, "r", encoding="utf-8") as fh:

@@ -1147,6 +1147,98 @@ class SocialPublisher:
         return [SocialCampaign.from_dict(c) for c in raw]
 
 
+    # ------------------------------------------------------------------
+    # Phase 6: Pipeline event handler + A/B headline support
+    # ------------------------------------------------------------------
+
+    def on_article_published(
+        self,
+        site_id: str,
+        title: str,
+        url: str,
+        description: str = "",
+        keywords: Optional[List[str]] = None,
+        wp_post_id: Optional[int] = None,
+    ) -> Optional[SocialCampaign]:
+        """
+        Pipeline event handler: called when content pipeline publishes an article.
+
+        Automatically creates a social campaign for all platforms.
+
+        Args:
+            site_id: Site identifier.
+            title: Article title.
+            url: Published article URL.
+            description: Article excerpt/description.
+            keywords: Target keywords for hashtag generation.
+            wp_post_id: WordPress post ID for tracking.
+
+        Returns:
+            Created SocialCampaign or None on failure.
+        """
+        try:
+            campaign = self.create_campaign(
+                site_id=site_id,
+                article_title=title,
+                article_description=description or title,
+                article_url=url,
+                keywords=keywords or [],
+            )
+            logger.info(
+                "Pipeline event: created social campaign for '%s' (%d posts)",
+                title[:40], len(campaign.posts),
+            )
+            return campaign
+        except Exception as exc:
+            logger.error("Pipeline social campaign creation failed: %s", exc)
+            return None
+
+    def create_ab_campaign(
+        self,
+        site_id: str,
+        article_title: str,
+        article_url: str,
+        headline_variants: List[str],
+        platforms: Optional[List[str]] = None,
+    ) -> List[SocialCampaign]:
+        """
+        Create A/B test campaigns with different headline variants.
+
+        Creates one campaign per headline variant. The A/B testing module
+        can then track which variant performs better.
+
+        Args:
+            site_id: Site identifier.
+            article_title: Original article title.
+            article_url: Article URL.
+            headline_variants: List of headline alternatives to test.
+            platforms: Optional platform filter.
+
+        Returns:
+            List of SocialCampaign objects, one per variant.
+        """
+        campaigns = []
+        for i, headline in enumerate(headline_variants):
+            variant_label = chr(65 + i)  # A, B, C, ...
+            try:
+                campaign = self.create_campaign(
+                    site_id=site_id,
+                    article_title=headline,
+                    article_description=f"[Variant {variant_label}] {article_title}",
+                    article_url=f"{article_url}?variant={variant_label.lower()}",
+                    keywords=[],
+                )
+                campaigns.append(campaign)
+                logger.info(
+                    "A/B variant %s created for '%s'",
+                    variant_label, headline[:40],
+                )
+            except Exception as exc:
+                logger.warning("A/B variant %s failed: %s", variant_label, exc)
+
+        return campaigns
+
+
 # ---------------------------------------------------------------------------
 # Singleton
 # ---------------------------------------------------------------------------

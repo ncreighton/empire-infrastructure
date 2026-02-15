@@ -1,0 +1,633 @@
+/* ===========================================================================
+   OpenClaw Empire — Workflow Builder / Node Editor Styles
+   ===========================================================================
+   Styles for the drag-and-drop workflow canvas, node cards, connections,
+   minimap, and toolbar. Used by js/workflow-builder.js.
+   =========================================================================== */
+
+/* ===== Canvas Container ===== */
+.workflow-canvas-wrap {
+  position: relative;
+  width: 100%;
+  height: 600px;
+  background: var(--bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  cursor: grab;
+}
+
+.workflow-canvas-wrap:active {
+  cursor: grabbing;
+}
+
+.workflow-canvas-wrap.connecting {
+  cursor: crosshair;
+}
+
+/* Grid background */
+#workflow-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background-image:
+    radial-gradient(circle, var(--card-border) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: center center;
+}
+
+.workflow-canvas-inner {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+  /* Controlled by JS: transform: translate(x, y) scale(z) */
+}
+
+
+/* ===== Toolbar ===== */
+.workflow-toolbar {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  display: flex;
+  gap: 0.35rem;
+  z-index: 10;
+  background: rgba(18, 18, 26, 0.9);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  padding: 0.35rem;
+}
+
+.workflow-toolbar-btn {
+  width: 32px;
+  height: 32px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  transition: all 0.15s ease;
+}
+
+.workflow-toolbar-btn:hover {
+  background: var(--primary-dim);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.workflow-toolbar-btn.active {
+  background: var(--primary-dim);
+  color: var(--primary);
+}
+
+.workflow-toolbar-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.workflow-toolbar-separator {
+  width: 1px;
+  background: var(--card-border);
+  margin: 0.2rem 0.15rem;
+}
+
+.workflow-toolbar-zoom {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  padding: 0 0.4rem;
+  min-width: 40px;
+  justify-content: center;
+}
+
+
+/* ===== Node Cards ===== */
+.workflow-node {
+  position: absolute;
+  min-width: 180px;
+  max-width: 260px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  user-select: none;
+  cursor: move;
+  z-index: 5;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.workflow-node:hover {
+  border-color: rgba(99, 102, 241, 0.4);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.workflow-node.selected {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-dim), 0 4px 16px rgba(0, 0, 0, 0.5);
+  z-index: 6;
+}
+
+.workflow-node.dragging {
+  opacity: 0.85;
+  z-index: 20;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+
+.workflow-node.error {
+  border-color: var(--critical);
+  box-shadow: 0 0 0 2px var(--critical-dim);
+}
+
+.workflow-node.running {
+  border-color: var(--primary);
+  animation: nodeRunning 2s ease-in-out infinite;
+}
+
+@keyframes nodeRunning {
+  0%, 100% { box-shadow: 0 0 0 2px var(--primary-dim), 0 4px 16px rgba(0, 0, 0, 0.5); }
+  50% { box-shadow: 0 0 0 4px var(--primary-dim), 0 4px 20px rgba(99, 102, 241, 0.15); }
+}
+
+/* Node title bar */
+.node-title-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.65rem;
+  border-bottom: 1px solid var(--card-border);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.node-title-bar .node-icon {
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.node-title-bar .node-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.node-title-bar .node-menu-btn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 0.1rem 0.2rem;
+  border-radius: 3px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.workflow-node:hover .node-menu-btn {
+  opacity: 1;
+}
+
+.node-menu-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+/* Node type color coding */
+.node-title-bar.trigger { background: rgba(34, 197, 94, 0.08); }
+.node-title-bar.action { background: rgba(99, 102, 241, 0.08); }
+.node-title-bar.condition { background: rgba(245, 158, 11, 0.08); }
+.node-title-bar.delay { background: rgba(148, 163, 184, 0.08); }
+.node-title-bar.parallel { background: rgba(59, 130, 246, 0.08); }
+.node-title-bar.notify { background: rgba(168, 85, 247, 0.08); }
+.node-title-bar.log { background: rgba(107, 114, 128, 0.08); }
+
+/* Node body */
+.node-body {
+  padding: 0.5rem 0.65rem;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.node-body .node-param {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.2rem 0;
+}
+
+.node-body .node-param-key {
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 0.65rem;
+}
+
+.node-body .node-param-value {
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  max-width: 120px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Node status footer */
+.node-footer {
+  padding: 0.3rem 0.65rem;
+  border-top: 1px solid var(--card-border);
+  font-size: 0.62rem;
+  font-family: var(--mono);
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+
+/* ===== Port Dots ===== */
+.node-port {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--card-border);
+  background: var(--card-bg);
+  cursor: crosshair;
+  z-index: 10;
+  transition: all 0.15s ease;
+}
+
+.node-port:hover {
+  transform: scale(1.4);
+}
+
+/* Input ports (left side, green) */
+.node-port.input {
+  left: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-color: var(--success);
+}
+
+.node-port.input:hover {
+  background: var(--success);
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+  transform: translateY(-50%) scale(1.4);
+}
+
+.node-port.input.connected {
+  background: var(--success);
+}
+
+/* Output ports (right side, blue/primary) */
+.node-port.output {
+  right: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-color: var(--info);
+}
+
+.node-port.output:hover {
+  background: var(--info);
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
+  transform: translateY(-50%) scale(1.4);
+}
+
+.node-port.output.connected {
+  background: var(--info);
+}
+
+/* Condition branch ports */
+.node-port.output-true {
+  right: -6px;
+  top: 35%;
+  transform: translateY(-50%);
+  border-color: var(--success);
+}
+
+.node-port.output-true:hover {
+  background: var(--success);
+}
+
+.node-port.output-false {
+  right: -6px;
+  top: 65%;
+  transform: translateY(-50%);
+  border-color: var(--critical);
+}
+
+.node-port.output-false:hover {
+  background: var(--critical);
+}
+
+/* Port labels */
+.node-port-label {
+  position: absolute;
+  font-size: 0.55rem;
+  font-family: var(--mono);
+  color: var(--text-muted);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.node-port.input + .node-port-label {
+  left: 10px;
+}
+
+.node-port.output + .node-port-label {
+  right: 10px;
+}
+
+
+/* ===== Connection Lines (SVG) ===== */
+.workflow-connections {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.workflow-connections svg {
+  width: 100%;
+  height: 100%;
+}
+
+.connection-path {
+  fill: none;
+  stroke: var(--text-dim);
+  stroke-width: 2;
+  stroke-linecap: round;
+  pointer-events: stroke;
+  cursor: pointer;
+  transition: stroke 0.2s ease;
+}
+
+.connection-path:hover {
+  stroke: var(--primary);
+  stroke-width: 3;
+}
+
+.connection-path.selected {
+  stroke: var(--primary);
+  stroke-width: 2.5;
+  stroke-dasharray: none;
+}
+
+.connection-path.active {
+  stroke: var(--success);
+  stroke-width: 2.5;
+  animation: connectionFlow 1s linear infinite;
+}
+
+@keyframes connectionFlow {
+  0% { stroke-dashoffset: 20; }
+  100% { stroke-dashoffset: 0; }
+}
+
+.connection-path.active {
+  stroke-dasharray: 8 4;
+}
+
+/* Temporary connection while dragging */
+.connection-path.temp {
+  stroke: var(--primary);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+  opacity: 0.6;
+}
+
+
+/* ===== Mini-Map Overlay ===== */
+.workflow-minimap {
+  position: absolute;
+  bottom: 0.75rem;
+  right: 0.75rem;
+  width: 160px;
+  height: 100px;
+  background: rgba(10, 10, 15, 0.85);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  z-index: 10;
+  cursor: pointer;
+}
+
+.minimap-content {
+  position: absolute;
+  inset: 0;
+}
+
+.minimap-node {
+  position: absolute;
+  background: var(--primary);
+  border-radius: 2px;
+  opacity: 0.6;
+}
+
+.minimap-viewport {
+  position: absolute;
+  border: 1px solid var(--primary);
+  background: rgba(99, 102, 241, 0.08);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.minimap-toggle {
+  position: absolute;
+  bottom: 0.75rem;
+  right: 0.75rem;
+  width: 28px;
+  height: 28px;
+  background: rgba(18, 18, 26, 0.9);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  z-index: 10;
+  transition: all 0.15s ease;
+}
+
+.minimap-toggle:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+
+/* ===== Node Palette (Sidebar) ===== */
+.node-palette {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.node-palette-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.65rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  cursor: grab;
+  font-size: 0.75rem;
+  transition: all 0.15s ease;
+}
+
+.node-palette-item:hover {
+  border-color: var(--card-border-hover);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.node-palette-item:active {
+  cursor: grabbing;
+  opacity: 0.7;
+}
+
+.node-palette-item .palette-icon {
+  font-size: 1rem;
+  width: 24px;
+  text-align: center;
+}
+
+.node-palette-item .palette-label {
+  font-weight: 500;
+}
+
+
+/* ===== Workflow Run List ===== */
+.workflow-run-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid rgba(30, 30, 46, 0.5);
+  font-size: 0.8rem;
+}
+
+.workflow-run-item:last-child {
+  border-bottom: none;
+}
+
+.workflow-run-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.workflow-run-name {
+  font-weight: 500;
+}
+
+.workflow-run-time {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+
+.workflow-run-duration {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+.workflow-run-status {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.workflow-run-status.success { background: var(--success-dim); color: var(--success); }
+.workflow-run-status.failed { background: var(--critical-dim); color: var(--critical); }
+.workflow-run-status.running { background: var(--primary-dim); color: var(--primary); }
+.workflow-run-status.cancelled { background: rgba(71, 85, 105, 0.15); color: var(--text-dim); }
+
+
+/* ===== Saved Workflows List ===== */
+.saved-workflow-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 0.75rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.5rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.saved-workflow-item:hover {
+  border-color: var(--card-border-hover);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.saved-workflow-item:last-child {
+  margin-bottom: 0;
+}
+
+.saved-workflow-name {
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+
+.saved-workflow-meta {
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  margin-top: 0.15rem;
+}
+
+.saved-workflow-actions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+
+/* ===== Responsive ===== */
+@media (max-width: 1200px) {
+  .workflow-canvas-wrap {
+    height: 450px;
+  }
+
+  .node-palette {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .workflow-canvas-wrap {
+    height: 350px;
+  }
+
+  .workflow-minimap {
+    width: 120px;
+    height: 75px;
+  }
+
+  .workflow-toolbar {
+    top: 0.5rem;
+    left: 0.5rem;
+  }
+
+  .node-palette {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

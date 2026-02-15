@@ -15,6 +15,8 @@ Port configurable via OPENCLAW_API_PORT environment variable (default 8765).
 
 from __future__ import annotations
 
+import asyncio
+import base64
 import logging
 import os
 import time
@@ -24,7 +26,7 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -209,6 +211,30 @@ class VoiceScoreRequest(BaseModel):
     text: str
 
 
+# -- Dashboard v2 request models -------------------------------------------
+
+
+class PipelineTriggerRequest(BaseModel):
+    site_id: str
+    title: str
+
+
+class MissionExecuteRequest(BaseModel):
+    mission_type: str = Field(..., description="e.g. CONTENT_PUBLISH, SEO_AUDIT, SOCIAL_BLAST")
+    params: Dict[str, Any] = Field(default_factory=dict)
+
+
+class PhoneCommandRequest(BaseModel):
+    device_id: str
+    command: str = Field(..., description="tap, swipe, home, back, screenshot, type")
+    params: Dict[str, Any] = Field(default_factory=dict)
+
+
+class PhoneMirrorConfig(BaseModel):
+    device_id: str
+    fps: float = 1.0
+
+
 # ---------------------------------------------------------------------------
 # Pydantic Models -- Responses
 # ---------------------------------------------------------------------------
@@ -237,6 +263,136 @@ class TaskResponse(BaseModel):
     data: Optional[Dict[str, Any]] = None
 
 
+# -- Dashboard v2 response models ------------------------------------------
+
+
+class EmpireStatsResponse(BaseModel):
+    total_articles: int = 0
+    total_sites: int = 16
+    active_devices: int = 0
+    active_pipelines: int = 0
+    uptime_seconds: float = 0.0
+    revenue_today: float = 0.0
+    timestamp: str = ""
+
+
+class DeviceInfo(BaseModel):
+    device_id: str
+    name: str = ""
+    status: str = "unknown"
+    platform: str = ""
+    last_seen: Optional[str] = None
+    current_app: Optional[str] = None
+
+
+class PipelineInfo(BaseModel):
+    pipeline_id: str
+    site_id: str
+    title: str
+    status: str = "pending"
+    current_stage: str = ""
+    stage_index: int = 0
+    total_stages: int = 14
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+
+
+class CalendarEntry(BaseModel):
+    site_id: str
+    title: str
+    scheduled_date: str
+    status: str = "scheduled"
+    content_type: str = "blog_post"
+
+
+class WorkflowTemplate(BaseModel):
+    workflow_id: str
+    name: str
+    description: str = ""
+    steps: List[str] = Field(default_factory=list)
+    last_run: Optional[str] = None
+
+
+class ABTestInfo(BaseModel):
+    test_id: str
+    name: str
+    site_id: str
+    status: str = "running"
+    variant_a: str = ""
+    variant_b: str = ""
+    winner: Optional[str] = None
+    started_at: Optional[str] = None
+    ended_at: Optional[str] = None
+    metrics: Dict[str, Any] = Field(default_factory=dict)
+
+
+class RevenueDataPoint(BaseModel):
+    date: str
+    revenue: float
+    source: str = ""
+    site_id: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
+# WebSocket Connection Manager
+# ---------------------------------------------------------------------------
+
+
+class ConnectionManager:
+    """Manages WebSocket connections organized by named channels."""
+
+    def __init__(self) -> None:
+        self.active_connections: Dict[str, List[WebSocket]] = {}
+        self._lock = asyncio.Lock()
+
+    async def connect(self, channel: str, websocket: WebSocket) -> None:
+        await websocket.accept()
+        async with self._lock:
+            if channel not in self.active_connections:
+                self.active_connections[channel] = []
+            self.active_connections[channel].append(websocket)
+        logger.info("WS connect: channel=%s, total=%d", channel, len(self.active_connections[channel]))
+
+    async def disconnect(self, channel: str, websocket: WebSocket) -> None:
+        async with self._lock:
+            if channel in self.active_connections:
+                try:
+                    self.active_connections[channel].remove(websocket)
+                except ValueError:
+                    pass
+                if not self.active_connections[channel]:
+                    del self.active_connections[channel]
+        logger.info("WS disconnect: channel=%s", channel)
+
+    async def broadcast(self, channel: str, data: dict) -> None:
+        """Send a JSON message to all connections on a channel."""
+        connections = self.active_connections.get(channel, [])
+        dead: List[WebSocket] = []
+        for conn in connections:
+            try:
+                await conn.send_json(data)
+            except Exception:
+                dead.append(conn)
+        # Clean up dead connections
+        if dead:
+            async with self._lock:
+                for conn in dead:
+                    try:
+                        self.active_connections.get(channel, []).remove(conn)
+                    except ValueError:
+                        pass
+
+    def channel_count(self, channel: str) -> int:
+        return len(self.active_connections.get(channel, []))
+
+    @property
+    def total_connections(self) -> int:
+        return sum(len(v) for v in self.active_connections.values())
+
+
+ws_manager = ConnectionManager()
+
+
 # ---------------------------------------------------------------------------
 # Application State
 # ---------------------------------------------------------------------------
@@ -259,6 +415,10 @@ class AppState:
         # Auth subsystems
         self.auth: Optional[TokenAuth] = None
         self.rate_limiter: Optional[RateLimiter] = None
+        # Dashboard v2 state
+        self.active_pipelines: Dict[str, Dict[str, Any]] = {}
+        self.activity_feed: List[Dict[str, Any]] = []  # last N events
+        self.activity_feed_max: int = 200
 
 
 state = AppState()
@@ -1480,6 +1640,816 @@ async def voice_score(
         raise HTTPException(503, "Voice engine not yet available")
     except Exception as exc:
         raise HTTPException(500, f"Voice scoring failed: {exc}")
+
+
+# ===================================================================
+# Dashboard v2 — Helper Utilities
+# ===================================================================
+
+
+async def _emit_activity(
+    event_type: str,
+    message: str,
+    module: str = "system",
+    severity: str = "info",
+    extra: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Record an activity event and broadcast to connected WS clients."""
+    event = {
+        "event_type": event_type,
+        "message": message,
+        "module": module,
+        "timestamp": _now_iso(),
+        "severity": severity,
+    }
+    if extra:
+        event.update(extra)
+    state.activity_feed.insert(0, event)
+    # Trim to max
+    if len(state.activity_feed) > state.activity_feed_max:
+        state.activity_feed = state.activity_feed[: state.activity_feed_max]
+    await ws_manager.broadcast("activity-feed", {"type": "activity", "data": event})
+
+
+# ===================================================================
+# Dashboard v2 — WebSocket Endpoints
+# ===================================================================
+
+
+@app.websocket("/ws/agent-status")
+async def ws_agent_status(websocket: WebSocket):
+    """Real-time agent mission updates.
+
+    On connect: sends current agent/mission status.
+    Broadcasts: mission start/stop, step progress, goal completion.
+    """
+    await ws_manager.connect("agent-status", websocket)
+    try:
+        # Send initial status snapshot
+        initial: Dict[str, Any] = {
+            "type": "agent_status",
+            "data": {
+                "mission_id": None,
+                "status": "idle",
+                "step": None,
+                "progress_percent": 0.0,
+                "running_tasks": len(state.running_tasks),
+            },
+        }
+        # Check if any autonomous agent module is available
+        try:
+            from src.autonomous_agent import get_current_mission  # type: ignore[import]
+            mission = get_current_mission()
+            if mission:
+                initial["data"].update({
+                    "mission_id": mission.get("mission_id"),
+                    "status": mission.get("status", "running"),
+                    "step": mission.get("current_step"),
+                    "progress_percent": mission.get("progress_percent", 0.0),
+                })
+        except (ImportError, Exception):
+            pass
+
+        await websocket.send_json(initial)
+
+        # Keep connection alive, listen for pings / close
+        while True:
+            data = await websocket.receive_text()
+            # Client can send "ping" to keep alive
+            if data == "ping":
+                await websocket.send_json({"type": "pong"})
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await ws_manager.disconnect("agent-status", websocket)
+
+
+@app.websocket("/ws/pipeline-progress")
+async def ws_pipeline_progress(websocket: WebSocket):
+    """Content pipeline stage updates.
+
+    On connect: sends all active pipelines.
+    Broadcasts: stage start/complete, pipeline done.
+    """
+    await ws_manager.connect("pipeline-progress", websocket)
+    try:
+        # Send active pipelines snapshot
+        pipelines_snapshot = []
+        for pid, pdata in state.active_pipelines.items():
+            pipelines_snapshot.append({
+                "pipeline_id": pid,
+                "site_id": pdata.get("site_id", ""),
+                "title": pdata.get("title", ""),
+                "stage": pdata.get("stage", ""),
+                "stage_index": pdata.get("stage_index", 0),
+                "total_stages": pdata.get("total_stages", 14),
+                "status": pdata.get("status", "running"),
+            })
+        await websocket.send_json({
+            "type": "pipeline_progress",
+            "data": {
+                "active_pipelines": pipelines_snapshot,
+                "count": len(pipelines_snapshot),
+            },
+        })
+
+        while True:
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_json({"type": "pong"})
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await ws_manager.disconnect("pipeline-progress", websocket)
+
+
+@app.websocket("/ws/activity-feed")
+async def ws_activity_feed(websocket: WebSocket):
+    """General activity/event stream.
+
+    On connect: sends last 20 events.
+    Broadcasts: any module activity (publishes, errors, revenue events, device events).
+    """
+    await ws_manager.connect("activity-feed", websocket)
+    try:
+        # Send last 20 events
+        recent = state.activity_feed[:20]
+        await websocket.send_json({
+            "type": "activity_backlog",
+            "data": {
+                "events": recent,
+                "count": len(recent),
+            },
+        })
+
+        while True:
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_json({"type": "pong"})
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await ws_manager.disconnect("activity-feed", websocket)
+
+
+@app.websocket("/ws/phone-mirror")
+async def ws_phone_mirror(websocket: WebSocket):
+    """Phone screenshot stream.
+
+    Client sends: { "device_id": "...", "fps": 1 }
+    Server streams: { "type": "phone_frame", "data": { "device_id": "...", "screenshot_base64": "...", "timestamp": "..." } }
+    """
+    await ws_manager.connect("phone-mirror", websocket)
+    streaming_task: Optional[asyncio.Task] = None
+    try:
+        while True:
+            raw = await websocket.receive_json()
+            config = PhoneMirrorConfig(**raw)
+
+            # Cancel any existing streaming task
+            if streaming_task and not streaming_task.done():
+                streaming_task.cancel()
+
+            async def _stream_frames(device_id: str, fps: float) -> None:
+                interval = 1.0 / max(fps, 0.1)
+                while True:
+                    try:
+                        # Try to get screenshot from device pool or phone controller
+                        screenshot_b64 = None
+                        try:
+                            from src.device_pool import DevicePool  # type: ignore[import]
+                            pool = DevicePool.instance()
+                            device = pool.get_device(device_id)
+                            if device:
+                                screenshot_b64 = await device.screenshot_base64()
+                        except (ImportError, Exception):
+                            pass
+
+                        # Fallback to default phone controller
+                        if screenshot_b64 is None and state.controller and state.controller.is_connected:
+                            try:
+                                path = await state.controller.screenshot()
+                                if path:
+                                    import aiofiles  # type: ignore[import]
+                                    async with aiofiles.open(path, "rb") as f:
+                                        raw_bytes = await f.read()
+                                    screenshot_b64 = base64.b64encode(raw_bytes).decode("ascii")
+                            except Exception:
+                                # If aiofiles not available, use sync read
+                                try:
+                                    path = await state.controller.screenshot()
+                                    if path:
+                                        with open(path, "rb") as f:
+                                            raw_bytes = f.read()
+                                        screenshot_b64 = base64.b64encode(raw_bytes).decode("ascii")
+                                except Exception:
+                                    pass
+
+                        if screenshot_b64:
+                            await websocket.send_json({
+                                "type": "phone_frame",
+                                "data": {
+                                    "device_id": device_id,
+                                    "screenshot_base64": screenshot_b64,
+                                    "timestamp": _now_iso(),
+                                },
+                            })
+                        await asyncio.sleep(interval)
+                    except asyncio.CancelledError:
+                        return
+                    except Exception as exc:
+                        logger.warning("phone-mirror frame error: %s", exc)
+                        await asyncio.sleep(interval)
+
+            streaming_task = asyncio.create_task(_stream_frames(config.device_id, config.fps))
+
+    except WebSocketDisconnect:
+        pass
+    except Exception as exc:
+        logger.warning("phone-mirror error: %s", exc)
+    finally:
+        if streaming_task and not streaming_task.done():
+            streaming_task.cancel()
+        await ws_manager.disconnect("phone-mirror", websocket)
+
+
+# ===================================================================
+# Dashboard v2 — New REST Endpoints
+# ===================================================================
+
+
+@app.get("/api/stats", response_model=EmpireStatsResponse, tags=["Dashboard v2"])
+async def api_empire_stats(
+    _auth=Depends(require_auth),
+    _rl=Depends(rate_limit),
+):
+    """Quick empire stats: total articles, revenue, active devices, uptime."""
+    uptime = time.monotonic() - state.start_time if state.start_time else 0.0
+    total_articles = 0
+    revenue_today = 0.0
+    active_devices = 0
+
+    # Articles count from WordPress manager
+    try:
+        from src.wordpress_manager import get_total_article_count  # type: ignore[import]
+        total_articles = await get_total_article_count()
+    except (ImportError, Exception):
+        pass
+
+    # Revenue from tracker
+    try:
+        from src.revenue_tracker import get_today  # type: ignore[import]
+        rev = await get_today()
+        revenue_today = rev.get("total", 0.0) if isinstance(rev, dict) else 0.0
+    except (ImportError, Exception):
+        pass
+
+    # Active devices from device pool
+    try:
+        from src.device_pool import DevicePool  # type: ignore[import]
+        pool = DevicePool.instance()
+        active_devices = len([d for d in pool.list_devices() if d.get("status") == "online"])
+    except (ImportError, Exception):
+        # Check if the default phone controller is connected
+        if state.controller and state.controller.is_connected:
+            active_devices = 1
+
+    return EmpireStatsResponse(
+        total_articles=total_articles,
+        total_sites=16,
+        active_devices=active_devices,
+        active_pipelines=len(state.active_pipelines),
+        uptime_seconds=round(uptime, 1),
+        revenue_today=revenue_today,
+        timestamp=_now_iso(),
+    )
+
+
+@app.get("/api/devices", tags=["Dashboard v2"])
+async def api_list_devices(
+    _auth=Depends(require_auth),
+    _rl=Depends(rate_limit),
+):
+    """List all devices from the DevicePool."""
+    devices: List[Dict[str, Any]] = []
+    try:
+        from src.device_pool import DevicePool  # type: ignore[import]
+        pool = DevicePool.instance()
+        for d in pool.list_devices():
+            devices.append({
+                "device_id": d.get("device_id", ""),
+                "name": d.get("name", ""),
+                "status": d.get("status", "unknown"),
+                "platform": d.get("platform", ""),
+                "last_seen": d.get("last_seen"),
+                "current_app": d.get("current_app"),
+            })
+    except (ImportError, Exception):
+        # Fallback: expose default phone controller as a device
+        if state.controller:
+            devices.append({
+                "device_id": "default",
+                "name": NODE_NAME,
+                "status": "connected" if state.controller.is_connected else "disconnected",
+                "platform": "android",
+                "last_seen": _now_iso() if state.controller.is_connected else None,
+                "current_app": None,
+            })
+    return {"devices": devices, "count": len(devices)}
+
+
+@app.get("/api/pipelines", tags=["Dashboard v2"])
+async def api_list_pipelines(
+    status: Optional[str] = Query(None, description="Filter by status: running, completed, failed"),
+    limit: int = Query(20, ge=1, le=100),
+    _auth=Depends(require_auth),
+    _rl=Depends(rate_limit),
+):
+    """List active and recent content pipeline runs."""
+    pipelines: List[Dict[str, Any]] = []
+
+    # Active pipelines from state
+    for pid, pdata in state.active_pipelines.items():
+        if status and pdata.get("status") != status:
+            continue
+        pipelines.append({"pipeline_id": pid, **pdata})
+
+    # Try to get historical pipelines from pipeline manager
+    try:
+        from src.pipeline_manager import get_recent_pipelines  # type: ignore[import]
+        historical = await get_recent_pipelines(limit=limit, status=status)
+        for p in historical:
+            if p.get("pipeline_id") not in state.active_pipelines:
+                pipelines.append(p)
+    except (ImportError, Exception):
+        pass
+
+    pipelines = pipelines[:limit]
+    return {"pipelines": pipelines, "count": len(pipelines)}
+
+
+@app.post("/api/pipelines/trigger", tags=["Dashboard v2"])
+async def api_trigger_pipeline(
+    req: PipelineTriggerRequest,
+    _auth=Depends(require_auth),
+    _rl=Depends(rate_limit_strict),
+):
+    """Trigger a content pipeline for a site."""
+    pipeline_id = uuid.uuid4().hex[:12]
+
+    # Register pipeline in active state
+    pipeline_data = {
+        "site_id": req.site_id,
+        "title": req.title,
+        "status": "starting",
+        "stage": "init",
+        "stage_index": 0,
+        "total_stages": 14,
+        "started_at": _now_iso(),
+        "completed_at": None,
+    }
+    state.active_pipelines[pipeline_id] = pipeline_data
+
+    # Broadcast pipeline start
+    await ws_manager.broadcast("pipeline-progress", {
+        "type": "pipeline_progress",
+        "data": {
+            "pipeline_id": pipeline_id,
+            "stage": "init",
+            "stage_index": 0,
+            "total_stages": 14,
+            "success": True,
+        },
+    })
+    await _emit_activity(
+        event_type="pipeline_started",
+        message=f"Content pipeline started for {req.site_id}: {req.title}",
+        module="pipeline",
+        severity="info",
+    )
+
+    # Try to actually start the pipeline via the pipeline manager
+    try:
+        from src.pipeline_manager import start_pipeline  # type: ignore[import]
+        result = await start_pipeline(
+            pipeline_id=pipeline_id,
+            site_id=req.site_id,
+            title=req.title,
+        )
+        pipeline_data["status"] = "running"
+        return {
+            "pipeline_id": pipeline_id,
+            "status": "running",
+            "site_id": req.site_id,
+            "title": req.title,
+            "message": "Pipeline started successfully",
+            "data": result if isinstance(result, dict) else {},
+        }
+    except ImportError:
+        # Pipeline manager not available -- keep the pipeline in "starting" as a placeholder
+        pipeline_data["status"] = "pending_module"
+        return {
+            "pipeline_id": pipeline_id,
+            "status": "pending_module",
+            "site_id": req.site_id,
+            "title": req.title,
+            "message": "Pipeline registered but pipeline_manager module is not yet available",
+        }
+    except Exception as exc:
+        pipeline_data["status"] = "error"
+        pipeline_data["error"] = str(exc)
+        await _emit_activity(
+            event_type="pipeline_error",
+            message=f"Pipeline failed for {req.site_id}: {exc}",
+            module="pipeline",
+            severity="error",
+        )
+        raise HTTPException(500, f"Pipeline trigger failed: {exc}")
+
+
+@app.get("/api/content/calendar", tags=["Dashboard v2"])
+async def api_content_calendar(
+    site: Optional[str] = Query(None, description="Filter by site ID"),
+    days_ahead: int = Query(30, ge=1, le=365),
+    _auth=Depends(require_auth),
+    _rl=Depends(rate_limit),
+):
+    """Get content calendar entries for the dashboard."""
+    entries: List[Dict[str, Any]] = []
+    try:
+        from src.content_engine import get_calendar  # type: ignore[import]
+        result = await get_calendar(site_id=site, days=days_ahead)
+        if isinstance(result, dict):
+            entries = result.get("entries", result.get("calendar", []))
+        elif isinstance(result, list):
+            entries = result
+    except (ImportError, Exception):
+        pass
+
+    # Fallback: try content_calendar skill
+    if not entries:
+        try:
+            from src.content_calendar import get_upcoming_entries  # type: ignore[import]
+            entries = await get_upcoming_entries(site_id=site, days_ahead=days_ahead)
+        except (ImportError, Exception):
+            pass
+
+    return {"entries": entries, "count": len(entries), "days_ahead": days_ahead, "site_filter": site}
+
+
+@app.post("/api/missions/execute", tags=["Dashboard v2"])
+async def api_execute_mission(
+    req: MissionExecuteRequest,
+    _auth=Depends(require_auth),
+    _rl=Depends(rate_limit_strict),
+):
+    """Execute a workflow mission (e.g. CONTENT_PUBLISH, SEO_AUDIT, SOCIAL_BLAST)."""
+    mission_id = uuid.uuid4().hex[:12]
+
+    # Broadcast mission start
+    await ws_manager.broadcast("agent-status", {
+        "type": "agent_status",
+        "data": {
+            "mission_id": mission_id,
+            "status": "starting",
+            "step": "init",
+            "progress_percent": 0.0,
+        },
+    })
+    await _emit_activity(
+        event_type="mission_started",
+        message=f"Mission {req.mission_type} started (id={mission_id})",
+        module="agent",
+        severity="info",
+    )
+
+    try:
+        from src.autonomous_agent import execute_mission  # type: ignore[import]
+        result = await execute_mission(
+            mission_id=mission_id,
+            mission_type=req.mission_type,
+            params=req.params,
+        )
+        await ws_manager.broadcast("agent-status", {
+            "type": "agent_status",
+            "data": {
+                "mission_id": mission_id,
+                "status": "completed",
+                "step": "done",
+                "progress_percent": 100.0,
+            },
+        })
+        return {
+            "mission_id": mission_id,
+            "mission_type": req.mission_type,
+            "status": "completed",
+            "result": result if isinstance(result, dict) else {"raw": str(result)},
+        }
+    except ImportError:
+        return {
+            "mission_id": mission_id,
+            "mission_type": req.mission_type,
+            "status": "pending_module",
+            "message": "autonomous_agent module not yet available. Mission registered.",
+        }
+    except Exception as exc:
+        await ws_manager.broadcast("agent-status", {
+            "type": "agent_status",
+            "data": {
+                "mission_id": mission_id,
+                "status": "error",
+                "step": "failed",
+                "progress_percent": 0.0,
+            },
+        })
+        await _emit_activity(
+            event_type="mission_error",
+            message=f"Mission {req.mission_type} failed: {exc}",
+            module="agent",
+            severity="error",
+        )
+        raise HTTPException(500, f"Mission execution failed: {exc}")
+
+
+@app.get("/api/workflows", tags=["Dashboard v2"])
+async def api_list_workflows(
+    _auth=Depends(require_auth),
+    _rl=Depends(rate_limit),
+):
+    """List saved workflow templates."""
+    workflows: List[Dict[str, Any]] = []
+    try:
+        from src.workflow_registry import list_workflows  # type: ignore[import]
+        workflows = await list_workflows()
+        if not isinstance(workflows, list):
+            workflows = workflows.get("workflows", []) if isinstance(workflows, dict) else []
+    except (ImportError, Exception):
+        pass
+
+    # Fallback: list built-in mission types
+    if not workflows:
+        workflows = [
+            {
+                "workflow_id": "content_publish",
+                "name": "Content Publish",
+                "description": "Generate, optimize, and publish content to a WordPress site",
+                "steps": ["research", "outline", "draft", "seo_optimize", "voice_check", "publish", "social_amplify"],
+                "last_run": None,
+            },
+            {
+                "workflow_id": "seo_audit",
+                "name": "SEO Audit",
+                "description": "Run full SEO audit across all sites",
+                "steps": ["crawl", "analyze", "report", "fix_critical"],
+                "last_run": None,
+            },
+            {
+                "workflow_id": "social_blast",
+                "name": "Social Blast",
+                "description": "Cross-platform social media campaign",
+                "steps": ["generate_captions", "create_images", "schedule_posts", "monitor_engagement"],
+                "last_run": None,
+            },
+            {
+                "workflow_id": "revenue_report",
+                "name": "Revenue Report",
+                "description": "Generate comprehensive revenue report across all channels",
+                "steps": ["collect_adsense", "collect_affiliate", "collect_kdp", "collect_etsy", "compile_report"],
+                "last_run": None,
+            },
+        ]
+    return {"workflows": workflows, "count": len(workflows)}
+
+
+@app.get("/api/ab-tests", tags=["Dashboard v2"])
+async def api_list_ab_tests(
+    site_id: Optional[str] = Query(None, description="Filter by site ID"),
+    status: Optional[str] = Query(None, description="Filter by status: running, completed, paused"),
+    _auth=Depends(require_auth),
+    _rl=Depends(rate_limit),
+):
+    """List A/B test experiments."""
+    tests: List[Dict[str, Any]] = []
+    try:
+        from src.ab_testing import list_experiments  # type: ignore[import]
+        tests = await list_experiments(site_id=site_id, status=status)
+        if not isinstance(tests, list):
+            tests = tests.get("experiments", []) if isinstance(tests, dict) else []
+    except (ImportError, Exception):
+        pass
+    return {"experiments": tests, "count": len(tests)}
+
+
+@app.get("/api/revenue", tags=["Dashboard v2"])
+async def api_revenue_chart(
+    days: int = Query(30, ge=1, le=365),
+    site_id: Optional[str] = Query(None, description="Filter by site ID"),
+    _auth=Depends(require_auth),
+    _rl=Depends(rate_limit),
+):
+    """Revenue data formatted for dashboard charts."""
+    data_points: List[Dict[str, Any]] = []
+    summary: Dict[str, Any] = {"total": 0.0, "average_daily": 0.0, "trend": "flat"}
+
+    try:
+        from src.revenue_tracker import get_report  # type: ignore[import]
+        report = await get_report(days=days)
+        if isinstance(report, dict):
+            data_points = report.get("daily", report.get("data_points", []))
+            summary["total"] = report.get("total", 0.0)
+            summary["average_daily"] = report.get("average_daily", 0.0)
+            summary["trend"] = report.get("trend", "flat")
+    except (ImportError, Exception):
+        pass
+
+    # If site filter requested but not handled by tracker, try site-specific
+    if site_id and not data_points:
+        try:
+            from src.revenue_tracker import get_site_revenue  # type: ignore[import]
+            site_report = await get_site_revenue(site_id=site_id, days=days)
+            if isinstance(site_report, dict):
+                data_points = site_report.get("daily", [])
+                summary["total"] = site_report.get("total", 0.0)
+        except (ImportError, Exception):
+            pass
+
+    return {
+        "data_points": data_points,
+        "summary": summary,
+        "days": days,
+        "site_filter": site_id,
+        "count": len(data_points),
+    }
+
+
+@app.post("/api/phone/command", tags=["Dashboard v2"])
+async def api_phone_command(
+    req: PhoneCommandRequest,
+    _auth=Depends(require_auth),
+    _rl=Depends(rate_limit_phone),
+):
+    """Send a command to a phone device."""
+    # Try device pool first for multi-device support
+    try:
+        from src.device_pool import DevicePool  # type: ignore[import]
+        pool = DevicePool.instance()
+        device = pool.get_device(req.device_id)
+        if device:
+            result = await device.execute_command(req.command, req.params)
+            await _emit_activity(
+                event_type="phone_command",
+                message=f"Command '{req.command}' sent to device {req.device_id}",
+                module="phone",
+                severity="info",
+            )
+            return ActionResponse(
+                success=True,
+                message=f"Command '{req.command}' executed on {req.device_id}",
+                data=result if isinstance(result, dict) else {"raw": str(result)},
+            )
+    except (ImportError, Exception):
+        pass
+
+    # Fallback to default phone controller (device_id == "default" or any)
+    ctrl = _require_controller()
+    command = req.command.lower()
+    params = req.params
+
+    try:
+        if command == "tap":
+            x = params.get("x", 0)
+            y = params.get("y", 0)
+            result = await ctrl.tap(int(x), int(y))
+        elif command == "swipe":
+            direction = params.get("direction")
+            if direction:
+                w, h = ctrl.resolution
+                cx, cy = w // 2, h // 2
+                dist = h // 3
+                directions = {
+                    "up": (cx, cy + dist, cx, cy - dist),
+                    "down": (cx, cy - dist, cx, cy + dist),
+                    "left": (cx + dist, cy, cx - dist, cy),
+                    "right": (cx - dist, cy, cx + dist, cy),
+                }
+                coords = directions.get(direction.lower())
+                if not coords:
+                    raise HTTPException(400, f"Invalid swipe direction: {direction}")
+                result = await ctrl.swipe(*coords)
+            else:
+                result = await ctrl.swipe(
+                    int(params.get("x1", 0)),
+                    int(params.get("y1", 0)),
+                    int(params.get("x2", 0)),
+                    int(params.get("y2", 0)),
+                )
+        elif command == "home":
+            result = await ctrl.press_home()
+        elif command == "back":
+            result = await ctrl.press_back()
+        elif command == "screenshot":
+            path = await ctrl.screenshot()
+            await _emit_activity(
+                event_type="phone_command",
+                message=f"Screenshot taken on device {req.device_id}",
+                module="phone",
+                severity="info",
+            )
+            return ActionResponse(
+                success=True,
+                message=f"Screenshot saved: {path}",
+                data={"path": path},
+            )
+        elif command == "type":
+            text = params.get("text", "")
+            result = await ctrl.type_text(text)
+        else:
+            raise HTTPException(400, f"Unknown command: {command}. Supported: tap, swipe, home, back, screenshot, type")
+
+        await _emit_activity(
+            event_type="phone_command",
+            message=f"Command '{command}' executed on device {req.device_id}",
+            module="phone",
+            severity="info",
+        )
+        return ActionResponse(
+            success=result.success,
+            message=result.error or f"Command '{command}' executed",
+            duration_ms=result.duration_ms,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(500, f"Phone command failed: {exc}")
+
+
+# ===================================================================
+# Dashboard v2 — Broadcast Helpers (for use by other modules)
+# ===================================================================
+
+
+async def broadcast_agent_status(
+    mission_id: str,
+    status: str,
+    step: str,
+    progress_percent: float,
+) -> None:
+    """Broadcast an agent status update to all connected WS clients.
+
+    Call this from other modules (e.g. autonomous_agent) to push real-time
+    updates to the dashboard.
+    """
+    await ws_manager.broadcast("agent-status", {
+        "type": "agent_status",
+        "data": {
+            "mission_id": mission_id,
+            "status": status,
+            "step": step,
+            "progress_percent": progress_percent,
+        },
+    })
+
+
+async def broadcast_pipeline_progress(
+    pipeline_id: str,
+    stage: str,
+    stage_index: int,
+    total_stages: int,
+    success: bool,
+) -> None:
+    """Broadcast a pipeline stage update to all connected WS clients.
+
+    Call this from the pipeline_manager to push stage progress.
+    """
+    # Update active pipeline state
+    if pipeline_id in state.active_pipelines:
+        state.active_pipelines[pipeline_id]["stage"] = stage
+        state.active_pipelines[pipeline_id]["stage_index"] = stage_index
+        if stage_index >= total_stages:
+            state.active_pipelines[pipeline_id]["status"] = "completed"
+            state.active_pipelines[pipeline_id]["completed_at"] = _now_iso()
+
+    await ws_manager.broadcast("pipeline-progress", {
+        "type": "pipeline_progress",
+        "data": {
+            "pipeline_id": pipeline_id,
+            "stage": stage,
+            "stage_index": stage_index,
+            "total_stages": total_stages,
+            "success": success,
+        },
+    })
+
+
+async def emit_activity_event(
+    event_type: str,
+    message: str,
+    module: str = "system",
+    severity: str = "info",
+    extra: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Public API for other modules to emit activity feed events."""
+    await _emit_activity(event_type, message, module, severity, extra)
 
 
 # ===================================================================

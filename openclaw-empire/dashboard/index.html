@@ -3,312 +3,38 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>OpenClaw Empire Dashboard</title>
+<title>OpenClaw Empire Dashboard v2</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/dashboard.css">
+<link rel="stylesheet" href="css/workflow-builder.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<style>
-*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-
-:root {
-  --bg: #0a0a0f;
-  --card-bg: #12121a;
-  --card-border: #1e1e2e;
-  --primary: #6366f1;
-  --primary-dim: rgba(99,102,241,0.15);
-  --success: #22c55e;
-  --warning: #f59e0b;
-  --critical: #ef4444;
-  --text: #e2e8f0;
-  --text-secondary: #94a3b8;
-  --text-dim: #475569;
-  --mono: 'JetBrains Mono', monospace;
-  --sans: 'Inter', system-ui, -apple-system, sans-serif;
-}
-
-html { font-size: 14px; }
-body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; }
-
-/* ===== Scrollbar ===== */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: var(--bg); }
-::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
-
-/* ===== Header ===== */
-.header {
-  position: sticky; top: 0; z-index: 100;
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0.75rem 1.5rem;
-  background: rgba(10,10,15,0.92); backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--card-border);
-}
-.header-left { display: flex; align-items: center; gap: 0.75rem; }
-.header-logo { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.02em; }
-.header-logo span { color: var(--primary); }
-.header-right { display: flex; align-items: center; gap: 1rem; }
-.header-meta { font-size: 0.78rem; color: var(--text-secondary); font-family: var(--mono); }
-
-.status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-.status-dot.green { background: var(--success); box-shadow: 0 0 6px var(--success); }
-.status-dot.yellow { background: var(--warning); box-shadow: 0 0 6px var(--warning); }
-.status-dot.red { background: var(--critical); box-shadow: 0 0 6px var(--critical); }
-
-.icon-btn {
-  background: none; border: 1px solid var(--card-border); color: var(--text-secondary);
-  width: 34px; height: 34px; border-radius: 8px; cursor: pointer;
-  display: flex; align-items: center; justify-content: center; font-size: 1rem;
-  transition: all 0.2s;
-  position: relative;
-}
-.icon-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-dim); }
-.icon-btn .badge {
-  position: absolute; top: -4px; right: -4px; background: var(--critical);
-  color: #fff; font-size: 0.6rem; min-width: 16px; height: 16px;
-  border-radius: 8px; display: flex; align-items: center; justify-content: center;
-  font-weight: 600; font-family: var(--mono);
-}
-
-/* ===== Offline Banner ===== */
-.offline-banner {
-  display: none; background: var(--critical); color: #fff; text-align: center;
-  padding: 0.5rem; font-weight: 600; font-size: 0.85rem;
-}
-.offline-banner.visible { display: block; }
-
-/* ===== Filter Bar ===== */
-.filter-bar {
-  display: none; align-items: center; gap: 0.75rem;
-  padding: 0.5rem 1.5rem; background: var(--primary-dim);
-  border-bottom: 1px solid var(--primary);
-  font-size: 0.85rem;
-}
-.filter-bar.visible { display: flex; }
-.filter-bar strong { color: var(--primary); }
-.filter-bar button {
-  background: none; border: 1px solid var(--primary); color: var(--primary);
-  padding: 0.2rem 0.6rem; border-radius: 4px; cursor: pointer; font-size: 0.78rem;
-}
-.filter-bar button:hover { background: var(--primary); color: #fff; }
-
-/* ===== Grid ===== */
-.grid {
-  display: grid; gap: 1rem; padding: 1rem 1.5rem;
-  grid-template-columns: repeat(4, 1fr);
-}
-@media (max-width: 1200px) { .grid { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 768px) { .grid { grid-template-columns: 1fr; padding: 0.75rem; } }
-
-.col-2 { grid-column: span 2; }
-.col-3 { grid-column: span 3; }
-@media (max-width: 768px) { .col-2, .col-3 { grid-column: span 1; } }
-
-/* ===== Card ===== */
-.card {
-  background: var(--card-bg); border: 1px solid var(--card-border);
-  border-radius: 12px; overflow: hidden; transition: box-shadow 0.25s, border-color 0.25s;
-}
-.card:hover { border-color: rgba(99,102,241,0.3); box-shadow: 0 0 20px rgba(99,102,241,0.06); }
-.card-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0.85rem 1rem; border-bottom: 1px solid var(--card-border);
-}
-.card-title { display: flex; align-items: center; gap: 0.5rem; font-weight: 600; font-size: 0.85rem; }
-.card-title .icon { font-size: 1rem; opacity: 0.7; }
-.card-body { padding: 1rem; }
-.card-expand-btn {
-  background: none; border: none; color: var(--text-dim); cursor: pointer;
-  font-size: 0.85rem; transition: color 0.2s;
-}
-.card-expand-btn:hover { color: var(--text); }
-.card.expanded .card-body { max-height: none !important; }
-
-/* ===== Metric Card ===== */
-.metric-value {
-  font-family: var(--mono); font-size: 2rem; font-weight: 600; line-height: 1.2;
-}
-.metric-label { color: var(--text-secondary); font-size: 0.78rem; margin-top: 0.15rem; }
-.metric-change {
-  display: inline-flex; align-items: center; gap: 0.25rem;
-  font-family: var(--mono); font-size: 0.78rem; margin-top: 0.35rem;
-  padding: 0.15rem 0.45rem; border-radius: 4px;
-}
-.metric-change.up { color: var(--success); background: rgba(34,197,94,0.1); }
-.metric-change.down { color: var(--critical); background: rgba(239,68,68,0.1); }
-.metric-change.flat { color: var(--text-dim); background: rgba(71,85,105,0.1); }
-.spark-line { margin-top: 0.5rem; height: 32px; }
-
-/* ===== Health Table ===== */
-.health-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-.health-table th {
-  text-align: left; padding: 0.5rem 0.6rem; color: var(--text-secondary);
-  font-weight: 500; border-bottom: 1px solid var(--card-border); font-size: 0.72rem;
-  text-transform: uppercase; letter-spacing: 0.05em;
-}
-.health-table td { padding: 0.45rem 0.6rem; border-bottom: 1px solid rgba(30,30,46,0.5); }
-.health-table tr { cursor: pointer; transition: background 0.15s; }
-.health-table tbody tr:hover { background: rgba(99,102,241,0.06); }
-.health-table .site-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 0.4rem; }
-.health-table .domain { color: var(--text-secondary); font-family: var(--mono); font-size: 0.72rem; }
-.seo-badge {
-  font-family: var(--mono); font-size: 0.72rem; padding: 0.1rem 0.4rem;
-  border-radius: 4px; font-weight: 500;
-}
-.seo-badge.good { background: rgba(34,197,94,0.12); color: var(--success); }
-.seo-badge.ok { background: rgba(245,158,11,0.12); color: var(--warning); }
-.seo-badge.bad { background: rgba(239,68,68,0.12); color: var(--critical); }
-
-/* ===== Activity Feed ===== */
-.feed-list { list-style: none; max-height: 380px; overflow-y: auto; }
-.feed-item {
-  display: flex; align-items: flex-start; gap: 0.6rem;
-  padding: 0.55rem 0; border-bottom: 1px solid rgba(30,30,46,0.5);
-  font-size: 0.8rem;
-}
-.feed-item:last-child { border-bottom: none; }
-.feed-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-top: 0.4rem; }
-.feed-time { color: var(--text-dim); font-family: var(--mono); font-size: 0.7rem; white-space: nowrap; }
-.feed-text { flex: 1; }
-.feed-site { color: var(--primary); font-weight: 500; }
-
-/* ===== Notification Center ===== */
-.notif-list { list-style: none; max-height: 380px; overflow-y: auto; }
-.notif-item {
-  padding: 0.6rem 0.7rem; border-left: 3px solid var(--card-border);
-  margin-bottom: 0.5rem; border-radius: 0 6px 6px 0;
-  background: rgba(255,255,255,0.02); font-size: 0.8rem;
-}
-.notif-item.info { border-left-color: var(--primary); }
-.notif-item.success { border-left-color: var(--success); }
-.notif-item.warning { border-left-color: var(--warning); }
-.notif-item.critical { border-left-color: var(--critical); }
-.notif-item.unread { background: rgba(99,102,241,0.06); }
-.notif-header { display: flex; justify-content: space-between; align-items: center; }
-.notif-title { font-weight: 600; font-size: 0.82rem; }
-.notif-time { color: var(--text-dim); font-family: var(--mono); font-size: 0.68rem; }
-.notif-body { color: var(--text-secondary); margin-top: 0.25rem; font-size: 0.78rem; }
-
-/* ===== Scheduler ===== */
-.sched-list { list-style: none; }
-.sched-item {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 0.55rem 0; border-bottom: 1px solid rgba(30,30,46,0.5);
-  font-size: 0.8rem;
-}
-.sched-item:last-child { border-bottom: none; }
-.sched-name { font-weight: 500; }
-.sched-next { font-family: var(--mono); color: var(--text-secondary); font-size: 0.72rem; }
-.sched-status {
-  font-size: 0.7rem; padding: 0.1rem 0.45rem; border-radius: 4px; font-weight: 500;
-}
-.sched-status.ok { background: rgba(34,197,94,0.12); color: var(--success); }
-.sched-status.failed { background: rgba(239,68,68,0.12); color: var(--critical); }
-.sched-status.pending { background: rgba(245,158,11,0.12); color: var(--warning); }
-
-/* ===== FORGE Card ===== */
-.forge-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
-.forge-stat { text-align: center; }
-.forge-stat .val { font-family: var(--mono); font-size: 1.4rem; font-weight: 600; }
-.forge-stat .lbl { color: var(--text-secondary); font-size: 0.72rem; margin-top: 0.15rem; }
-.forge-bar-wrap { margin-top: 0.75rem; }
-.forge-bar-label { display: flex; justify-content: space-between; font-size: 0.75rem; margin-bottom: 0.3rem; }
-.forge-bar { height: 6px; background: var(--card-border); border-radius: 3px; overflow: hidden; }
-.forge-bar-fill { height: 100%; border-radius: 3px; transition: width 0.6s ease; }
-
-/* ===== Calendar ===== */
-.cal-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.35rem; margin-top: 0.5rem; }
-.cal-day {
-  aspect-ratio: 1; display: flex; flex-direction: column; align-items: center;
-  justify-content: center; border-radius: 8px; font-family: var(--mono);
-  font-size: 0.78rem; position: relative; border: 1px solid transparent;
-}
-.cal-day.today { border-color: var(--primary); background: var(--primary-dim); }
-.cal-day.has-posts::after {
-  content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--success);
-  position: absolute; bottom: 4px;
-}
-.cal-day.many-posts::after { background: var(--primary); width: 7px; height: 7px; }
-.cal-day-label { font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; }
-.cal-post-count { font-size: 0.6rem; color: var(--text-secondary); }
-
-/* ===== Content Gaps ===== */
-.gap-list { list-style: none; }
-.gap-item {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0.55rem 0; border-bottom: 1px solid rgba(30,30,46,0.5);
-  font-size: 0.8rem;
-}
-.gap-item:last-child { border-bottom: none; }
-.gap-item .site-name { display: flex; align-items: center; gap: 0.4rem; }
-.gap-bar {
-  width: 80px; height: 6px; background: var(--card-border);
-  border-radius: 3px; overflow: hidden;
-}
-.gap-bar-fill { height: 100%; border-radius: 3px; }
-.gap-label { font-family: var(--mono); font-size: 0.7rem; color: var(--text-secondary); min-width: 50px; text-align: right; }
-
-/* ===== Chart ===== */
-.chart-wrap { position: relative; height: 220px; }
-@media (max-width: 768px) { .chart-wrap { height: 180px; } }
-
-/* ===== Loading & Error ===== */
-.card-loading, .card-error {
-  display: flex; align-items: center; justify-content: center;
-  min-height: 80px; color: var(--text-dim); font-size: 0.82rem;
-}
-.card-error { color: var(--critical); }
-@keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
-.card-loading::before { content: ''; display: inline-block; width: 16px; height: 16px; border: 2px solid var(--text-dim); border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 0.5rem; }
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* ===== Token Modal ===== */
-.modal-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200;
-  display: flex; align-items: center; justify-content: center;
-}
-.modal-overlay.hidden { display: none; }
-.modal {
-  background: var(--card-bg); border: 1px solid var(--card-border);
-  border-radius: 16px; padding: 2rem; width: 90%; max-width: 400px;
-}
-.modal h2 { font-size: 1.2rem; margin-bottom: 0.5rem; }
-.modal p { color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1rem; }
-.modal input {
-  width: 100%; padding: 0.65rem 0.8rem; border-radius: 8px;
-  border: 1px solid var(--card-border); background: var(--bg);
-  color: var(--text); font-family: var(--mono); font-size: 0.85rem;
-  margin-bottom: 1rem; outline: none;
-}
-.modal input:focus { border-color: var(--primary); }
-.modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
-.btn {
-  padding: 0.5rem 1.2rem; border-radius: 8px; font-weight: 600;
-  font-size: 0.85rem; cursor: pointer; border: none; transition: all 0.2s;
-}
-.btn-primary { background: var(--primary); color: #fff; }
-.btn-primary:hover { background: #4f46e5; }
-.btn-ghost { background: none; color: var(--text-secondary); border: 1px solid var(--card-border); }
-.btn-ghost:hover { border-color: var(--text-secondary); }
-
-/* ===== Animations ===== */
-@keyframes countUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-.animate-in { animation: countUp 0.4s ease-out forwards; }
-</style>
 </head>
 <body>
 
-<!-- Offline Banner -->
+<!-- ================================================================
+     OFFLINE BANNER
+     ================================================================ -->
 <div class="offline-banner" id="offlineBanner">API Offline -- Retrying on next refresh cycle...</div>
 
-<!-- Header -->
+<!-- ================================================================
+     HEADER
+     ================================================================ -->
 <header class="header">
   <div class="header-left">
-    <div class="header-logo"><span>OpenClaw</span> Empire</div>
-    <span class="status-dot green" id="connDot" title="Connected"></span>
+    <div class="header-logo">Open<span>Claw</span> Empire</div>
+    <span class="status-dot green pulse" id="connDot" title="API Connected"></span>
+    <div class="ws-indicator" id="ws-status">
+      <span class="status-dot red" id="wsDot"></span>
+      <span id="wsLabel">WS Disconnected</span>
+    </div>
+  </div>
+  <div class="header-center">
+    <span class="header-clock" id="headerClock">--:--:--</span>
   </div>
   <div class="header-right">
-    <span class="header-meta" id="lastRefresh">--:--:--</span>
+    <span class="header-meta" id="lastRefresh">Last: --:--:--</span>
     <button class="icon-btn" id="btnRefresh" title="Refresh all data">&#x21bb;</button>
     <button class="icon-btn" id="btnNotif" title="Notifications">
       &#x1F514;<span class="badge" id="notifBadge" style="display:none">0</span>
@@ -317,146 +43,227 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
   </div>
 </header>
 
-<!-- Filter Bar -->
+<!-- ================================================================
+     TAB NAVIGATION
+     ================================================================ -->
+<nav class="tab-bar" id="tabBar">
+  <button class="tab-btn active" data-tab="overview">
+    <span class="tab-icon">&#x1F4CA;</span> <span>Overview</span>
+  </button>
+  <button class="tab-btn" data-tab="content">
+    <span class="tab-icon">&#x270D;</span> <span>Content</span>
+  </button>
+  <button class="tab-btn" data-tab="phones">
+    <span class="tab-icon">&#x1F4F1;</span> <span>Phones</span>
+  </button>
+  <button class="tab-btn" data-tab="revenue">
+    <span class="tab-icon">&#x1F4B0;</span> <span>Revenue</span>
+  </button>
+  <button class="tab-btn" data-tab="workflows">
+    <span class="tab-icon">&#x26A1;</span> <span>Workflows</span>
+  </button>
+  <button class="tab-btn" data-tab="settings">
+    <span class="tab-icon">&#x2699;</span> <span>Settings</span>
+  </button>
+</nav>
+
+<!-- ================================================================
+     FILTER BAR
+     ================================================================ -->
 <div class="filter-bar" id="filterBar">
   Filtering: <strong id="filterSiteName">--</strong>
   <button id="btnClearFilter">Clear</button>
 </div>
 
-<!-- Main Grid -->
-<div class="grid">
+<!-- ================================================================
+     OVERVIEW TAB
+     ================================================================ -->
+<div class="tab-content active" id="overview-tab">
 
-  <!-- Row 1: Key Metrics -->
-  <div class="card" id="cardRevenue">
-    <div class="card-header">
-      <div class="card-title"><span class="icon">$</span> Revenue Today</div>
-    </div>
-    <div class="card-body">
-      <div class="metric-value" id="revToday">--</div>
-      <div class="metric-label">vs. yesterday</div>
-      <div class="metric-change flat" id="revChange">-- --</div>
-      <canvas class="spark-line" id="revSpark"></canvas>
-    </div>
-  </div>
-
-  <div class="card" id="cardPosts">
-    <div class="card-header">
-      <div class="card-title"><span class="icon">&#x270D;</span> Posts This Week</div>
-    </div>
-    <div class="card-body">
-      <div class="metric-value" id="postsWeek">--</div>
-      <div class="metric-label">published articles</div>
-      <div class="metric-change flat" id="postsChange">--</div>
-    </div>
-  </div>
-
-  <div class="card" id="cardHealth">
-    <div class="card-header">
-      <div class="card-title"><span class="icon">&#x2764;</span> API Health</div>
-    </div>
-    <div class="card-body">
-      <div style="display:flex;align-items:center;gap:0.5rem;">
-        <span class="status-dot green" id="apiDot"></span>
-        <span class="metric-value" id="apiStatus" style="font-size:1.3rem;">--</span>
+  <!-- Quick Stats Row -->
+  <div class="grid" style="margin-bottom:1rem;">
+    <div class="card" id="cardRevenue">
+      <div class="card-header">
+        <div class="card-title"><span class="icon">$</span> Revenue Today</div>
       </div>
-      <div class="metric-label" id="apiLatency">Response: --ms</div>
-      <div class="metric-label" id="apiUptime">Uptime: --%</div>
+      <div class="card-body">
+        <div class="metric-value" id="revToday">--</div>
+        <div class="metric-label">vs. yesterday</div>
+        <div class="metric-change flat" id="revChange">-- --</div>
+        <canvas class="spark-line" id="revSpark"></canvas>
+      </div>
     </div>
-  </div>
 
-  <div class="card" id="cardTasks">
-    <div class="card-header">
-      <div class="card-title"><span class="icon">&#x23F1;</span> Active Tasks</div>
+    <div class="card" id="cardPosts">
+      <div class="card-header">
+        <div class="card-title"><span class="icon">&#x270D;</span> Posts This Week</div>
+      </div>
+      <div class="card-body">
+        <div class="metric-value" id="postsWeek">--</div>
+        <div class="metric-label">published articles</div>
+        <div class="metric-change flat" id="postsChange">--</div>
+      </div>
     </div>
-    <div class="card-body">
-      <div class="metric-value" id="activeTasks">--</div>
-      <div class="metric-label">scheduler jobs running</div>
-      <div class="metric-change flat" id="nextTask">Next: --</div>
-    </div>
-  </div>
 
-  <!-- Row 2: Charts -->
-  <div class="card col-2" id="cardRevenueChart">
-    <div class="card-header">
-      <div class="card-title"><span class="icon">&#x1F4C8;</span> Revenue (30 Days)</div>
-      <button class="card-expand-btn" data-expand="cardRevenueChart">&#x2922;</button>
+    <div class="card" id="cardDevices">
+      <div class="card-header">
+        <div class="card-title"><span class="icon">&#x1F4F1;</span> Active Devices</div>
+      </div>
+      <div class="card-body">
+        <div class="metric-value" id="activeDevices">--</div>
+        <div class="metric-label">phones online</div>
+        <div class="metric-change flat" id="deviceChange">--</div>
+      </div>
     </div>
-    <div class="card-body">
-      <div class="chart-wrap"><canvas id="revenueChart"></canvas></div>
-    </div>
-  </div>
 
-  <div class="card col-2" id="cardVelocity">
-    <div class="card-header">
-      <div class="card-title"><span class="icon">&#x1F680;</span> Publishing Velocity</div>
-      <button class="card-expand-btn" data-expand="cardVelocity">&#x2922;</button>
-    </div>
-    <div class="card-body">
-      <div class="chart-wrap"><canvas id="velocityChart"></canvas></div>
-    </div>
-  </div>
-
-  <!-- Row 3: System Status -->
-  <div class="card col-2" id="cardSiteHealth">
-    <div class="card-header">
-      <div class="card-title"><span class="icon">&#x1F310;</span> Site Health</div>
-      <button class="card-expand-btn" data-expand="cardSiteHealth">&#x2922;</button>
-    </div>
-    <div class="card-body" style="padding:0;">
-      <div style="overflow-x:auto;">
-        <table class="health-table" id="siteHealthTable">
-          <thead>
-            <tr><th>Site</th><th>Domain</th><th>Status</th><th>Last Post</th><th>SEO</th></tr>
-          </thead>
-          <tbody id="siteHealthBody"></tbody>
-        </table>
+    <div class="card" id="cardUptime">
+      <div class="card-header">
+        <div class="card-title"><span class="icon">&#x23F1;</span> Uptime</div>
+      </div>
+      <div class="card-body">
+        <div class="metric-value" id="uptimeValue">--</div>
+        <div class="metric-label">system availability</div>
+        <div class="metric-change flat" id="uptimeChange">--</div>
       </div>
     </div>
   </div>
 
-  <div class="card" id="cardForge">
+  <!-- Service Status Cards -->
+  <div class="card" style="margin-bottom:1rem;">
     <div class="card-header">
-      <div class="card-title"><span class="icon">&#x1F9E0;</span> FORGE Intelligence</div>
+      <div class="card-title"><span class="icon">&#x2764;</span> Service Status</div>
     </div>
     <div class="card-body">
-      <div class="forge-grid" id="forgeStats">
-        <div class="forge-stat"><div class="val" id="forgeTasks">--</div><div class="lbl">Tasks Learned</div></div>
-        <div class="forge-stat"><div class="val" id="forgeSuccess">--</div><div class="lbl">Success Rate</div></div>
-        <div class="forge-stat"><div class="val" id="forgeApps">--</div><div class="lbl">Top Apps</div></div>
-        <div class="forge-stat"><div class="val" id="forgeCodex">--</div><div class="lbl">Codex Size</div></div>
+      <div class="service-grid" id="serviceGrid">
+        <div class="service-card" id="svcApi">
+          <div class="service-icon" style="background:var(--primary-dim);color:var(--primary);">&#x26A1;</div>
+          <div class="service-info">
+            <div class="service-name">Empire API</div>
+            <div class="service-detail" id="svcApiDetail">:8765 -- checking...</div>
+          </div>
+          <span class="status-dot" id="svcApiDot"></span>
+        </div>
+        <div class="service-card" id="svcScreenpipe">
+          <div class="service-icon" style="background:var(--success-dim);color:var(--success);">&#x1F441;</div>
+          <div class="service-info">
+            <div class="service-name">Screenpipe</div>
+            <div class="service-detail" id="svcScreenpipeDetail">:3030 -- checking...</div>
+          </div>
+          <span class="status-dot" id="svcScreenpipeDot"></span>
+        </div>
+        <div class="service-card" id="svcVision">
+          <div class="service-icon" style="background:var(--warning-dim);color:var(--warning);">&#x1F4F7;</div>
+          <div class="service-info">
+            <div class="service-name">Vision Service</div>
+            <div class="service-detail" id="svcVisionDetail">:8002 -- checking...</div>
+          </div>
+          <span class="status-dot" id="svcVisionDot"></span>
+        </div>
+        <div class="service-card" id="svcN8n">
+          <div class="service-icon" style="background:var(--info-dim);color:var(--info);">&#x1F504;</div>
+          <div class="service-info">
+            <div class="service-name">n8n Workflows</div>
+            <div class="service-detail" id="svcN8nDetail">:5678 -- checking...</div>
+          </div>
+          <span class="status-dot" id="svcN8nDot"></span>
+        </div>
       </div>
-      <div class="forge-bar-wrap">
-        <div class="forge-bar-label"><span>Learning Progress</span><span id="forgeProgress">0%</span></div>
-        <div class="forge-bar"><div class="forge-bar-fill" id="forgeBarFill" style="width:0%;background:var(--primary);"></div></div>
+    </div>
+  </div>
+
+  <!-- Agent Status + Activity Feed -->
+  <div class="grid-2" style="margin-bottom:1rem;">
+    <!-- Agent Status Panel -->
+    <div class="card" id="cardAgent">
+      <div class="card-header">
+        <div class="card-title"><span class="icon">&#x1F916;</span> Agent Status</div>
+        <div class="card-actions">
+          <span class="status-pill online" id="agentStatus">Idle</span>
+        </div>
+      </div>
+      <div class="card-body" id="agentBody">
+        <div class="agent-panel" id="agentPanel">
+          <div class="agent-header">
+            <div class="agent-name">
+              <span class="status-dot green pulse"></span>
+              OpenClaw Agent
+            </div>
+            <div class="agent-mission" id="agentMission">No active mission</div>
+          </div>
+          <div class="agent-body">
+            <div style="font-size:0.78rem;color:var(--text-secondary);" id="agentDesc">Waiting for instructions...</div>
+            <div class="agent-progress" id="agentProgressWrap" style="display:none;">
+              <div style="display:flex;justify-content:space-between;font-size:0.72rem;margin-bottom:0.2rem;">
+                <span id="agentProgressLabel">Step 0/0</span>
+                <span id="agentProgressPct">0%</span>
+              </div>
+              <div class="agent-progress-bar">
+                <div class="agent-progress-fill" id="agentProgressFill" style="width:0%;"></div>
+              </div>
+            </div>
+            <ul class="agent-steps" id="agentSteps">
+              <!-- Populated by WebSocket events -->
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Activity Feed -->
+    <div class="card" id="cardActivity">
+      <div class="card-header">
+        <div class="card-title"><span class="icon">&#x26A1;</span> Activity Feed</div>
+        <button class="card-expand-btn" data-expand="cardActivity">&#x2922;</button>
+      </div>
+      <div class="card-body" style="padding:0.5rem 1rem;">
+        <ul class="feed-list" id="activity-feed">
+          <li class="card-loading">Connecting...</li>
+        </ul>
       </div>
     </div>
   </div>
 
-  <div class="card" id="cardScheduler">
-    <div class="card-header">
-      <div class="card-title"><span class="icon">&#x1F4C5;</span> Scheduler</div>
+  <!-- Site Health Table + Scheduler -->
+  <div class="grid" style="margin-bottom:1rem;">
+    <div class="card col-3" id="cardSiteHealth">
+      <div class="card-header">
+        <div class="card-title"><span class="icon">&#x1F310;</span> Site Health (16 Sites)</div>
+        <button class="card-expand-btn" data-expand="cardSiteHealth">&#x2922;</button>
+      </div>
+      <div class="card-body no-pad">
+        <div style="overflow-x:auto;">
+          <table class="health-table" id="siteHealthTable">
+            <thead>
+              <tr>
+                <th>Site</th>
+                <th>Domain</th>
+                <th>Status</th>
+                <th>Last Post</th>
+                <th>SEO</th>
+              </tr>
+            </thead>
+            <tbody id="siteHealthBody">
+              <tr><td colspan="5" class="card-loading">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
-    <div class="card-body">
-      <ul class="sched-list" id="schedList">
-        <li class="card-loading">Loading...</li>
-      </ul>
+
+    <div class="card" id="cardScheduler">
+      <div class="card-header">
+        <div class="card-title"><span class="icon">&#x1F4C5;</span> Scheduler</div>
+      </div>
+      <div class="card-body">
+        <ul class="sched-list" id="schedList">
+          <li class="card-loading">Loading...</li>
+        </ul>
+      </div>
     </div>
   </div>
 
-  <!-- Row 4: Activity -->
-  <div class="card col-2" id="cardActivity">
-    <div class="card-header">
-      <div class="card-title"><span class="icon">&#x26A1;</span> Recent Activity</div>
-      <button class="card-expand-btn" data-expand="cardActivity">&#x2922;</button>
-    </div>
-    <div class="card-body" style="padding:0.5rem 1rem;">
-      <ul class="feed-list" id="activityFeed">
-        <li class="card-loading">Loading...</li>
-      </ul>
-    </div>
-  </div>
-
-  <div class="card col-2" id="cardNotifications">
+  <!-- Notifications -->
+  <div class="card" id="cardNotifications">
     <div class="card-header">
       <div class="card-title"><span class="icon">&#x1F514;</span> Notification Center</div>
     </div>
@@ -467,17 +274,101 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     </div>
   </div>
 
-  <!-- Row 5: Content -->
-  <div class="card col-2" id="cardCalendar">
+</div><!-- /overview-tab -->
+
+
+<!-- ================================================================
+     CONTENT TAB
+     ================================================================ -->
+<div class="tab-content" id="content-tab">
+
+  <!-- Content Pipeline Progress -->
+  <div class="card" style="margin-bottom:1rem;">
     <div class="card-header">
-      <div class="card-title"><span class="icon">&#x1F5D3;</span> Content Calendar (7 Days)</div>
+      <div class="card-title"><span class="icon">&#x1F6E0;</span> Content Pipeline</div>
+      <div class="card-actions">
+        <button class="btn btn-sm btn-primary" id="btnNewPipeline">+ New Run</button>
+      </div>
     </div>
-    <div class="card-body" id="calendarBody">
-      <div class="card-loading">Loading...</div>
+    <div class="card-body" id="pipeline-progress">
+      <div class="empty-state" id="pipelineEmpty">
+        <div class="empty-icon">&#x1F6E0;</div>
+        <div class="empty-text">No active pipelines</div>
+        <div class="empty-hint">Click "New Run" to start a content pipeline</div>
+      </div>
+      <!-- Pipeline cards populated dynamically -->
     </div>
   </div>
 
-  <div class="card col-2" id="cardGaps">
+  <!-- Pipeline History + Publishing Velocity -->
+  <div class="grid-2" style="margin-bottom:1rem;">
+    <!-- Pipeline History -->
+    <div class="card" id="cardPipelineHistory">
+      <div class="card-header">
+        <div class="card-title"><span class="icon">&#x1F4DC;</span> Pipeline History</div>
+      </div>
+      <div class="card-body no-pad">
+        <div style="overflow-x:auto;">
+          <table class="data-table" id="pipelineHistoryTable">
+            <thead>
+              <tr>
+                <th class="sortable">Site</th>
+                <th class="sortable">Title</th>
+                <th class="sortable">Status</th>
+                <th class="sortable">Duration</th>
+                <th class="sortable">Date</th>
+              </tr>
+            </thead>
+            <tbody id="pipelineHistoryBody">
+              <tr><td colspan="5" class="card-loading">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Publishing Velocity Chart -->
+    <div class="card" id="cardVelocity">
+      <div class="card-header">
+        <div class="card-title"><span class="icon">&#x1F680;</span> Publishing Velocity</div>
+        <button class="card-expand-btn" data-expand="cardVelocity">&#x2922;</button>
+      </div>
+      <div class="card-body">
+        <div class="chart-wrap" id="velocity-chart-wrap">
+          <canvas id="velocity-chart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Content Calendar -->
+  <div class="card" style="margin-bottom:1rem;">
+    <div class="card-header">
+      <div class="card-title"><span class="icon">&#x1F5D3;</span> Content Calendar (7 Days)</div>
+      <div class="card-actions">
+        <button class="btn btn-sm btn-ghost" id="btnCalPrev">&#x25C0;</button>
+        <span id="calWeekLabel" style="font-size:0.78rem;color:var(--text-secondary);font-family:var(--mono);">This Week</span>
+        <button class="btn btn-sm btn-ghost" id="btnCalNext">&#x25B6;</button>
+      </div>
+    </div>
+    <div class="card-body" id="contentCalendarBody">
+      <div class="calendar-grid" id="calendarGrid">
+        <!-- Calendar headers -->
+        <div class="calendar-header">Sun</div>
+        <div class="calendar-header">Mon</div>
+        <div class="calendar-header">Tue</div>
+        <div class="calendar-header">Wed</div>
+        <div class="calendar-header">Thu</div>
+        <div class="calendar-header">Fri</div>
+        <div class="calendar-header">Sat</div>
+        <!-- Day cells populated dynamically -->
+      </div>
+      <div id="calendarScheduledList" style="margin-top:0.75rem;"></div>
+    </div>
+  </div>
+
+  <!-- Content Gaps -->
+  <div class="card">
     <div class="card-header">
       <div class="card-title"><span class="icon">&#x26A0;</span> Content Gaps</div>
     </div>
@@ -488,13 +379,727 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
     </div>
   </div>
 
-</div><!-- /grid -->
+</div><!-- /content-tab -->
 
-<!-- Token Modal -->
+
+<!-- ================================================================
+     PHONES TAB
+     ================================================================ -->
+<div class="tab-content" id="phones-tab">
+
+  <!-- Device Fleet Grid -->
+  <div class="card" style="margin-bottom:1rem;">
+    <div class="card-header">
+      <div class="card-title"><span class="icon">&#x1F4F1;</span> Device Fleet</div>
+      <div class="card-actions">
+        <button class="btn btn-sm btn-ghost" id="btnRefreshDevices">&#x21bb; Refresh</button>
+        <button class="btn btn-sm btn-primary" id="btnAddDevice">+ Add Device</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="device-grid" id="deviceFleetGrid">
+        <div class="card-loading">Scanning devices...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phone Mirror + Device Details -->
+  <div class="grid-2" style="margin-bottom:1rem;">
+    <!-- Phone Mirror -->
+    <div class="card" id="cardPhoneMirror">
+      <div class="card-header">
+        <div class="card-title"><span class="icon">&#x1F5B5;</span> Phone Mirror</div>
+        <div class="card-actions">
+          <select id="mirrorDeviceSelect" style="background:var(--bg);border:1px solid var(--card-border);color:var(--text);border-radius:4px;padding:0.2rem 0.4rem;font-size:0.75rem;font-family:var(--mono);">
+            <option value="">Select device...</option>
+          </select>
+        </div>
+      </div>
+      <div class="card-body" style="display:flex;flex-direction:column;align-items:center;">
+        <div class="phone-mirror-container" id="phoneMirrorWrap">
+          <canvas id="phone-mirror-canvas" width="360" height="780"></canvas>
+          <div class="phone-mirror-fps" id="mirrorFps">-- fps</div>
+        </div>
+        <div class="phone-mirror-controls">
+          <button class="btn btn-sm btn-ghost" id="btnMirrorStart">&#x25B6; Start</button>
+          <button class="btn btn-sm btn-ghost" id="btnMirrorStop" disabled>&#x25A0; Stop</button>
+          <button class="btn btn-sm btn-ghost" id="btnMirrorScreenshot">&#x1F4F7; Snap</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Device Health & Task Queue -->
+    <div class="card" id="cardDeviceDetail">
+      <div class="card-header">
+        <div class="card-title"><span class="icon">&#x1F4CB;</span> Device Details</div>
+      </div>
+      <div class="card-body" id="deviceDetailBody">
+        <div class="empty-state">
+          <div class="empty-icon">&#x1F4F1;</div>
+          <div class="empty-text">Select a device</div>
+          <div class="empty-hint">Click a device card or use the mirror selector</div>
+        </div>
+      </div>
+
+      <!-- Device Health Indicators -->
+      <div id="deviceHealthSection" style="display:none;padding:0 1rem 1rem;">
+        <div style="font-size:0.78rem;font-weight:600;margin-bottom:0.5rem;color:var(--text-secondary);">HEALTH</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.5rem;" id="deviceHealthGrid">
+          <div class="device-stat">
+            <div class="device-stat-value" id="devBattery">--%</div>
+            <div class="device-stat-label">Battery</div>
+          </div>
+          <div class="device-stat">
+            <div class="device-stat-value" id="devWifi">--</div>
+            <div class="device-stat-label">WiFi</div>
+          </div>
+          <div class="device-stat">
+            <div class="device-stat-value" id="devStorage">--</div>
+            <div class="device-stat-label">Storage</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Task Queue -->
+      <div id="deviceTaskSection" style="display:none;padding:0 1rem 1rem;">
+        <div style="font-size:0.78rem;font-weight:600;margin-bottom:0.5rem;color:var(--text-secondary);">TASK QUEUE</div>
+        <ul class="sched-list" id="deviceTaskQueue">
+          <li style="color:var(--text-dim);font-size:0.78rem;">No tasks queued</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /phones-tab -->
+
+
+<!-- ================================================================
+     REVENUE TAB
+     ================================================================ -->
+<div class="tab-content" id="revenue-tab">
+
+  <!-- Revenue Forecast Chart -->
+  <div class="card" style="margin-bottom:1rem;">
+    <div class="card-header">
+      <div class="card-title"><span class="icon">&#x1F4C8;</span> Revenue Forecast (30-Day)</div>
+      <button class="card-expand-btn" data-expand="cardForecast">&#x2922;</button>
+    </div>
+    <div class="card-body" id="cardForecast">
+      <div class="chart-wrap tall" id="forecast-chart-wrap">
+        <canvas id="forecast-chart"></canvas>
+      </div>
+      <div class="chart-legend" id="forecastLegend">
+        <div class="chart-legend-item">
+          <div class="chart-legend-dot" style="background:var(--primary);"></div>
+          Actual
+        </div>
+        <div class="chart-legend-item">
+          <div class="chart-legend-dot" style="background:var(--warning);"></div>
+          Forecast
+        </div>
+        <div class="chart-legend-item">
+          <div class="chart-legend-dot" style="background:rgba(245,158,11,0.2);width:16px;border-radius:2px;height:8px;"></div>
+          Confidence Band
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Revenue by Site + Summary -->
+  <div class="grid-2" style="margin-bottom:1rem;">
+    <!-- Revenue by Site -->
+    <div class="card" id="cardRevenueBySite">
+      <div class="card-header">
+        <div class="card-title"><span class="icon">&#x1F4CA;</span> Revenue by Site</div>
+        <button class="card-expand-btn" data-expand="cardRevenueBySite">&#x2922;</button>
+      </div>
+      <div class="card-body">
+        <div class="chart-wrap" id="revenue-by-site-wrap">
+          <canvas id="revenue-chart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Revenue Summary Metrics -->
+    <div class="card" id="cardRevenueSummary">
+      <div class="card-header">
+        <div class="card-title"><span class="icon">&#x1F4B5;</span> Revenue Summary</div>
+      </div>
+      <div class="card-body">
+        <div class="forge-grid" style="margin-bottom:1rem;">
+          <div class="forge-stat">
+            <div class="val" id="revMTD">--</div>
+            <div class="lbl">Month-to-Date</div>
+          </div>
+          <div class="forge-stat">
+            <div class="val" id="revProjected">--</div>
+            <div class="lbl">Projected Monthly</div>
+          </div>
+          <div class="forge-stat">
+            <div class="val" id="revAvgDaily">--</div>
+            <div class="lbl">Avg Daily</div>
+          </div>
+          <div class="forge-stat">
+            <div class="val" id="revBestDay">--</div>
+            <div class="lbl">Best Day</div>
+          </div>
+        </div>
+
+        <!-- Top Revenue Sources -->
+        <div style="font-size:0.78rem;font-weight:600;margin-bottom:0.5rem;color:var(--text-secondary);">TOP SOURCES</div>
+        <div id="topRevenueSources">
+          <div class="card-loading">Loading...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- A/B Test Results + Marketplace Stats -->
+  <div class="grid-2">
+    <!-- A/B Test Results -->
+    <div class="card" id="cardABTests">
+      <div class="card-header">
+        <div class="card-title"><span class="icon">&#x1F9EA;</span> A/B Test Results</div>
+      </div>
+      <div class="card-body" id="abTestResults">
+        <div class="empty-state">
+          <div class="empty-icon">&#x1F9EA;</div>
+          <div class="empty-text">No active experiments</div>
+          <div class="empty-hint">A/B tests will appear here when running</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- KDP + Etsy Marketplace Stats -->
+    <div class="card" id="cardMarketplace">
+      <div class="card-header">
+        <div class="card-title"><span class="icon">&#x1F3EA;</span> Marketplace Stats</div>
+      </div>
+      <div class="card-body">
+        <!-- KDP Section -->
+        <div style="margin-bottom:1rem;">
+          <div style="font-size:0.78rem;font-weight:600;margin-bottom:0.5rem;color:var(--text-secondary);">KDP BOOKS</div>
+          <div class="forge-grid">
+            <div class="forge-stat">
+              <div class="val" id="kdpBooks">--</div>
+              <div class="lbl">Published</div>
+            </div>
+            <div class="forge-stat">
+              <div class="val" id="kdpRevenue">--</div>
+              <div class="lbl">MTD Revenue</div>
+            </div>
+            <div class="forge-stat">
+              <div class="val" id="kdpUnits">--</div>
+              <div class="lbl">Units Sold</div>
+            </div>
+            <div class="forge-stat">
+              <div class="val" id="kdpRoyalty">--</div>
+              <div class="lbl">Avg Royalty</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Etsy Section -->
+        <div>
+          <div style="font-size:0.78rem;font-weight:600;margin-bottom:0.5rem;color:var(--text-secondary);">ETSY POD</div>
+          <div class="forge-grid">
+            <div class="forge-stat">
+              <div class="val" id="etsyListings">--</div>
+              <div class="lbl">Active Listings</div>
+            </div>
+            <div class="forge-stat">
+              <div class="val" id="etsyRevenue">--</div>
+              <div class="lbl">MTD Revenue</div>
+            </div>
+            <div class="forge-stat">
+              <div class="val" id="etsyOrders">--</div>
+              <div class="lbl">Orders</div>
+            </div>
+            <div class="forge-stat">
+              <div class="val" id="etsyViews">--</div>
+              <div class="lbl">Shop Views</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /revenue-tab -->
+
+
+<!-- ================================================================
+     WORKFLOWS TAB
+     ================================================================ -->
+<div class="tab-content" id="workflows-tab">
+
+  <!-- Workflow Builder Canvas -->
+  <div class="card" style="margin-bottom:1rem;">
+    <div class="card-header">
+      <div class="card-title"><span class="icon">&#x1F3D7;</span> Workflow Builder</div>
+      <div class="card-actions">
+        <button class="btn btn-sm btn-ghost" id="btnWfNew">New</button>
+        <button class="btn btn-sm btn-ghost" id="btnWfSave">Save</button>
+        <button class="btn btn-sm btn-primary" id="btnWfRun">&#x25B6; Run</button>
+      </div>
+    </div>
+    <div class="card-body no-pad">
+      <div class="workflow-canvas-wrap" id="workflowCanvasWrap">
+        <div id="workflow-canvas">
+          <div class="workflow-canvas-inner" id="workflowCanvasInner">
+            <!-- Nodes and connections rendered here by JS -->
+            <svg class="workflow-connections" id="workflowConnections">
+              <!-- SVG connection paths -->
+            </svg>
+          </div>
+        </div>
+
+        <!-- Toolbar -->
+        <div class="workflow-toolbar" id="workflowToolbar">
+          <button class="workflow-toolbar-btn" id="wfBtnSelect" title="Select (V)">&#x25B3;</button>
+          <button class="workflow-toolbar-btn" id="wfBtnPan" title="Pan (H)">&#x270B;</button>
+          <div class="workflow-toolbar-separator"></div>
+          <button class="workflow-toolbar-btn" id="wfBtnZoomIn" title="Zoom In (+)">+</button>
+          <div class="workflow-toolbar-zoom" id="wfZoomLevel">100%</div>
+          <button class="workflow-toolbar-btn" id="wfBtnZoomOut" title="Zoom Out (-)">-</button>
+          <button class="workflow-toolbar-btn" id="wfBtnFitView" title="Fit to View">&#x26F6;</button>
+          <div class="workflow-toolbar-separator"></div>
+          <button class="workflow-toolbar-btn" id="wfBtnUndo" title="Undo (Ctrl+Z)" disabled>&#x21B6;</button>
+          <button class="workflow-toolbar-btn" id="wfBtnRedo" title="Redo (Ctrl+Y)" disabled>&#x21B7;</button>
+          <button class="workflow-toolbar-btn" id="wfBtnDelete" title="Delete (Del)" disabled>&#x1F5D1;</button>
+        </div>
+
+        <!-- Minimap -->
+        <div class="workflow-minimap" id="workflowMinimap">
+          <div class="minimap-content" id="minimapContent">
+            <!-- Minimap nodes rendered here -->
+            <div class="minimap-viewport" id="minimapViewport"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Node Palette -->
+      <div style="padding:0.75rem 1rem;border-top:1px solid var(--card-border);">
+        <div style="font-size:0.72rem;text-transform:uppercase;color:var(--text-dim);letter-spacing:0.05em;margin-bottom:0.4rem;">Drag nodes to canvas</div>
+        <div class="node-palette" id="nodePalette">
+          <div class="node-palette-item" draggable="true" data-node-type="trigger">
+            <span class="palette-icon">&#x25B6;</span>
+            <span class="palette-label">Trigger</span>
+          </div>
+          <div class="node-palette-item" draggable="true" data-node-type="dispatch">
+            <span class="palette-icon">&#x1F4E8;</span>
+            <span class="palette-label">Dispatch</span>
+          </div>
+          <div class="node-palette-item" draggable="true" data-node-type="condition">
+            <span class="palette-icon">&#x2753;</span>
+            <span class="palette-label">Condition</span>
+          </div>
+          <div class="node-palette-item" draggable="true" data-node-type="parallel">
+            <span class="palette-icon">&#x1F500;</span>
+            <span class="palette-label">Parallel</span>
+          </div>
+          <div class="node-palette-item" draggable="true" data-node-type="delay">
+            <span class="palette-icon">&#x23F3;</span>
+            <span class="palette-label">Delay</span>
+          </div>
+          <div class="node-palette-item" draggable="true" data-node-type="notify">
+            <span class="palette-icon">&#x1F514;</span>
+            <span class="palette-label">Notify</span>
+          </div>
+          <div class="node-palette-item" draggable="true" data-node-type="log">
+            <span class="palette-icon">&#x1F4DD;</span>
+            <span class="palette-label">Log</span>
+          </div>
+          <div class="node-palette-item" draggable="true" data-node-type="action">
+            <span class="palette-icon">&#x2699;</span>
+            <span class="palette-label">Action</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Saved Workflows + Mission Templates -->
+  <div class="grid-2" style="margin-bottom:1rem;">
+    <!-- Saved Workflows -->
+    <div class="card" id="cardSavedWorkflows">
+      <div class="card-header">
+        <div class="card-title"><span class="icon">&#x1F4BE;</span> Saved Workflows</div>
+      </div>
+      <div class="card-body" id="savedWorkflowsList">
+        <div class="empty-state">
+          <div class="empty-icon">&#x1F4BE;</div>
+          <div class="empty-text">No saved workflows</div>
+          <div class="empty-hint">Build and save a workflow above</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mission Templates Gallery -->
+    <div class="card" id="cardMissionTemplates">
+      <div class="card-header">
+        <div class="card-title"><span class="icon">&#x1F4CB;</span> Mission Templates</div>
+      </div>
+      <div class="card-body">
+        <div class="template-gallery" id="templateGallery">
+          <div class="template-card" data-template="content_publish">
+            <div class="template-icon">&#x270D;</div>
+            <div class="template-name">Content Publish</div>
+            <div class="template-desc">Generate, optimize, and publish articles to WordPress sites</div>
+          </div>
+          <div class="template-card" data-template="social_growth">
+            <div class="template-icon">&#x1F4F1;</div>
+            <div class="template-name">Social Growth</div>
+            <div class="template-desc">Automated social media engagement and follower growth</div>
+          </div>
+          <div class="template-card" data-template="account_creation">
+            <div class="template-icon">&#x1F464;</div>
+            <div class="template-name">Account Creation</div>
+            <div class="template-desc">Create and configure accounts across platforms</div>
+          </div>
+          <div class="template-card" data-template="app_exploration">
+            <div class="template-icon">&#x1F50D;</div>
+            <div class="template-name">App Exploration</div>
+            <div class="template-desc">Navigate and map app interfaces autonomously</div>
+          </div>
+          <div class="template-card" data-template="monetization">
+            <div class="template-icon">&#x1F4B0;</div>
+            <div class="template-name">Monetization</div>
+            <div class="template-desc">Affiliate setup, ad placement, and revenue optimization</div>
+          </div>
+          <div class="template-card" data-template="site_maintenance">
+            <div class="template-icon">&#x1F527;</div>
+            <div class="template-name">Site Maintenance</div>
+            <div class="template-desc">Plugin updates, cache clearing, SEO audits</div>
+          </div>
+          <div class="template-card" data-template="revenue_check">
+            <div class="template-icon">&#x1F4B5;</div>
+            <div class="template-name">Revenue Check</div>
+            <div class="template-desc">Pull revenue data from all monetization channels</div>
+          </div>
+          <div class="template-card" data-template="device_maintenance">
+            <div class="template-icon">&#x1F4F1;</div>
+            <div class="template-name">Device Maintenance</div>
+            <div class="template-desc">Clean storage, update apps, rotate proxies on devices</div>
+          </div>
+          <div class="template-card" data-template="substack_daily">
+            <div class="template-icon">&#x1F4E7;</div>
+            <div class="template-name">Substack Daily</div>
+            <div class="template-desc">Generate and publish daily newsletter editions</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Workflow Runs -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><span class="icon">&#x1F4DC;</span> Recent Workflow Runs</div>
+    </div>
+    <div class="card-body no-pad">
+      <div style="overflow-x:auto;">
+        <table class="data-table" id="workflowRunsTable">
+          <thead>
+            <tr>
+              <th class="sortable">Workflow</th>
+              <th class="sortable">Type</th>
+              <th class="sortable">Status</th>
+              <th class="sortable">Duration</th>
+              <th class="sortable">Started</th>
+            </tr>
+          </thead>
+          <tbody id="workflowRunsBody">
+            <tr><td colspan="5" class="card-loading">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /workflows-tab -->
+
+
+<!-- ================================================================
+     SETTINGS TAB
+     ================================================================ -->
+<div class="tab-content" id="settings-tab">
+
+  <div class="grid-2">
+    <!-- API Configuration -->
+    <div class="card" style="margin-bottom:1rem;">
+      <div class="card-header">
+        <div class="card-title"><span class="icon">&#x1F511;</span> API Configuration</div>
+      </div>
+      <div class="card-body">
+        <div class="settings-section">
+          <div class="settings-section-title">Connection</div>
+
+          <div class="settings-row">
+            <div class="settings-label">
+              API Base URL
+              <span class="hint">The Empire API server address</span>
+            </div>
+            <div class="settings-control">
+              <input type="text" id="settingsApiUrl" value="http://localhost:8765" style="width:220px;padding:0.4rem 0.6rem;border-radius:4px;border:1px solid var(--card-border);background:var(--bg);color:var(--text);font-family:var(--mono);font-size:0.78rem;">
+            </div>
+          </div>
+
+          <div class="settings-row">
+            <div class="settings-label">
+              WebSocket URL
+              <span class="hint">Real-time event stream</span>
+            </div>
+            <div class="settings-control">
+              <input type="text" id="settingsWsUrl" value="ws://localhost:8765/ws" style="width:220px;padding:0.4rem 0.6rem;border-radius:4px;border:1px solid var(--card-border);background:var(--bg);color:var(--text);font-family:var(--mono);font-size:0.78rem;">
+            </div>
+          </div>
+
+          <div class="settings-row">
+            <div class="settings-label">
+              API Token
+              <span class="hint">Bearer authentication token</span>
+            </div>
+            <div class="settings-control">
+              <button class="btn btn-sm btn-ghost" id="btnChangeToken">Change Token</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-section-title">Refresh Intervals</div>
+
+          <div class="settings-row">
+            <div class="settings-label">
+              Metrics refresh
+              <span class="hint">Health, revenue, device status</span>
+            </div>
+            <div class="settings-control">
+              <select id="settingsMetricsInterval" style="background:var(--bg);border:1px solid var(--card-border);color:var(--text);border-radius:4px;padding:0.3rem 0.5rem;font-size:0.78rem;">
+                <option value="15000">15 seconds</option>
+                <option value="30000" selected>30 seconds</option>
+                <option value="60000">1 minute</option>
+                <option value="120000">2 minutes</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="settings-row">
+            <div class="settings-label">
+              Charts refresh
+              <span class="hint">Revenue and velocity charts</span>
+            </div>
+            <div class="settings-control">
+              <select id="settingsChartsInterval" style="background:var(--bg);border:1px solid var(--card-border);color:var(--text);border-radius:4px;padding:0.3rem 0.5rem;font-size:0.78rem;">
+                <option value="120000">2 minutes</option>
+                <option value="300000" selected>5 minutes</option>
+                <option value="600000">10 minutes</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Notification Preferences -->
+    <div class="card" style="margin-bottom:1rem;">
+      <div class="card-header">
+        <div class="card-title"><span class="icon">&#x1F514;</span> Notification Preferences</div>
+      </div>
+      <div class="card-body">
+        <div class="settings-section">
+          <div class="settings-section-title">Alerts</div>
+
+          <div class="settings-row">
+            <div class="settings-label">
+              Site offline alerts
+              <span class="hint">Notify when a site goes down</span>
+            </div>
+            <div class="settings-control">
+              <div class="toggle active" id="toggleSiteAlerts" data-setting="siteAlerts"></div>
+            </div>
+          </div>
+
+          <div class="settings-row">
+            <div class="settings-label">
+              Revenue alerts
+              <span class="hint">Notify on significant revenue changes</span>
+            </div>
+            <div class="settings-control">
+              <div class="toggle active" id="toggleRevenueAlerts" data-setting="revenueAlerts"></div>
+            </div>
+          </div>
+
+          <div class="settings-row">
+            <div class="settings-label">
+              Pipeline failures
+              <span class="hint">Notify when content pipeline fails</span>
+            </div>
+            <div class="settings-control">
+              <div class="toggle active" id="togglePipelineAlerts" data-setting="pipelineAlerts"></div>
+            </div>
+          </div>
+
+          <div class="settings-row">
+            <div class="settings-label">
+              Device disconnections
+              <span class="hint">Notify when a phone goes offline</span>
+            </div>
+            <div class="settings-control">
+              <div class="toggle" id="toggleDeviceAlerts" data-setting="deviceAlerts"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-section-title">Sound</div>
+          <div class="settings-row">
+            <div class="settings-label">
+              Notification sounds
+              <span class="hint">Play sounds for critical alerts</span>
+            </div>
+            <div class="settings-control">
+              <div class="toggle" id="toggleSounds" data-setting="sounds"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Backup Controls -->
+    <div class="card" style="margin-bottom:1rem;">
+      <div class="card-header">
+        <div class="card-title"><span class="icon">&#x1F4BE;</span> Backup Controls</div>
+      </div>
+      <div class="card-body">
+        <div class="settings-section">
+          <div class="settings-section-title">Manual Actions</div>
+
+          <div class="settings-row">
+            <div class="settings-label">
+              Full site backup
+              <span class="hint">Trigger UpdraftPlus backup on all sites</span>
+            </div>
+            <div class="settings-control">
+              <button class="btn btn-sm btn-ghost" id="btnTriggerBackup">Run Backup</button>
+            </div>
+          </div>
+
+          <div class="settings-row">
+            <div class="settings-label">
+              Export dashboard config
+              <span class="hint">Download settings as JSON</span>
+            </div>
+            <div class="settings-control">
+              <button class="btn btn-sm btn-ghost" id="btnExportConfig">Export</button>
+            </div>
+          </div>
+
+          <div class="settings-row">
+            <div class="settings-label">
+              Import dashboard config
+              <span class="hint">Restore from JSON file</span>
+            </div>
+            <div class="settings-control">
+              <button class="btn btn-sm btn-ghost" id="btnImportConfig">Import</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-section-title">Last Backup Status</div>
+          <div id="backupStatusList">
+            <div class="card-loading">Checking backup status...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Module Health -->
+    <div class="card" style="margin-bottom:1rem;">
+      <div class="card-header">
+        <div class="card-title"><span class="icon">&#x1F9E9;</span> Module Health</div>
+        <div class="card-actions">
+          <button class="btn btn-sm btn-ghost" id="btnRefreshModules">&#x21bb; Check</button>
+        </div>
+      </div>
+      <div class="card-body no-pad">
+        <div style="overflow-x:auto;">
+          <table class="data-table" id="moduleHealthTable">
+            <thead>
+              <tr>
+                <th>Module</th>
+                <th>Version</th>
+                <th>Status</th>
+                <th>Last Check</th>
+              </tr>
+            </thead>
+            <tbody id="moduleHealthBody">
+              <tr>
+                <td>OpenClaw Gateway</td>
+                <td style="font-family:var(--mono);font-size:0.72rem;" id="modGatewayVer">--</td>
+                <td><span class="status-pill" id="modGatewayStatus">checking</span></td>
+                <td style="font-family:var(--mono);font-size:0.72rem;" id="modGatewayCheck">--</td>
+              </tr>
+              <tr>
+                <td>WordPress Empire Manager</td>
+                <td style="font-family:var(--mono);font-size:0.72rem;" id="modWpVer">--</td>
+                <td><span class="status-pill" id="modWpStatus">checking</span></td>
+                <td style="font-family:var(--mono);font-size:0.72rem;" id="modWpCheck">--</td>
+              </tr>
+              <tr>
+                <td>Content Calendar</td>
+                <td style="font-family:var(--mono);font-size:0.72rem;" id="modCalVer">--</td>
+                <td><span class="status-pill" id="modCalStatus">checking</span></td>
+                <td style="font-family:var(--mono);font-size:0.72rem;" id="modCalCheck">--</td>
+              </tr>
+              <tr>
+                <td>Revenue Tracker</td>
+                <td style="font-family:var(--mono);font-size:0.72rem;" id="modRevVer">--</td>
+                <td><span class="status-pill" id="modRevStatus">checking</span></td>
+                <td style="font-family:var(--mono);font-size:0.72rem;" id="modRevCheck">--</td>
+              </tr>
+              <tr>
+                <td>KDP Publisher</td>
+                <td style="font-family:var(--mono);font-size:0.72rem;" id="modKdpVer">--</td>
+                <td><span class="status-pill" id="modKdpStatus">checking</span></td>
+                <td style="font-family:var(--mono);font-size:0.72rem;" id="modKdpCheck">--</td>
+              </tr>
+              <tr>
+                <td>Etsy POD Manager</td>
+                <td style="font-family:var(--mono);font-size:0.72rem;" id="modEtsyVer">--</td>
+                <td><span class="status-pill" id="modEtsyStatus">checking</span></td>
+                <td style="font-family:var(--mono);font-size:0.72rem;" id="modEtsyCheck">--</td>
+              </tr>
+              <tr>
+                <td>Brand Voice Library</td>
+                <td style="font-family:var(--mono);font-size:0.72rem;" id="modVoiceVer">--</td>
+                <td><span class="status-pill" id="modVoiceStatus">checking</span></td>
+                <td style="font-family:var(--mono);font-size:0.72rem;" id="modVoiceCheck">--</td>
+              </tr>
+              <tr>
+                <td>n8n Webhook Bridge</td>
+                <td style="font-family:var(--mono);font-size:0.72rem;" id="modN8nVer">--</td>
+                <td><span class="status-pill" id="modN8nStatus">checking</span></td>
+                <td style="font-family:var(--mono);font-size:0.72rem;" id="modN8nCheck">--</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /settings-tab -->
+
+
+<!-- ================================================================
+     TOKEN MODAL
+     ================================================================ -->
 <div class="modal-overlay hidden" id="tokenModal">
   <div class="modal">
     <h2>API Token</h2>
-    <p>Enter your OpenClaw Empire API token to connect.</p>
+    <p>Enter your OpenClaw Empire API token to connect to the backend.</p>
     <input type="password" id="tokenInput" placeholder="Bearer token..." autocomplete="off">
     <div class="modal-actions">
       <button class="btn btn-ghost" id="btnTokenCancel">Cancel</button>
@@ -503,12 +1108,24 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); min-
   </div>
 </div>
 
+<!-- ================================================================
+     TOAST CONTAINER
+     ================================================================ -->
+<div class="toast-container" id="toastContainer"></div>
+
+
+<!-- ================================================================
+     JAVASCRIPT — Core application logic
+     External modules loaded below, inline bootstrap here
+     ================================================================ -->
 <script>
 // ===================================================================
-//  OpenClaw Empire Dashboard — Vanilla JS
+//  OpenClaw Empire Dashboard v2 — Core Application
 // ===================================================================
 
-const API_BASE = 'http://localhost:8765';
+const API_BASE = localStorage.getItem('openclaw_api_url') || 'http://localhost:8765';
+const WS_URL = localStorage.getItem('openclaw_ws_url') || 'ws://localhost:8765/ws';
+
 const SITES = [
   { id:'witchcraft', domain:'witchcraftforbeginners.com', color:'#4A1C6F', freq:'daily', name:'Witchcraft' },
   { id:'smarthome', domain:'smarthomewizards.com', color:'#0066CC', freq:'3x/wk', name:'Smart Home' },
@@ -533,9 +1150,45 @@ let state = {
   token: localStorage.getItem('openclaw_token') || '',
   filterSite: null,
   apiOnline: false,
+  wsConnected: false,
   unreadNotifs: 0,
   charts: {},
+  activeTab: 'overview',
+  ws: null,
+  refreshTimers: {},
 };
+
+// ===== Utilities =====
+function $(sel) { return document.querySelector(sel); }
+function $$(sel) { return document.querySelectorAll(sel); }
+function fmt$(n) { return '$' + Number(n||0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function fmtDate(d) { if (!d) return '--'; const dt = new Date(d); return dt.toLocaleDateString('en-US', { month:'short', day:'numeric' }); }
+function fmtTime(d) { if (!d) return '--:--'; const dt = new Date(d); return dt.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit' }); }
+function relTime(d) {
+  if (!d) return '--';
+  const diff = Date.now() - new Date(d).getTime();
+  if (diff < 60000) return 'just now';
+  if (diff < 3600000) return Math.floor(diff/60000) + 'm ago';
+  if (diff < 86400000) return Math.floor(diff/3600000) + 'h ago';
+  return Math.floor(diff/86400000) + 'd ago';
+}
+
+function animateValue(el, end, prefix, suffix, duration) {
+  prefix = prefix || ''; suffix = suffix || '';
+  const start = 0;
+  const range = end - start;
+  const startTime = performance.now();
+  duration = duration || 800;
+  function step(now) {
+    const elapsed = now - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    const current = start + range * eased;
+    el.textContent = prefix + (Number.isInteger(end) ? Math.round(current).toLocaleString() : current.toFixed(2)) + suffix;
+    if (progress < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
 
 // ===== API Helper =====
 async function apiCall(endpoint) {
@@ -555,41 +1208,56 @@ async function apiCall(endpoint) {
   }
 }
 
-// ===== Utilities =====
-function $(sel) { return document.querySelector(sel); }
-function $$(sel) { return document.querySelectorAll(sel); }
-function fmt$(n) { return '$' + Number(n||0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-function fmtDate(d) { if (!d) return '--'; const dt = new Date(d); return dt.toLocaleDateString('en-US', { month:'short', day:'numeric' }); }
-function fmtTime(d) { if (!d) return '--:--'; const dt = new Date(d); return dt.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit' }); }
-function relTime(d) {
-  if (!d) return '--';
-  const diff = Date.now() - new Date(d).getTime();
-  if (diff < 60000) return 'just now';
-  if (diff < 3600000) return Math.floor(diff/60000) + 'm ago';
-  if (diff < 86400000) return Math.floor(diff/3600000) + 'h ago';
-  return Math.floor(diff/86400000) + 'd ago';
+// ===== Toast Notifications =====
+function showToast(type, title, message, duration) {
+  duration = duration || 4000;
+  const container = $('#toastContainer');
+  const icons = { success: '\u2705', warning: '\u26A0\uFE0F', error: '\u274C', info: '\u2139\uFE0F' };
+  const toast = document.createElement('div');
+  toast.className = 'toast ' + type;
+  toast.innerHTML = `
+    <span class="toast-icon">${icons[type] || icons.info}</span>
+    <div class="toast-body">
+      <div class="toast-title">${title}</div>
+      ${message ? '<div class="toast-message">' + message + '</div>' : ''}
+    </div>
+    <button class="toast-close" onclick="this.parentElement.remove()">&times;</button>
+  `;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.classList.add('leaving');
+    setTimeout(() => toast.remove(), 300);
+  }, duration);
 }
-function animateValue(el, end, prefix, suffix, duration) {
-  prefix = prefix || ''; suffix = suffix || '';
-  const start = 0;
-  const range = end - start;
-  const startTime = performance.now();
-  duration = duration || 800;
-  function step(now) {
-    const elapsed = now - startTime;
-    const progress = Math.min(elapsed / duration, 1);
-    const eased = 1 - Math.pow(1 - progress, 3);
-    const current = start + range * eased;
-    el.textContent = prefix + (Number.isInteger(end) ? Math.round(current).toLocaleString() : current.toFixed(2)) + suffix;
-    if (progress < 1) requestAnimationFrame(step);
-  }
-  requestAnimationFrame(step);
+
+// ===== Clock =====
+function updateClock() {
+  const now = new Date();
+  $('#headerClock').textContent = now.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
 }
+setInterval(updateClock, 1000);
+updateClock();
+
+// ===== Tab Navigation =====
+function switchTab(tabId) {
+  state.activeTab = tabId;
+  $$('.tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tabId);
+  });
+  $$('.tab-content').forEach(panel => {
+    panel.classList.toggle('active', panel.id === tabId + '-tab');
+  });
+}
+
+$$('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+});
 
 // ===== Token Management =====
 function showTokenModal() { $('#tokenModal').classList.remove('hidden'); $('#tokenInput').focus(); }
 function hideTokenModal() { $('#tokenModal').classList.add('hidden'); }
-$('#btnSettings').addEventListener('click', showTokenModal);
+$('#btnSettings').addEventListener('click', () => switchTab('settings'));
+$('#btnChangeToken').addEventListener('click', showTokenModal);
 $('#btnTokenCancel').addEventListener('click', hideTokenModal);
 $('#btnTokenSave').addEventListener('click', () => {
   const v = $('#tokenInput').value.trim();
@@ -620,17 +1288,31 @@ $$('.card-expand-btn').forEach(btn => {
     const id = btn.getAttribute('data-expand');
     const card = document.getElementById(id);
     if (card) card.classList.toggle('expanded');
-    btn.textContent = card.classList.contains('expanded') ? '\u2923' : '\u2922';
+    btn.textContent = card && card.classList.contains('expanded') ? '\u2923' : '\u2922';
   });
 });
 
-// ===== Notifications bell =====
+// ===== Notification Bell =====
 $('#btnNotif').addEventListener('click', () => {
-  document.getElementById('cardNotifications').scrollIntoView({ behavior: 'smooth' });
+  switchTab('overview');
+  setTimeout(() => {
+    document.getElementById('cardNotifications').scrollIntoView({ behavior: 'smooth' });
+  }, 100);
 });
 
 // ===== Refresh Button =====
 $('#btnRefresh').addEventListener('click', () => refreshAll());
+
+// ===== Toggle Switches =====
+$$('.toggle').forEach(toggle => {
+  toggle.addEventListener('click', () => {
+    toggle.classList.toggle('active');
+    const setting = toggle.dataset.setting;
+    if (setting) {
+      localStorage.setItem('openclaw_' + setting, toggle.classList.contains('active'));
+    }
+  });
+});
 
 // ===== Connection Status =====
 function setOnline(ok) {
@@ -638,12 +1320,147 @@ function setOnline(ok) {
   const dot = $('#connDot');
   const banner = $('#offlineBanner');
   if (ok) {
-    dot.className = 'status-dot green';
+    dot.className = 'status-dot green pulse';
     banner.classList.remove('visible');
   } else {
     dot.className = 'status-dot red';
     banner.classList.add('visible');
   }
+}
+
+function setWsStatus(connected) {
+  state.wsConnected = connected;
+  const dot = $('#wsDot');
+  const label = $('#wsLabel');
+  if (connected) {
+    dot.className = 'status-dot green';
+    label.textContent = 'WS Live';
+  } else {
+    dot.className = 'status-dot red';
+    label.textContent = 'WS Disconnected';
+  }
+}
+
+// ===== WebSocket =====
+function connectWebSocket() {
+  if (state.ws && state.ws.readyState <= 1) return;
+  try {
+    state.ws = new WebSocket(WS_URL);
+    state.ws.onopen = () => {
+      setWsStatus(true);
+      showToast('success', 'WebSocket Connected', 'Real-time events active');
+    };
+    state.ws.onclose = () => {
+      setWsStatus(false);
+      setTimeout(connectWebSocket, 5000);
+    };
+    state.ws.onerror = () => {
+      setWsStatus(false);
+    };
+    state.ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        handleWsMessage(msg);
+      } catch(e) { /* ignore non-JSON */ }
+    };
+  } catch(e) {
+    setWsStatus(false);
+    setTimeout(connectWebSocket, 5000);
+  }
+}
+
+function handleWsMessage(msg) {
+  const type = msg.type || msg.event || 'info';
+
+  if (type === 'activity' || type === 'event') {
+    addActivityItem(msg);
+  }
+  if (type === 'agent_status' || type === 'agent_update') {
+    updateAgentStatus(msg);
+  }
+  if (type === 'pipeline_progress') {
+    updatePipelineProgress(msg);
+  }
+  if (type === 'device_update') {
+    updateDeviceStatus(msg);
+  }
+  if (type === 'notification') {
+    addNotification(msg);
+  }
+}
+
+function addActivityItem(msg) {
+  const feed = $('#activity-feed');
+  const first = feed.firstElementChild;
+  if (first && first.classList.contains('card-loading')) {
+    feed.innerHTML = '';
+  }
+
+  const dotColor = msg.status === 'error' ? 'var(--critical)'
+    : msg.type === 'publish' ? 'var(--success)'
+    : msg.type === 'alert' ? 'var(--warning)' : 'var(--primary)';
+  const siteTag = msg.site ? '<span class="feed-site">' + msg.site + '</span> ' : '';
+
+  const li = document.createElement('li');
+  li.className = 'feed-item new';
+  li.innerHTML = `
+    <span class="feed-dot" style="background:${dotColor};"></span>
+    <span class="feed-text">${siteTag}${msg.message || msg.text || '--'}</span>
+    <span class="feed-time">${relTime(msg.time || msg.timestamp || new Date().toISOString())}</span>
+  `;
+  feed.insertBefore(li, feed.firstChild);
+
+  // Keep max 50 items
+  while (feed.children.length > 50) {
+    feed.removeChild(feed.lastChild);
+  }
+}
+
+function updateAgentStatus(msg) {
+  const status = msg.status || 'idle';
+  const pill = $('#agentStatus');
+  pill.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+  pill.className = 'status-pill ' + (status === 'running' ? 'online' : status === 'error' ? 'offline' : 'degraded');
+
+  if (msg.mission) {
+    $('#agentMission').textContent = msg.mission;
+  }
+  if (msg.description) {
+    $('#agentDesc').textContent = msg.description;
+  }
+  if (msg.progress !== undefined) {
+    $('#agentProgressWrap').style.display = 'block';
+    const pct = Math.round(msg.progress * 100);
+    $('#agentProgressPct').textContent = pct + '%';
+    $('#agentProgressFill').style.width = pct + '%';
+    if (msg.step && msg.total_steps) {
+      $('#agentProgressLabel').textContent = 'Step ' + msg.step + '/' + msg.total_steps;
+    }
+  }
+  if (msg.steps && Array.isArray(msg.steps)) {
+    const ul = $('#agentSteps');
+    ul.innerHTML = msg.steps.map(s => {
+      const cls = s.status === 'done' ? 'done' : s.status === 'active' ? 'active' : 'pending';
+      const icon = s.status === 'done' ? '\u2713' : s.status === 'active' ? '\u25B6' : '\u25CB';
+      return '<li class="' + cls + '">' + icon + ' ' + (s.name || s.label || '--') + '</li>';
+    }).join('');
+  }
+}
+
+function updatePipelineProgress(msg) {
+  // Pipeline updates handled by content tab refresh
+}
+
+function updateDeviceStatus(msg) {
+  // Device updates handled by phones tab refresh
+}
+
+function addNotification(msg) {
+  state.unreadNotifs++;
+  const badge = $('#notifBadge');
+  badge.style.display = 'flex';
+  badge.textContent = state.unreadNotifs;
+  showToast(msg.severity || 'info', msg.title || 'Notification', msg.body || msg.message || '');
 }
 
 // ===== Data Fetching =====
@@ -654,19 +1471,27 @@ async function fetchHealth() {
     const latency = Math.round(performance.now() - t0);
     setOnline(true);
 
-    const dot = $('#apiDot');
-    const status = data.status || 'healthy';
-    dot.className = 'status-dot ' + (status === 'healthy' ? 'green' : status === 'degraded' ? 'yellow' : 'red');
-    $('#apiStatus').textContent = status.charAt(0).toUpperCase() + status.slice(1);
-    $('#apiLatency').textContent = 'Response: ' + latency + 'ms';
-    $('#apiUptime').textContent = 'Uptime: ' + (data.uptime_percent || data.uptime || '99.9') + '%';
+    // Service cards
+    updateServiceCard('svcApi', true, latency + 'ms');
+
+    // Try individual service checks
+    try { await apiCall('/health/screenpipe'); updateServiceCard('svcScreenpipe', true, 'connected'); } catch(e) { updateServiceCard('svcScreenpipe', false, 'offline'); }
+    try { await apiCall('/health/vision'); updateServiceCard('svcVision', true, 'connected'); } catch(e) { updateServiceCard('svcVision', false, 'offline'); }
+    try { await apiCall('/health/n8n'); updateServiceCard('svcN8n', true, 'connected'); } catch(e) { updateServiceCard('svcN8n', false, 'offline'); }
   } catch (e) {
     setOnline(false);
-    $('#apiStatus').textContent = 'Offline';
-    $('#apiDot').className = 'status-dot red';
-    $('#apiLatency').textContent = 'Response: --ms';
-    $('#apiUptime').textContent = 'Uptime: --%';
+    updateServiceCard('svcApi', false, 'offline');
+    updateServiceCard('svcScreenpipe', false, 'unknown');
+    updateServiceCard('svcVision', false, 'unknown');
+    updateServiceCard('svcN8n', false, 'unknown');
   }
+}
+
+function updateServiceCard(prefix, online, detail) {
+  const dot = document.getElementById(prefix + 'Dot');
+  const detailEl = document.getElementById(prefix + 'Detail');
+  if (dot) dot.className = 'status-dot ' + (online ? 'green' : 'red');
+  if (detailEl) detailEl.textContent = detail;
 }
 
 async function fetchRevenue() {
@@ -678,86 +1503,15 @@ async function fetchRevenue() {
 
     animateValue($('#revToday'), today, '$', '', 900);
     const changeEl = $('#revChange');
-    if (diff > 0) {
-      changeEl.className = 'metric-change up';
-      changeEl.textContent = '+' + diff.toFixed(1) + '%';
-    } else if (diff < 0) {
-      changeEl.className = 'metric-change down';
-      changeEl.textContent = diff.toFixed(1) + '%';
-    } else {
-      changeEl.className = 'metric-change flat';
-      changeEl.textContent = '0%';
-    }
+    if (diff > 0) { changeEl.className = 'metric-change up'; changeEl.textContent = '+' + diff.toFixed(1) + '%'; }
+    else if (diff < 0) { changeEl.className = 'metric-change down'; changeEl.textContent = diff.toFixed(1) + '%'; }
+    else { changeEl.className = 'metric-change flat'; changeEl.textContent = '0%'; }
 
-    // Sparkline from recent data
     if (data.recent && data.recent.length > 1) drawSparkLine('revSpark', data.recent);
   } catch (e) {
     $('#revToday').textContent = '--';
     $('#revChange').textContent = 'Error';
     $('#revChange').className = 'metric-change down';
-  }
-}
-
-async function fetchRevenueChart() {
-  try {
-    const data = await apiCall('/revenue/report?period=month');
-    const days = data.daily || data.data || data.days || [];
-    const labels = days.map(d => d.date ? new Date(d.date).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : d.label || '');
-    const values = days.map(d => d.total || d.revenue || d.amount || 0);
-
-    if (state.charts.revenue) state.charts.revenue.destroy();
-
-    const ctx = document.getElementById('revenueChart').getContext('2d');
-    const gradient = ctx.createLinearGradient(0, 0, 0, 200);
-    gradient.addColorStop(0, 'rgba(99,102,241,0.3)');
-    gradient.addColorStop(1, 'rgba(99,102,241,0)');
-
-    state.charts.revenue = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: labels,
-        datasets: [{
-          label: 'Revenue',
-          data: values,
-          borderColor: '#6366f1',
-          backgroundColor: gradient,
-          fill: true,
-          tension: 0.4,
-          borderWidth: 2,
-          pointRadius: 0,
-          pointHoverRadius: 5,
-          pointHoverBackgroundColor: '#6366f1',
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            backgroundColor: '#12121a',
-            borderColor: '#1e1e2e',
-            borderWidth: 1,
-            titleColor: '#e2e8f0',
-            bodyColor: '#94a3b8',
-            bodyFont: { family: "'JetBrains Mono', monospace" },
-            callbacks: { label: ctx => fmt$(ctx.parsed.y) }
-          }
-        },
-        scales: {
-          x: {
-            grid: { color: 'rgba(30,30,46,0.5)' },
-            ticks: { color: '#475569', font: { size: 10 }, maxTicksLimit: 10 }
-          },
-          y: {
-            grid: { color: 'rgba(30,30,46,0.5)' },
-            ticks: { color: '#475569', font: { family: "'JetBrains Mono', monospace", size: 10 }, callback: v => '$' + v }
-          }
-        }
-      }
-    });
-  } catch (e) {
-    document.getElementById('revenueChart').parentElement.innerHTML = '<div class="card-error">Error loading revenue chart</div>';
   }
 }
 
@@ -785,68 +1539,47 @@ async function fetchWordPress() {
     renderContentGaps(sites);
   } catch (e) {
     $('#postsWeek').textContent = '--';
-    $('#postsChange').textContent = 'Error';
     $('#siteHealthBody').innerHTML = '<tr><td colspan="5" class="card-error">Error loading</td></tr>';
-    $('#gapList').innerHTML = '<li class="card-error">Error loading</li>';
   }
 }
 
 function renderSiteHealth(apiSites) {
   const tbody = $('#siteHealthBody');
-  const rows = SITES.map(site => {
+  tbody.innerHTML = SITES.map(site => {
     const apiSite = apiSites.find(s => s.id === site.id || s.domain === site.domain) || {};
     const online = apiSite.status === 'online' || apiSite.healthy || apiSite.status !== 'offline';
     const lastPost = apiSite.last_published || apiSite.last_post || null;
     const seo = apiSite.seo_score || apiSite.seo || Math.floor(Math.random()*30 + 65);
     const seoClass = seo >= 80 ? 'good' : seo >= 60 ? 'ok' : 'bad';
-
-    return `<tr data-site="${site.id}" onclick="setFilter('${site.id}')">
-      <td><span class="site-dot" style="background:${site.color}"></span>${site.name}</td>
-      <td class="domain">${site.domain}</td>
-      <td><span class="status-dot ${online ? 'green' : 'red'}"></span></td>
-      <td>${fmtDate(lastPost)}</td>
-      <td><span class="seo-badge ${seoClass}">${seo}</span></td>
-    </tr>`;
-  });
-  tbody.innerHTML = rows.join('');
+    return '<tr data-site="' + site.id + '" onclick="setFilter(\'' + site.id + '\')">' +
+      '<td><span class="site-dot" style="background:' + site.color + '"></span>' + site.name + '</td>' +
+      '<td class="domain">' + site.domain + '</td>' +
+      '<td><span class="status-dot ' + (online ? 'green' : 'red') + '"></span></td>' +
+      '<td>' + fmtDate(lastPost) + '</td>' +
+      '<td><span class="seo-badge ' + seoClass + '">' + seo + '</span></td></tr>';
+  }).join('');
 }
 
 function renderVelocityChart(apiSites) {
   const merged = SITES.map(site => {
     const apiSite = apiSites.find(s => s.id === site.id || s.domain === site.domain) || {};
     return { ...site, posts: apiSite.posts_week || apiSite.posts || 0 };
-  }).sort((a,b) => b.posts - a.posts).slice(0, 8);
+  }).sort((a,b) => b.posts - a.posts).slice(0, 10);
 
   if (state.charts.velocity) state.charts.velocity.destroy();
-
-  const ctx = document.getElementById('velocityChart').getContext('2d');
+  const ctx = document.getElementById('velocity-chart').getContext('2d');
   state.charts.velocity = new Chart(ctx, {
     type: 'bar',
     data: {
       labels: merged.map(s => s.name),
-      datasets: [{
-        label: 'Posts/Week',
-        data: merged.map(s => s.posts),
-        backgroundColor: merged.map(s => s.color + 'cc'),
-        borderColor: merged.map(s => s.color),
-        borderWidth: 1,
-        borderRadius: 4,
-      }]
+      datasets: [{ label: 'Posts/Week', data: merged.map(s => s.posts), backgroundColor: merged.map(s => s.color + 'cc'), borderColor: merged.map(s => s.color), borderWidth: 1, borderRadius: 4 }]
     },
     options: {
-      indexAxis: 'y',
-      responsive: true,
-      maintainAspectRatio: false,
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
-        x: {
-          grid: { color: 'rgba(30,30,46,0.5)' },
-          ticks: { color: '#475569', font: { family: "'JetBrains Mono', monospace", size: 10 }, stepSize: 1 }
-        },
-        y: {
-          grid: { display: false },
-          ticks: { color: '#e2e8f0', font: { size: 11 } }
-        }
+        x: { grid: { color: 'rgba(30,30,46,0.5)' }, ticks: { color: '#475569', font: { family: "'JetBrains Mono', monospace", size: 10 }, stepSize: 1 } },
+        y: { grid: { display: false }, ticks: { color: '#e2e8f0', font: { size: 11 } } }
       }
     }
   });
@@ -858,24 +1591,43 @@ function renderContentGaps(apiSites) {
     const apiSite = apiSites.find(s => s.id === site.id || s.domain === site.domain) || {};
     const target = freqMap[site.freq] || 2;
     const actual = apiSite.posts_week || apiSite.posts || 0;
-    const ratio = Math.min(actual / target, 1);
-    return { ...site, target, actual, ratio };
+    return { ...site, target, actual, ratio: Math.min(actual / target, 1) };
   }).filter(s => s.ratio < 1).sort((a,b) => a.ratio - b.ratio);
 
-  if (gaps.length === 0) {
-    $('#gapList').innerHTML = '<li style="color:var(--success);padding:1rem;text-align:center;">All sites on target!</li>';
-    return;
-  }
-
-  $('#gapList').innerHTML = gaps.map(g => {
+  const list = $('#gapList');
+  if (gaps.length === 0) { list.innerHTML = '<li style="color:var(--success);padding:1rem;text-align:center;">All sites on target!</li>'; return; }
+  list.innerHTML = gaps.map(g => {
     const pct = Math.round(g.ratio * 100);
     const barColor = pct >= 60 ? 'var(--warning)' : 'var(--critical)';
-    return `<li class="gap-item">
-      <div class="site-name"><span class="site-dot" style="background:${g.color};width:7px;height:7px;border-radius:50%;display:inline-block;"></span> ${g.name}</div>
-      <div class="gap-bar"><div class="gap-bar-fill" style="width:${pct}%;background:${barColor};"></div></div>
-      <div class="gap-label">${g.actual}/${g.target}</div>
-    </li>`;
+    return '<li class="gap-item"><div class="site-name"><span class="site-dot" style="background:' + g.color + ';width:7px;height:7px;border-radius:50%;display:inline-block;"></span> ' + g.name + '</div><div class="gap-bar"><div class="gap-bar-fill" style="width:' + pct + '%;background:' + barColor + ';"></div></div><div class="gap-label">' + g.actual + '/' + g.target + '</div></li>';
   }).join('');
+}
+
+async function fetchRevenueChart() {
+  try {
+    const data = await apiCall('/revenue/report?period=month');
+    const days = data.daily || data.data || data.days || [];
+    const labels = days.map(d => d.date ? new Date(d.date).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : d.label || '');
+    const values = days.map(d => d.total || d.revenue || d.amount || 0);
+
+    if (state.charts.revenue) state.charts.revenue.destroy();
+    const ctx = document.getElementById('revenue-chart').getContext('2d');
+    const gradient = ctx.createLinearGradient(0, 0, 0, 200);
+    gradient.addColorStop(0, 'rgba(99,102,241,0.3)');
+    gradient.addColorStop(1, 'rgba(99,102,241,0)');
+
+    state.charts.revenue = new Chart(ctx, {
+      type: 'line',
+      data: { labels, datasets: [{ label: 'Revenue', data: values, borderColor: '#6366f1', backgroundColor: gradient, fill: true, tension: 0.4, borderWidth: 2, pointRadius: 0, pointHoverRadius: 5, pointHoverBackgroundColor: '#6366f1' }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { backgroundColor: '#12121a', borderColor: '#1e1e2e', borderWidth: 1, titleColor: '#e2e8f0', bodyColor: '#94a3b8', bodyFont: { family: "'JetBrains Mono', monospace" }, callbacks: { label: ctx => fmt$(ctx.parsed.y) } } },
+        scales: { x: { grid: { color: 'rgba(30,30,46,0.5)' }, ticks: { color: '#475569', font: { size: 10 }, maxTicksLimit: 10 } }, y: { grid: { color: 'rgba(30,30,46,0.5)' }, ticks: { color: '#475569', font: { family: "'JetBrains Mono', monospace", size: 10 }, callback: v => '$' + v } } }
+      }
+    });
+  } catch (e) {
+    document.getElementById('revenue-chart').parentElement.innerHTML = '<div class="card-error">Error loading revenue chart</div>';
+  }
 }
 
 async function fetchScheduler() {
@@ -883,227 +1635,78 @@ async function fetchScheduler() {
     const data = await apiCall('/scheduler/upcoming');
     const jobs = data.jobs || data.upcoming || data || [];
     const active = jobs.filter(j => j.running || j.status === 'running').length;
-
     animateValue($('#activeTasks'), (typeof active === 'number' ? active : jobs.length), '', '', 500);
-    if (jobs.length > 0) {
-      const next = jobs[0];
-      $('#nextTask').textContent = 'Next: ' + (next.name || next.id || '--') + ' at ' + fmtTime(next.next_run || next.scheduled);
-      $('#nextTask').className = 'metric-change flat';
-    }
+    if (jobs.length > 0) { const next = jobs[0]; $('#nextTask').textContent = 'Next: ' + (next.name || next.id || '--') + ' at ' + fmtTime(next.next_run || next.scheduled); }
 
     const list = $('#schedList');
-    if (jobs.length === 0) {
-      list.innerHTML = '<li style="color:var(--text-dim);padding:0.5rem 0;">No upcoming jobs</li>';
-      return;
-    }
+    if (jobs.length === 0) { list.innerHTML = '<li style="color:var(--text-dim);padding:0.5rem 0;">No upcoming jobs</li>'; return; }
     list.innerHTML = jobs.slice(0, 5).map(j => {
-      const statusClass = j.last_result === 'success' || j.last_status === 'ok' ? 'ok'
-        : j.last_result === 'failed' || j.last_status === 'error' ? 'failed' : 'pending';
-      return `<li class="sched-item">
-        <div>
-          <div class="sched-name">${j.name || j.id || 'Unknown'}</div>
-          <div class="sched-next">${fmtTime(j.next_run || j.scheduled)}</div>
-        </div>
-        <span class="sched-status ${statusClass}">${j.last_result || j.last_status || 'pending'}</span>
-      </li>`;
+      const sc = j.last_result === 'success' || j.last_status === 'ok' ? 'ok' : j.last_result === 'failed' || j.last_status === 'error' ? 'failed' : 'pending';
+      return '<li class="sched-item"><div><div class="sched-name">' + (j.name || j.id || 'Unknown') + '</div><div class="sched-next">' + fmtTime(j.next_run || j.scheduled) + '</div></div><span class="sched-status ' + sc + '">' + (j.last_result || j.last_status || 'pending') + '</span></li>';
     }).join('');
   } catch (e) {
-    $('#activeTasks').textContent = '--';
     $('#schedList').innerHTML = '<li class="card-error">Error loading</li>';
   }
 }
 
-async function fetchForge() {
-  try {
-    const data = await apiCall('/forge/stats');
-    const tasks = data.tasks_learned || data.total_tasks || 0;
-    const rate = data.success_rate || data.accuracy || 0;
-    const apps = data.top_apps_count || data.apps || 0;
-    const codex = data.codex_size || data.entries || 0;
-
-    animateValue($('#forgeTasks'), tasks, '', '', 600);
-    animateValue($('#forgeSuccess'), rate, '', '%', 600);
-    $('#forgeApps').textContent = apps;
-    animateValue($('#forgeCodex'), codex, '', '', 600);
-
-    const progress = data.progress || Math.min(rate, 100);
-    $('#forgeProgress').textContent = Math.round(progress) + '%';
-    $('#forgeBarFill').style.width = progress + '%';
-    $('#forgeBarFill').style.background = progress >= 80 ? 'var(--success)' : progress >= 50 ? 'var(--warning)' : 'var(--primary)';
-  } catch (e) {
-    ['forgeTasks','forgeSuccess','forgeApps','forgeCodex'].forEach(id => document.getElementById(id).textContent = '--');
-  }
-}
-
-async function fetchStats() {
-  try {
-    const data = await apiCall('/stats');
-    // Stats may include aggregated info; populate from here if other calls don't yield data
-    if (data.forge) {
-      const f = data.forge;
-      if (f.tasks_learned) animateValue($('#forgeTasks'), f.tasks_learned, '', '', 600);
-      if (f.success_rate) animateValue($('#forgeSuccess'), f.success_rate, '', '%', 600);
-    }
-  } catch (e) { /* non-critical */ }
-}
-
 async function fetchActivity() {
   try {
-    // Build from multiple possible sources
     let events = [];
-    try {
-      const wpData = await apiCall('/wordpress/dashboard');
-      if (wpData.recent_activity) events = events.concat(wpData.recent_activity);
-    } catch(e) {}
-
-    try {
-      const schedData = await apiCall('/scheduler/jobs');
-      const jobs = schedData.jobs || schedData || [];
-      jobs.filter(j => j.last_run).forEach(j => {
-        events.push({
-          type: 'task',
-          message: `Job "${j.name || j.id}" completed`,
-          site: j.site || null,
-          time: j.last_run,
-          status: j.last_result || 'ok'
-        });
-      });
-    } catch(e) {}
-
+    try { const d = await apiCall('/activity/recent'); events = d.events || d.data || d || []; } catch(e) {}
+    if (events.length === 0) {
+      try {
+        const wpData = await apiCall('/wordpress/dashboard');
+        if (wpData.recent_activity) events = events.concat(wpData.recent_activity);
+      } catch(e) {}
+    }
     events.sort((a,b) => new Date(b.time||0) - new Date(a.time||0));
     events = events.slice(0, 20);
 
-    const feed = $('#activityFeed');
-    if (events.length === 0) {
-      feed.innerHTML = '<li style="color:var(--text-dim);padding:0.5rem 0;">No recent activity</li>';
-      return;
-    }
+    const feed = $('#activity-feed');
+    if (events.length === 0) { feed.innerHTML = '<li style="color:var(--text-dim);padding:0.5rem 0;">No recent activity</li>'; return; }
     feed.innerHTML = events.map(ev => {
-      const dotColor = ev.status === 'error' || ev.status === 'failed' ? 'var(--critical)'
-        : ev.type === 'publish' ? 'var(--success)'
-        : ev.type === 'alert' ? 'var(--warning)' : 'var(--primary)';
-      const siteTag = ev.site ? `<span class="feed-site">${ev.site}</span> ` : '';
-      return `<li class="feed-item">
-        <span class="feed-dot" style="background:${dotColor};"></span>
-        <span class="feed-text">${siteTag}${ev.message || ev.text || ev.description || '--'}</span>
-        <span class="feed-time">${relTime(ev.time || ev.timestamp)}</span>
-      </li>`;
+      const dotColor = ev.status === 'error' || ev.status === 'failed' ? 'var(--critical)' : ev.type === 'publish' ? 'var(--success)' : ev.type === 'alert' ? 'var(--warning)' : 'var(--primary)';
+      const siteTag = ev.site ? '<span class="feed-site">' + ev.site + '</span> ' : '';
+      return '<li class="feed-item"><span class="feed-dot" style="background:' + dotColor + ';"></span><span class="feed-text">' + siteTag + (ev.message || ev.text || '--') + '</span><span class="feed-time">' + relTime(ev.time || ev.timestamp) + '</span></li>';
     }).join('');
   } catch (e) {
-    $('#activityFeed').innerHTML = '<li class="card-error">Error loading</li>';
+    $('#activity-feed').innerHTML = '<li class="card-error">Error loading</li>';
   }
 }
 
 async function fetchNotifications() {
   try {
-    // Notifications from health checks and system alerts
     let notifs = [];
     try {
       const health = await apiCall('/wordpress/health');
       const sites = health.sites || health || [];
       sites.forEach(s => {
         if (s.status === 'offline' || s.healthy === false) {
-          notifs.push({
-            severity: 'critical', title: 'Site Offline',
-            body: (s.domain || s.id) + ' is not responding.',
-            time: s.checked_at || new Date().toISOString(), unread: true
-          });
+          notifs.push({ severity:'critical', title:'Site Offline', body:(s.domain||s.id)+' is not responding.', time: s.checked_at || new Date().toISOString(), unread:true });
         }
       });
     } catch(e) {}
 
-    // Add system-level notifications from stats
     try {
       const stats = await apiCall('/stats');
-      if (stats.alerts) {
-        stats.alerts.forEach(a => notifs.push({
-          severity: a.severity || 'info',
-          title: a.title || 'Alert',
-          body: a.message || a.body || '',
-          time: a.time || a.timestamp || new Date().toISOString(),
-          unread: a.unread !== false
-        }));
-      }
+      if (stats.alerts) { stats.alerts.forEach(a => notifs.push({ severity:a.severity||'info', title:a.title||'Alert', body:a.message||a.body||'', time:a.time||a.timestamp||new Date().toISOString(), unread:a.unread!==false })); }
     } catch(e) {}
 
     notifs.sort((a,b) => new Date(b.time||0) - new Date(a.time||0));
     const unread = notifs.filter(n => n.unread).length;
     state.unreadNotifs = unread;
     const badge = $('#notifBadge');
-    if (unread > 0) {
-      badge.style.display = 'flex';
-      badge.textContent = unread;
-    } else {
-      badge.style.display = 'none';
-    }
+    if (unread > 0) { badge.style.display = 'flex'; badge.textContent = unread; } else { badge.style.display = 'none'; }
 
     const list = $('#notifList');
-    if (notifs.length === 0) {
-      list.innerHTML = '<li style="color:var(--text-dim);padding:0.5rem 0;text-align:center;">No notifications</li>';
-      return;
-    }
-    list.innerHTML = notifs.slice(0, 15).map(n => {
-      return `<li class="notif-item ${n.severity || 'info'} ${n.unread ? 'unread' : ''}">
-        <div class="notif-header">
-          <span class="notif-title">${n.title}</span>
-          <span class="notif-time">${relTime(n.time)}</span>
-        </div>
-        <div class="notif-body">${n.body}</div>
-      </li>`;
-    }).join('');
+    if (notifs.length === 0) { list.innerHTML = '<li style="color:var(--text-dim);padding:0.5rem 0;text-align:center;">No notifications</li>'; return; }
+    list.innerHTML = notifs.slice(0, 15).map(n =>
+      '<li class="notif-item ' + (n.severity||'info') + ' ' + (n.unread?'unread':'') + '">' +
+      '<div class="notif-header"><span class="notif-title">' + n.title + '</span><span class="notif-time">' + relTime(n.time) + '</span></div>' +
+      '<div class="notif-body">' + n.body + '</div></li>'
+    ).join('');
   } catch (e) {
     $('#notifList').innerHTML = '<li class="card-error">Error loading</li>';
-  }
-}
-
-async function fetchCalendar() {
-  try {
-    const data = await apiCall('/content/calendar?days=7');
-    const items = data.items || data.scheduled || data.posts || data || [];
-
-    const body = $('#calendarBody');
-    const today = new Date();
-    const days = [];
-
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(today);
-      d.setDate(d.getDate() + i);
-      const dateStr = d.toISOString().split('T')[0];
-      const postsOnDay = Array.isArray(items) ? items.filter(p => {
-        const pDate = (p.date || p.scheduled || '').split('T')[0];
-        return pDate === dateStr;
-      }) : [];
-      days.push({ date: d, posts: postsOnDay, isToday: i === 0 });
-    }
-
-    const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-
-    body.innerHTML = `
-      <div class="cal-days">
-        ${days.map(d => {
-          const ct = d.posts.length;
-          const cls = [
-            'cal-day',
-            d.isToday ? 'today' : '',
-            ct > 0 ? 'has-posts' : '',
-            ct >= 3 ? 'many-posts' : ''
-          ].filter(Boolean).join(' ');
-          return `<div class="${cls}" title="${ct} post(s) scheduled">
-            <div class="cal-day-label">${dayNames[d.date.getDay()]}</div>
-            <div>${d.date.getDate()}</div>
-            ${ct > 0 ? `<div class="cal-post-count">${ct}</div>` : ''}
-          </div>`;
-        }).join('')}
-      </div>
-      ${items.length > 0 ? `<div style="margin-top:0.75rem;font-size:0.78rem;color:var(--text-secondary);">
-        ${items.slice(0, 6).map(p => `<div style="padding:0.25rem 0;border-bottom:1px solid rgba(30,30,46,0.5);">
-          <span style="color:var(--text);font-weight:500;">${p.title || p.name || '--'}</span>
-          <span style="float:right;font-family:var(--mono);font-size:0.7rem;">${fmtDate(p.date || p.scheduled)}</span>
-        </div>`).join('')}
-      </div>` : ''}
-    `;
-  } catch (e) {
-    $('#calendarBody').innerHTML = '<div class="card-error">Error loading</div>';
   }
 }
 
@@ -1114,43 +1717,28 @@ function drawSparkLine(canvasId, data) {
   const ctx = canvas.getContext('2d');
   const w = canvas.offsetWidth;
   const h = canvas.offsetHeight;
-  canvas.width = w * 2;
-  canvas.height = h * 2;
+  canvas.width = w * 2; canvas.height = h * 2;
   ctx.scale(2, 2);
-
   const values = data.map(d => typeof d === 'number' ? d : d.value || d.total || 0);
   const max = Math.max(...values, 1);
   const min = Math.min(...values, 0);
   const range = max - min || 1;
   const step = w / (values.length - 1);
-
-  ctx.beginPath();
-  ctx.strokeStyle = '#6366f1';
-  ctx.lineWidth = 1.5;
-  values.forEach((v, i) => {
-    const x = i * step;
-    const y = h - ((v - min) / range) * (h - 4) - 2;
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
+  ctx.beginPath(); ctx.strokeStyle = '#6366f1'; ctx.lineWidth = 1.5;
+  values.forEach((v, i) => { const x = i * step; const y = h - ((v - min) / range) * (h - 4) - 2; if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
   ctx.stroke();
-
-  // Fill gradient
-  ctx.lineTo((values.length - 1) * step, h);
-  ctx.lineTo(0, h);
-  ctx.closePath();
+  ctx.lineTo((values.length - 1) * step, h); ctx.lineTo(0, h); ctx.closePath();
   const grad = ctx.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0, 'rgba(99,102,241,0.2)');
-  grad.addColorStop(1, 'rgba(99,102,241,0)');
-  ctx.fillStyle = grad;
-  ctx.fill();
+  grad.addColorStop(0, 'rgba(99,102,241,0.2)'); grad.addColorStop(1, 'rgba(99,102,241,0)');
+  ctx.fillStyle = grad; ctx.fill();
+}
+
+// ===== Timestamp =====
+function updateTimestamp() {
+  $('#lastRefresh').textContent = 'Last: ' + new Date().toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
 }
 
 // ===== Refresh Orchestration =====
-function updateTimestamp() {
-  $('#lastRefresh').textContent = new Date().toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
-}
-
 async function refreshMetrics() {
   await Promise.allSettled([fetchHealth(), fetchRevenue(), fetchScheduler()]);
   updateTimestamp();
@@ -1161,25 +1749,15 @@ async function refreshCharts() {
 }
 
 async function refreshActivity() {
-  await Promise.allSettled([fetchActivity(), fetchNotifications(), fetchCalendar()]);
-}
-
-async function refreshSystem() {
-  await Promise.allSettled([fetchForge(), fetchStats()]);
+  await Promise.allSettled([fetchActivity(), fetchNotifications()]);
 }
 
 async function refreshAll() {
   updateTimestamp();
-  await Promise.allSettled([
-    refreshMetrics(),
-    refreshCharts(),
-    refreshActivity(),
-    refreshSystem(),
-  ]);
+  await Promise.allSettled([refreshMetrics(), refreshCharts(), refreshActivity()]);
 }
 
 // ===== Demo / Fallback Data =====
-// When API is offline, populate with realistic demo data so the UI is not empty
 function populateDemoData() {
   // Revenue
   animateValue($('#revToday'), 247.83, '$', '', 900);
@@ -1192,10 +1770,27 @@ function populateDemoData() {
   $('#postsChange').className = 'metric-change up';
   $('#postsChange').textContent = '+6 vs last week';
 
-  // Tasks
-  animateValue($('#activeTasks'), 3, '', '', 500);
-  $('#nextTask').textContent = 'Next: content-publish at 14:30';
-  $('#nextTask').className = 'metric-change flat';
+  // Devices
+  animateValue($('#activeDevices'), 4, '', '', 500);
+  $('#deviceChange').textContent = '2 cloud, 2 physical';
+  $('#deviceChange').className = 'metric-change flat';
+
+  // Uptime
+  $('#uptimeValue').textContent = '99.7%';
+  $('#uptimeChange').textContent = 'Last 30 days';
+  $('#uptimeChange').className = 'metric-change up';
+
+  // Services
+  updateServiceCard('svcApi', true, ':8765 -- 42ms');
+  updateServiceCard('svcScreenpipe', true, ':3030 -- active');
+  updateServiceCard('svcVision', true, ':8002 -- ready');
+  updateServiceCard('svcN8n', true, ':5678 -- 12 workflows');
+
+  // Agent
+  $('#agentStatus').textContent = 'Idle';
+  $('#agentStatus').className = 'status-pill online';
+  $('#agentMission').textContent = 'No active mission';
+  $('#agentDesc').textContent = 'Completed content-publish for witchcraftforbeginners.com 23m ago.';
 
   // Site Health
   const demoSites = SITES.map(s => ({
@@ -1208,43 +1803,17 @@ function populateDemoData() {
   renderVelocityChart(demoSites);
   renderContentGaps(demoSites);
 
-  // Revenue Chart (demo)
+  // Revenue Chart
   const demoRevDays = [];
-  for (let i = 29; i >= 0; i--) {
-    const d = new Date(); d.setDate(d.getDate() - i);
-    demoRevDays.push({ date: d.toISOString(), total: Math.random() * 150 + 100 });
-  }
-
-  const ctx = document.getElementById('revenueChart').getContext('2d');
+  for (let i = 29; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); demoRevDays.push({ date: d.toISOString(), total: Math.random() * 150 + 100 }); }
+  const ctx = document.getElementById('revenue-chart').getContext('2d');
   const gradient = ctx.createLinearGradient(0, 0, 0, 200);
-  gradient.addColorStop(0, 'rgba(99,102,241,0.3)');
-  gradient.addColorStop(1, 'rgba(99,102,241,0)');
-
+  gradient.addColorStop(0, 'rgba(99,102,241,0.3)'); gradient.addColorStop(1, 'rgba(99,102,241,0)');
   if (state.charts.revenue) state.charts.revenue.destroy();
   state.charts.revenue = new Chart(ctx, {
     type: 'line',
-    data: {
-      labels: demoRevDays.map(d => new Date(d.date).toLocaleDateString('en-US',{month:'short',day:'numeric'})),
-      datasets: [{
-        label: 'Revenue', data: demoRevDays.map(d => d.total),
-        borderColor: '#6366f1', backgroundColor: gradient, fill: true,
-        tension: 0.4, borderWidth: 2, pointRadius: 0
-      }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false },
-        tooltip: { backgroundColor: '#12121a', borderColor: '#1e1e2e', borderWidth: 1,
-          titleColor: '#e2e8f0', bodyColor: '#94a3b8',
-          bodyFont: { family: "'JetBrains Mono', monospace" },
-          callbacks: { label: ctx => fmt$(ctx.parsed.y) }
-        }
-      },
-      scales: {
-        x: { grid: { color: 'rgba(30,30,46,0.5)' }, ticks: { color: '#475569', font: { size: 10 }, maxTicksLimit: 10 } },
-        y: { grid: { color: 'rgba(30,30,46,0.5)' }, ticks: { color: '#475569', font: { family: "'JetBrains Mono', monospace", size: 10 }, callback: v => '$' + Math.round(v) } }
-      }
-    }
+    data: { labels: demoRevDays.map(d => new Date(d.date).toLocaleDateString('en-US',{month:'short',day:'numeric'})), datasets: [{ label: 'Revenue', data: demoRevDays.map(d => d.total), borderColor: '#6366f1', backgroundColor: gradient, fill: true, tension: 0.4, borderWidth: 2, pointRadius: 0 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { backgroundColor: '#12121a', borderColor: '#1e1e2e', borderWidth: 1, titleColor: '#e2e8f0', bodyColor: '#94a3b8', bodyFont: { family: "'JetBrains Mono', monospace" }, callbacks: { label: ctx => fmt$(ctx.parsed.y) } } }, scales: { x: { grid: { color: 'rgba(30,30,46,0.5)' }, ticks: { color: '#475569', font: { size: 10 }, maxTicksLimit: 10 } }, y: { grid: { color: 'rgba(30,30,46,0.5)' }, ticks: { color: '#475569', font: { family: "'JetBrains Mono', monospace", size: 10 }, callback: v => '$' + Math.round(v) } } } }
   });
 
   // Scheduler
@@ -1256,23 +1825,11 @@ function populateDemoData() {
     { name: 'backup-weekly', next_run: new Date(Date.now()+86400000).toISOString(), last_result: 'success' },
   ];
   $('#schedList').innerHTML = demoJobs.map(j => {
-    const statusClass = j.last_result === 'success' ? 'ok' : j.last_result === 'failed' ? 'failed' : 'pending';
-    return `<li class="sched-item">
-      <div><div class="sched-name">${j.name}</div><div class="sched-next">${fmtTime(j.next_run)}</div></div>
-      <span class="sched-status ${statusClass}">${j.last_result}</span>
-    </li>`;
+    const sc = j.last_result === 'success' ? 'ok' : j.last_result === 'failed' ? 'failed' : 'pending';
+    return '<li class="sched-item"><div><div class="sched-name">' + j.name + '</div><div class="sched-next">' + fmtTime(j.next_run) + '</div></div><span class="sched-status ' + sc + '">' + j.last_result + '</span></li>';
   }).join('');
 
-  // FORGE
-  animateValue($('#forgeTasks'), 142, '', '', 600);
-  animateValue($('#forgeSuccess'), 94, '', '%', 600);
-  $('#forgeApps').textContent = '12';
-  animateValue($('#forgeCodex'), 2847, '', '', 600);
-  $('#forgeProgress').textContent = '94%';
-  $('#forgeBarFill').style.width = '94%';
-  $('#forgeBarFill').style.background = 'var(--success)';
-
-  // Activity
+  // Activity Feed
   const demoEvents = [
     { type:'publish', message:'Published "Full Moon Ritual Guide"', site:'witchcraft', time: new Date(Date.now()-300000).toISOString(), status:'ok' },
     { type:'task', message:'SEO audit completed for all sites', site:null, time: new Date(Date.now()-1800000).toISOString(), status:'ok' },
@@ -1282,17 +1839,11 @@ function populateDemoData() {
     { type:'task', message:'Revenue sync completed', site:null, time: new Date(Date.now()-9000000).toISOString(), status:'ok' },
     { type:'publish', message:'Published "AI Trading Bots Review"', site:'wealthai', time: new Date(Date.now()-10800000).toISOString(), status:'ok' },
     { type:'alert', message:'High traffic detected on witchcraftforbeginners.com', site:'witchcraft', time: new Date(Date.now()-14400000).toISOString(), status:'ok' },
-    { type:'publish', message:'Published "Tarot Spread for Love"', site:'tarotbeginners', time: new Date(Date.now()-18000000).toISOString(), status:'ok' },
-    { type:'task', message:'Image pipeline generated 12 featured images', site:null, time: new Date(Date.now()-21600000).toISOString(), status:'ok' },
   ];
-  $('#activityFeed').innerHTML = demoEvents.map(ev => {
+  $('#activity-feed').innerHTML = demoEvents.map(ev => {
     const dotColor = ev.type === 'publish' ? 'var(--success)' : ev.type === 'alert' ? 'var(--warning)' : 'var(--primary)';
-    const siteTag = ev.site ? `<span class="feed-site">${ev.site}</span> ` : '';
-    return `<li class="feed-item">
-      <span class="feed-dot" style="background:${dotColor};"></span>
-      <span class="feed-text">${siteTag}${ev.message}</span>
-      <span class="feed-time">${relTime(ev.time)}</span>
-    </li>`;
+    const siteTag = ev.site ? '<span class="feed-site">' + ev.site + '</span> ' : '';
+    return '<li class="feed-item"><span class="feed-dot" style="background:' + dotColor + ';"></span><span class="feed-text">' + siteTag + ev.message + '</span><span class="feed-time">' + relTime(ev.time) + '</span></li>';
   }).join('');
 
   // Notifications
@@ -1306,77 +1857,171 @@ function populateDemoData() {
   const badge = $('#notifBadge');
   badge.style.display = 'flex';
   badge.textContent = state.unreadNotifs;
+  $('#notifList').innerHTML = demoNotifs.map(n => '<li class="notif-item ' + n.severity + ' ' + (n.unread?'unread':'') + '"><div class="notif-header"><span class="notif-title">' + n.title + '</span><span class="notif-time">' + relTime(n.time) + '</span></div><div class="notif-body">' + n.body + '</div></li>').join('');
 
-  $('#notifList').innerHTML = demoNotifs.map(n => `<li class="notif-item ${n.severity} ${n.unread ? 'unread' : ''}">
-    <div class="notif-header">
-      <span class="notif-title">${n.title}</span>
-      <span class="notif-time">${relTime(n.time)}</span>
-    </div>
-    <div class="notif-body">${n.body}</div>
-  </li>`).join('');
+  // Revenue tab summary
+  $('#revMTD').textContent = '$3,847';
+  $('#revProjected').textContent = '$7,420';
+  $('#revAvgDaily').textContent = '$248';
+  $('#revBestDay').textContent = '$412';
+  $('#kdpBooks').textContent = '8';
+  $('#kdpRevenue').textContent = '$342';
+  $('#kdpUnits').textContent = '89';
+  $('#kdpRoyalty').textContent = '$3.84';
+  $('#etsyListings').textContent = '47';
+  $('#etsyRevenue').textContent = '$518';
+  $('#etsyOrders').textContent = '34';
+  $('#etsyViews').textContent = '2.1k';
 
-  // Calendar
-  const today = new Date();
-  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  const calDays = [];
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(today); d.setDate(d.getDate() + i);
-    const ct = Math.floor(Math.random() * 5);
-    calDays.push({ date: d, count: ct, isToday: i === 0 });
+  // Device fleet demo
+  const demoDevices = [
+    { id:'pixel-7a', name:'Pixel 7a', type:'physical', status:'online', battery:87, wifi:'Strong', storage:'42%', tasks:2 },
+    { id:'samsung-a54', name:'Samsung A54', type:'physical', status:'online', battery:63, wifi:'Good', storage:'58%', tasks:1 },
+    { id:'geelark-01', name:'GeeLark Cloud #1', type:'cloud', status:'online', battery:100, wifi:'N/A', storage:'12%', tasks:3 },
+    { id:'geelark-02', name:'GeeLark Cloud #2', type:'cloud', status:'offline', battery:100, wifi:'N/A', storage:'8%', tasks:0 },
+  ];
+  animateValue($('#activeDevices'), demoDevices.filter(d => d.status==='online').length, '', '', 500);
+  $('#deviceChange').textContent = demoDevices.filter(d=>d.type==='cloud').length + ' cloud, ' + demoDevices.filter(d=>d.type==='physical').length + ' physical';
+
+  const grid = $('#deviceFleetGrid');
+  grid.innerHTML = demoDevices.map(d => {
+    const badgeCls = d.type === 'cloud' ? 'cloud' : 'physical';
+    return '<div class="device-card" data-device="' + d.id + '">' +
+      '<div class="device-header"><div class="device-name"><span class="status-dot ' + (d.status==='online'?'green':'red') + '"></span> ' + d.name + '</div><span class="device-type-badge ' + badgeCls + '">' + d.type + '</span></div>' +
+      '<div class="device-stats"><div class="device-stat"><div class="device-stat-value">' + d.battery + '%</div><div class="device-stat-label">Battery</div></div><div class="device-stat"><div class="device-stat-value">' + d.wifi + '</div><div class="device-stat-label">WiFi</div></div><div class="device-stat"><div class="device-stat-value">' + d.storage + '</div><div class="device-stat-label">Storage</div></div></div>' +
+      '<div class="device-task-queue">' + d.tasks + ' task(s) queued</div></div>';
+  }).join('');
+
+  // Populate mirror device select
+  const sel = $('#mirrorDeviceSelect');
+  demoDevices.forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d.id;
+    opt.textContent = d.name + ' (' + d.type + ')';
+    sel.appendChild(opt);
+  });
+
+  // Pipeline history demo
+  const demoPipeline = [
+    { site:'witchcraft', title:'Full Moon Ritual Guide', status:'complete', duration:'4m 23s', date: new Date(Date.now()-1800000).toISOString() },
+    { site:'smarthome', title:'Smart Lock Comparison', status:'complete', duration:'3m 51s', date: new Date(Date.now()-7200000).toISOString() },
+    { site:'aiaction', title:'GPT-5 Analysis', status:'failed', duration:'1m 12s', date: new Date(Date.now()-14400000).toISOString() },
+    { site:'wealthai', title:'AI Trading Bots 2026', status:'complete', duration:'5m 02s', date: new Date(Date.now()-28800000).toISOString() },
+    { site:'crystalwitchcraft', title:'Crystal Grid Basics', status:'complete', duration:'3m 44s', date: new Date(Date.now()-43200000).toISOString() },
+  ];
+  $('#pipelineHistoryBody').innerHTML = demoPipeline.map(p => {
+    const sc = p.status === 'complete' ? 'success' : 'failed';
+    return '<tr><td>' + p.site + '</td><td>' + p.title + '</td><td><span class="pipeline-status ' + p.status + '">' + p.status + '</span></td><td style="font-family:var(--mono);font-size:0.72rem;">' + p.duration + '</td><td>' + relTime(p.date) + '</td></tr>';
+  }).join('');
+
+  // Workflow runs demo
+  const demoRuns = [
+    { name:'Content Publish', type:'content_publish', status:'success', duration:'4m 23s', started: new Date(Date.now()-1800000).toISOString() },
+    { name:'Social Growth', type:'social_growth', status:'running', duration:'2m 10s', started: new Date(Date.now()-130000).toISOString() },
+    { name:'Revenue Check', type:'revenue_check', status:'success', duration:'1m 05s', started: new Date(Date.now()-7200000).toISOString() },
+    { name:'Site Maintenance', type:'site_maintenance', status:'failed', duration:'0m 45s', started: new Date(Date.now()-14400000).toISOString() },
+    { name:'Device Maintenance', type:'device_maintenance', status:'success', duration:'2m 30s', started: new Date(Date.now()-28800000).toISOString() },
+  ];
+  $('#workflowRunsBody').innerHTML = demoRuns.map(r => {
+    return '<tr><td>' + r.name + '</td><td style="font-family:var(--mono);font-size:0.72rem;">' + r.type + '</td><td><span class="workflow-run-status ' + r.status + '">' + r.status + '</span></td><td style="font-family:var(--mono);font-size:0.72rem;">' + r.duration + '</td><td>' + relTime(r.started) + '</td></tr>';
+  }).join('');
+
+  // Module health demo
+  const modules = [
+    { prefix:'Gateway', ver:'2.4.1', ok:true },
+    { prefix:'Wp', ver:'1.8.0', ok:true },
+    { prefix:'Cal', ver:'1.3.2', ok:true },
+    { prefix:'Rev', ver:'1.1.0', ok:true },
+    { prefix:'Kdp', ver:'0.9.5', ok:true },
+    { prefix:'Etsy', ver:'0.7.2', ok:false },
+    { prefix:'Voice', ver:'1.5.0', ok:true },
+    { prefix:'N8n', ver:'1.2.1', ok:true },
+  ];
+  modules.forEach(m => {
+    const ver = document.getElementById('mod' + m.prefix + 'Ver');
+    const status = document.getElementById('mod' + m.prefix + 'Status');
+    const check = document.getElementById('mod' + m.prefix + 'Check');
+    if (ver) ver.textContent = 'v' + m.ver;
+    if (status) { status.textContent = m.ok ? 'healthy' : 'degraded'; status.className = 'status-pill ' + (m.ok ? 'online' : 'degraded'); }
+    if (check) check.textContent = 'just now';
+  });
+
+  // Backup status demo
+  $('#backupStatusList').innerHTML = '<div style="font-size:0.78rem;"><div style="display:flex;justify-content:space-between;padding:0.3rem 0;border-bottom:1px solid rgba(30,30,46,0.5);"><span>Full backup (UpdraftPlus)</span><span style="color:var(--success);font-family:var(--mono);">2h ago</span></div><div style="display:flex;justify-content:space-between;padding:0.3rem 0;border-bottom:1px solid rgba(30,30,46,0.5);"><span>Database export</span><span style="color:var(--success);font-family:var(--mono);">6h ago</span></div><div style="display:flex;justify-content:space-between;padding:0.3rem 0;"><span>Git push (configs)</span><span style="color:var(--success);font-family:var(--mono);">1h ago</span></div></div>';
+
+  // Forecast chart demo
+  const forecastCtx = document.getElementById('forecast-chart');
+  if (forecastCtx) {
+    const fCtx = forecastCtx.getContext('2d');
+    const actualDays = []; const forecastDays = []; const upperBand = []; const lowerBand = []; const labels = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      labels.push(d.toLocaleDateString('en-US',{month:'short',day:'numeric'}));
+      if (i >= 10) { actualDays.push(Math.random()*150+100); forecastDays.push(null); upperBand.push(null); lowerBand.push(null); }
+      else { const base = Math.random()*150+120; actualDays.push(null); forecastDays.push(base); upperBand.push(base+40); lowerBand.push(Math.max(base-40,0)); }
+    }
+    if (state.charts.forecast) state.charts.forecast.destroy();
+    state.charts.forecast = new Chart(fCtx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          { label:'Actual', data:actualDays, borderColor:'#6366f1', backgroundColor:'transparent', borderWidth:2, pointRadius:0, tension:0.4, spanGaps:false },
+          { label:'Forecast', data:forecastDays, borderColor:'#f59e0b', backgroundColor:'transparent', borderWidth:2, borderDash:[6,3], pointRadius:0, tension:0.4, spanGaps:false },
+          { label:'Upper', data:upperBand, borderColor:'transparent', backgroundColor:'rgba(245,158,11,0.08)', fill:'+1', pointRadius:0, tension:0.4, spanGaps:false },
+          { label:'Lower', data:lowerBand, borderColor:'transparent', backgroundColor:'rgba(245,158,11,0.08)', fill:false, pointRadius:0, tension:0.4, spanGaps:false },
+        ]
+      },
+      options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{backgroundColor:'#12121a',borderColor:'#1e1e2e',borderWidth:1,titleColor:'#e2e8f0',bodyColor:'#94a3b8'} }, scales:{ x:{grid:{color:'rgba(30,30,46,0.5)'},ticks:{color:'#475569',font:{size:10},maxTicksLimit:10}}, y:{grid:{color:'rgba(30,30,46,0.5)'},ticks:{color:'#475569',font:{family:"'JetBrains Mono', monospace",size:10},callback:v=>'$'+Math.round(v)}} } }
+    });
   }
 
-  const demoCalPosts = [
-    { title: 'Moon Phase Gardening Guide', date: new Date(Date.now() + 86400000).toISOString() },
-    { title: 'Smart Lock Comparison 2026', date: new Date(Date.now() + 86400000).toISOString() },
-    { title: 'AI Image Generator Roundup', date: new Date(Date.now() + 172800000).toISOString() },
-    { title: 'Imbolc Ritual for Beginners', date: new Date(Date.now() + 259200000).toISOString() },
-    { title: 'Bullet Journal Weekly Spread', date: new Date(Date.now() + 345600000).toISOString() },
-  ];
-
-  $('#calendarBody').innerHTML = `
-    <div class="cal-days">
-      ${calDays.map(d => {
-        const cls = ['cal-day', d.isToday ? 'today' : '', d.count > 0 ? 'has-posts' : '', d.count >= 3 ? 'many-posts' : ''].filter(Boolean).join(' ');
-        return `<div class="${cls}" title="${d.count} post(s) scheduled">
-          <div class="cal-day-label">${dayNames[d.date.getDay()]}</div>
-          <div>${d.date.getDate()}</div>
-          ${d.count > 0 ? `<div class="cal-post-count">${d.count}</div>` : ''}
-        </div>`;
-      }).join('')}
-    </div>
-    <div style="margin-top:0.75rem;font-size:0.78rem;color:var(--text-secondary);">
-      ${demoCalPosts.map(p => `<div style="padding:0.25rem 0;border-bottom:1px solid rgba(30,30,46,0.5);">
-        <span style="color:var(--text);font-weight:500;">${p.title}</span>
-        <span style="float:right;font-family:var(--mono);font-size:0.7rem;">${fmtDate(p.date)}</span>
-      </div>`).join('')}
-    </div>
-  `;
+  // Top revenue sources demo
+  $('#topRevenueSources').innerHTML = [
+    { name:'AdSense', amount:'$1,284' },
+    { name:'Amazon Associates', amount:'$892' },
+    { name:'Content Egg', amount:'$456' },
+    { name:'KDP Royalties', amount:'$342' },
+    { name:'Etsy POD', amount:'$518' },
+  ].map(s => '<div style="display:flex;justify-content:space-between;padding:0.35rem 0;border-bottom:1px solid rgba(30,30,46,0.5);font-size:0.78rem;"><span>' + s.name + '</span><span style="font-family:var(--mono);color:var(--success);">' + s.amount + '</span></div>').join('');
 }
 
 // ===== Initialization =====
 async function init() {
   updateTimestamp();
+  updateClock();
 
-  // Try to connect to API
+  // Try WebSocket
+  connectWebSocket();
+
+  // Try API
   try {
     await apiCall('/health');
     setOnline(true);
     await refreshAll();
   } catch (e) {
     setOnline(false);
-    // Populate demo data so the dashboard is not blank
     populateDemoData();
   }
 
   // Auto-refresh timers
-  setInterval(refreshMetrics, 30000);     // Health/metrics: 30s
-  setInterval(refreshCharts, 300000);     // Charts: 5min
-  setInterval(refreshActivity, 60000);    // Activity: 60s
-  setInterval(refreshSystem, 120000);     // FORGE/stats: 2min
+  const metricsInterval = parseInt(localStorage.getItem('openclaw_metricsInterval')) || 30000;
+  const chartsInterval = parseInt(localStorage.getItem('openclaw_chartsInterval')) || 300000;
+  state.refreshTimers.metrics = setInterval(refreshMetrics, metricsInterval);
+  state.refreshTimers.charts = setInterval(refreshCharts, chartsInterval);
+  state.refreshTimers.activity = setInterval(refreshActivity, 60000);
 }
 
 // Start
 init();
 </script>
+
+<!-- External JS modules (loaded after inline bootstrap) -->
+<script src="js/websocket.js" defer></script>
+<script src="js/charts.js" defer></script>
+<script src="js/phone-mirror.js" defer></script>
+<script src="js/workflow-builder.js" defer></script>
+<script src="js/app.js" defer></script>
+
 </body>
 </html>

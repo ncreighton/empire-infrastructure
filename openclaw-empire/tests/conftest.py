@@ -150,7 +150,7 @@ def good_phone_state():
         "storage_free_mb": 2000,
         "active_app": "com.android.launcher",
         "active_window": "Home",
-        "installed_apps": ["chrome", "wordpress", "gmail", "whatsapp", "camera"],
+        "installed_apps": ["chrome", "wordpress", "gmail", "whatsapp", "camera", "calculator"],
         "notifications": [],
         "visible_dialogs": [],
     }
@@ -300,3 +300,157 @@ def wp_media_response():
         "media_type": "image",
         "mime_type": "image/png",
     }
+
+
+# ---------------------------------------------------------------------------
+# Phase 6: Content Pipeline fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def pipeline_data_dir(tmp_path):
+    """Create temp data dirs for the content pipeline."""
+    for d in [
+        "content", "calendar", "social", "quality",
+        "pipeline", "pipeline/runs", "pipeline/history",
+        "orchestrator", "orchestrator/missions",
+        "device_pool", "mobile_tests",
+        "email_lists", "email_lists/segments",
+        "competitor_intel", "audience_analytics",
+        "substack", "substack/accounts", "substack/newsletters",
+        "ab_testing", "ab_testing/experiments",
+        "marketplace", "forecasts", "payments",
+        "circuit_breaker", "audit", "encryption",
+        "prompts", "rate_limits", "benchmarks",
+        "rag", "backup", "anomaly",
+    ]:
+        (tmp_path / d).mkdir(parents=True, exist_ok=True)
+    return tmp_path
+
+
+@pytest.fixture
+def sample_article():
+    """Sample article data for content pipeline tests."""
+    return {
+        "title": "Moon Water Ritual Guide for Beginners",
+        "site_id": "testsite1",
+        "content": "<h2>What is Moon Water?</h2><p>Moon water is water that has been charged under the light of the full moon.</p>",
+        "word_count": 2500,
+        "keywords": ["moon water", "lunar water", "full moon ritual"],
+        "meta_description": "Learn how to make and use moon water in your spiritual practice.",
+        "schema_type": "BlogPosting",
+    }
+
+
+@pytest.fixture
+def sample_pipeline_stages():
+    """List of content pipeline stage names."""
+    return [
+        "GAP_DETECTION", "TOPIC_SELECTION", "RESEARCH", "OUTLINE",
+        "GENERATION", "VOICE_VALIDATION", "QUALITY_CHECK", "SEO_OPTIMIZATION",
+        "AFFILIATE_INJECTION", "INTERNAL_LINKING", "WORDPRESS_PUBLISH",
+        "IMAGE_GENERATION", "SOCIAL_CAMPAIGN", "N8N_NOTIFICATION",
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Phase 6: Device Pool fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def sample_devices():
+    """Sample device list for device pool tests."""
+    return [
+        {
+            "id": "dev_001",
+            "name": "Pixel 6",
+            "type": "PHYSICAL",
+            "status": "healthy",
+            "battery": 85,
+            "wifi": True,
+            "current_task": "",
+            "niche": "witchcraft",
+        },
+        {
+            "id": "dev_002",
+            "name": "GeeLark Cloud 1",
+            "type": "GEELARK",
+            "status": "healthy",
+            "battery": 100,
+            "wifi": True,
+            "current_task": "social_engagement",
+            "niche": "ai",
+        },
+        {
+            "id": "dev_003",
+            "name": "Samsung S21",
+            "type": "PHYSICAL",
+            "status": "unhealthy",
+            "battery": 12,
+            "wifi": False,
+            "current_task": "",
+            "niche": "smarthome",
+        },
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Phase 6: A/B Testing fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def sample_experiment():
+    """Sample A/B test experiment."""
+    return {
+        "id": "exp_headline_001",
+        "name": "Headline Test: Moon Water",
+        "site_id": "testsite1",
+        "variants": {
+            "A": {"headline": "Moon Water: The Ultimate Beginner's Guide"},
+            "B": {"headline": "How to Make Moon Water (Step-by-Step)"},
+        },
+        "metric": "click_through_rate",
+        "min_sample_size": 100,
+        "confidence_level": 0.95,
+        "status": "running",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Phase 6: Revenue fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def sample_revenue_data():
+    """Sample revenue time series for forecasting tests."""
+    return [
+        {"date": "2026-01-01", "amount": 120.50},
+        {"date": "2026-01-02", "amount": 135.00},
+        {"date": "2026-01-03", "amount": 98.75},
+        {"date": "2026-01-04", "amount": 142.00},
+        {"date": "2026-01-05", "amount": 156.25},
+        {"date": "2026-01-06", "amount": 110.00},
+        {"date": "2026-01-07", "amount": 128.50},
+        {"date": "2026-01-08", "amount": 145.00},
+        {"date": "2026-01-09", "amount": 133.25},
+        {"date": "2026-01-10", "amount": 151.00},
+        {"date": "2026-01-11", "amount": 167.50},
+        {"date": "2026-01-12", "amount": 124.00},
+        {"date": "2026-01-13", "amount": 139.75},
+        {"date": "2026-01-14", "amount": 158.00},
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Phase 6: Subscriber fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def sample_subscribers():
+    """Sample subscriber data for email list builder tests."""
+    return [
+        {"email": "alice@example.com", "name": "Alice", "status": "active", "engagement_score": 85},
+        {"email": "bob@example.com", "name": "Bob", "status": "active", "engagement_score": 42},
+        {"email": "carol@example.com", "name": "Carol", "status": "unsubscribed", "engagement_score": 10},
+        {"email": "dave@example.com", "name": "Dave", "status": "active", "engagement_score": 95},
+        {"email": "eve@example.com", "name": "Eve", "status": "bounced", "engagement_score": 0},
+    ]

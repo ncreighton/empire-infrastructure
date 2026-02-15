@@ -1552,6 +1552,150 @@ class ContentCalendar:
         }
 
 
+    # ------------------------------------------------------------------
+    # Phase 6: Pipeline trigger methods
+    # ------------------------------------------------------------------
+
+    def trigger_pipeline(
+        self,
+        site_id: str,
+        title: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Trigger the content pipeline for a specific entry or site.
+
+        If title is provided, creates/finds a calendar entry and triggers
+        the pipeline for that specific article. Otherwise, finds the next
+        gap entry and triggers for it.
+
+        Args:
+            site_id: Site identifier.
+            title: Optional specific article title.
+
+        Returns:
+            Dict with entry_id, title, and trigger status.
+        """
+        result: Dict[str, Any] = {
+            "site_id": site_id,
+            "triggered": False,
+            "entry_id": "",
+            "title": "",
+        }
+
+        if title:
+            # Find or create entry for this title
+            matches = [
+                e for e in self.entries
+                if e.site_id == site_id and e.title.lower() == title.lower()
+            ]
+            if matches:
+                entry = matches[0]
+            else:
+                entry = self.add_entry(site_id, title, datetime.now().strftime("%Y-%m-%d"))
+            result["entry_id"] = entry.id
+            result["title"] = entry.title
+        else:
+            # Find next gap entry
+            gaps = self.detect_gaps(site_id=site_id, days_ahead=14)
+            for gap_info in gaps:
+                gap_dates = gap_info.get("gaps", [])
+                if gap_dates:
+                    # Auto-fill first gap
+                    filled = self.auto_fill_gaps(site_id=site_id, days_ahead=14)
+                    if filled:
+                        entry_data = filled[0] if isinstance(filled, list) else filled
+                        if isinstance(entry_data, dict):
+                            result["entry_id"] = entry_data.get("id", "")
+                            result["title"] = entry_data.get("title", "")
+                        elif isinstance(entry_data, CalendarEntry):
+                            result["entry_id"] = entry_data.id
+                            result["title"] = entry_data.title
+                        break
+            if not result["title"]:
+                result["error"] = f"No gaps found for {site_id} in the next 14 days"
+                return result
+
+        result["triggered"] = True
+        return result
+
+    def transition_status(
+        self,
+        entry_id: str,
+        new_status: str,
+        wp_post_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """
+        Transition a calendar entry to a new status.
+
+        Called by the content pipeline as articles progress through stages.
+        Valid transitions: idea -> outlined -> drafted -> scheduled -> published.
+
+        Args:
+            entry_id: Calendar entry ID.
+            new_status: Target status.
+            wp_post_id: WordPress post ID (set when published).
+
+        Returns:
+            Dict with entry details and transition success.
+        """
+        if new_status not in VALID_STATUSES:
+            return {"success": False, "error": f"Invalid status: {new_status}"}
+
+        for entry in self.entries:
+            if entry.id == entry_id:
+                old_status = entry.status
+                entry.status = new_status
+                entry.updated_at = _now_iso()
+                if wp_post_id is not None:
+                    entry.wp_post_id = wp_post_id
+                if new_status == "published" and not entry.actual_publish_date:
+                    entry.actual_publish_date = datetime.now().strftime("%Y-%m-%d")
+                self._save_entries()
+                logger.info(
+                    "Entry %s transitioned: %s -> %s",
+                    entry_id[:12], old_status, new_status,
+                )
+                return {
+                    "success": True,
+                    "entry_id": entry_id,
+                    "old_status": old_status,
+                    "new_status": new_status,
+                }
+
+        return {"success": False, "error": f"Entry {entry_id} not found"}
+
+    def get_pipeline_candidates(
+        self,
+        site_id: Optional[str] = None,
+        statuses: Optional[List[str]] = None,
+        limit: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """
+        Get entries ready for the next pipeline stage.
+
+        Args:
+            site_id: Optional site filter.
+            statuses: Status filter (default: idea, outlined).
+            limit: Max entries to return.
+
+        Returns:
+            List of entry dicts sorted by target_date.
+        """
+        if statuses is None:
+            statuses = ["idea", "outlined"]
+
+        candidates = []
+        for entry in self.entries:
+            if site_id and entry.site_id != site_id:
+                continue
+            if entry.status in statuses:
+                candidates.append(entry.to_dict())
+
+        # Sort by target date (soonest first)
+        candidates.sort(key=lambda e: e.get("target_date", "9999"))
+        return candidates[:limit]
+
+
 # ---------------------------------------------------------------------------
 # Singleton
 # ---------------------------------------------------------------------------

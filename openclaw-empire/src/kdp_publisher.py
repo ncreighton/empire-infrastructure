@@ -2549,6 +2549,83 @@ def get_publisher() -> KDPPublisher:
     return _publisher_instance
 
 
+# Alias for MODULE_IMPORTS compatibility
+get_kdp_publisher = get_publisher
+
+
+# ===================================================================
+# Phase 6: MarketplaceOptimizer Integration
+# ===================================================================
+
+def optimize_book_listing(book_id: str) -> dict:
+    """
+    Optimize a KDP book listing using the MarketplaceOptimizer.
+
+    Analyzes title, description, keywords, and categories for the book
+    and returns optimization suggestions.
+
+    Args:
+        book_id: KDP book identifier.
+
+    Returns:
+        Dict with optimization suggestions and scores.
+    """
+    result: dict = {
+        "book_id": book_id,
+        "optimized": False,
+        "suggestions": [],
+    }
+
+    publisher = get_publisher()
+    book = publisher.get_book(book_id)
+    if not book:
+        result["error"] = f"Book {book_id} not found"
+        return result
+
+    try:
+        from src.marketplace_optimizer import get_optimizer
+        optimizer = get_optimizer()
+
+        # Build listing data from book
+        listing_data = {
+            "platform": "kdp",
+            "title": book.title,
+            "description": book.description,
+            "keywords": book.keywords,
+            "niche": book.niche,
+            "price": book.price,
+            "category": book.category,
+        }
+
+        suggestions = optimizer.optimize_listing_sync(listing_data)
+        result["suggestions"] = suggestions if isinstance(suggestions, list) else [suggestions]
+        result["optimized"] = True
+
+    except ImportError:
+        result["error"] = "MarketplaceOptimizer not available"
+    except Exception as exc:
+        result["error"] = f"Optimization failed: {exc}"
+
+    return result
+
+
+def batch_optimize_books(niche: str = "") -> list:
+    """
+    Optimize all KDP books, optionally filtered by niche.
+
+    Returns list of optimization results.
+    """
+    publisher = get_publisher()
+    books = publisher.list_books(niche=niche)
+    results = []
+    for book in books:
+        book_id = book.get("book_id", "") if isinstance(book, dict) else getattr(book, "book_id", "")
+        if book_id:
+            result = optimize_book_listing(book_id)
+            results.append(result)
+    return results
+
+
 # ===================================================================
 # CLI Entry Point
 # ===================================================================

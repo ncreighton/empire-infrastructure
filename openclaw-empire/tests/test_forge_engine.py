@@ -252,6 +252,11 @@ class TestSentinel:
         self.data_dir = tmp_data_dir / "forge"
         with patch("src.forge_engine.FORGE_DATA_DIR", self.data_dir):
             Sentinel.SCORES_PATH = self.data_dir / "sentinel_scores.json"
+            # Reset class-level BASE_TEMPLATES state to avoid cross-test leakage
+            for t in Sentinel.BASE_TEMPLATES.values():
+                t.use_count = 0
+                t.success_count = 0
+                t.avg_confidence = 0.0
             self.sentinel = Sentinel()
 
     @pytest.mark.unit

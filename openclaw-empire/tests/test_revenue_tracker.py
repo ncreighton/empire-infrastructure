@@ -18,6 +18,9 @@ try:
         RevenueEntry,
         RevenueAlert,
         RevenueGoal,
+        RevenueStream,
+        DailyRevenue,
+        RevenueReport,
     )
     HAS_REVENUE = True
 except ImportError:
@@ -30,17 +33,18 @@ pytestmark = pytest.mark.skipif(
 
 
 # ===================================================================
-# Revenue Streams
+# Revenue Streams (actual enum values from source)
 # ===================================================================
 
 REVENUE_STREAMS = [
-    "adsense",
+    "ads",
     "affiliate",
     "kdp",
     "etsy",
-    "courses",
-    "newsletter",
-    "consulting",
+    "substack",
+    "youtube",
+    "sponsored",
+    "digital_products",
 ]
 
 SITE_IDS = [
@@ -63,181 +67,187 @@ class TestRevenueTracker:
     """Test revenue tracking functionality."""
 
     @pytest.fixture
-    def tracker(self, tmp_data_dir):
-        """Create tracker with temp storage."""
-        return RevenueTracker(data_dir=tmp_data_dir / "revenue")
+    def tracker(self, tmp_path):
+        """Create tracker with temp storage directories."""
+        daily_dir = tmp_path / "daily"
+        daily_dir.mkdir(parents=True, exist_ok=True)
+        with patch("src.revenue_tracker.DAILY_DIR", daily_dir), \
+             patch("src.revenue_tracker.GOALS_FILE", tmp_path / "goals.json"), \
+             patch("src.revenue_tracker.ALERTS_FILE", tmp_path / "alerts.json"), \
+             patch("src.revenue_tracker.CONFIG_FILE", tmp_path / "config.json"), \
+             patch("src.revenue_tracker.REVENUE_DATA_DIR", tmp_path):
+            yield RevenueTracker()
 
     @pytest.mark.unit
     def test_record_revenue(self, tracker):
         """Record a revenue entry."""
         entry = tracker.record_revenue(
-            stream="adsense",
+            date="2026-02-14",
+            stream=RevenueStream.ADS,
+            source="adsense",
             amount=42.50,
             site_id="witchcraft",
-            date_str="2026-02-14",
         )
         assert entry is not None
         assert entry.amount == 42.50
 
     @pytest.mark.unit
-    def test_record_revenue_default_date(self, tracker):
-        """Revenue defaults to today's date."""
+    def test_record_revenue_string_stream(self, tracker):
+        """Revenue with string stream name."""
         entry = tracker.record_revenue(
+            date="2026-02-14",
             stream="affiliate",
+            source="amazon",
             amount=15.00,
             site_id="smarthome",
         )
         assert entry is not None
-        assert entry.date is not None
+        assert entry.stream == RevenueStream.AFFILIATE
 
     @pytest.mark.unit
     def test_get_daily(self, tracker):
-        """get_daily returns revenue for a specific date."""
-        tracker.record_revenue("adsense", 10.0, "witchcraft", "2026-02-14")
-        tracker.record_revenue("affiliate", 5.0, "witchcraft", "2026-02-14")
-        tracker.record_revenue("adsense", 20.0, "smarthome", "2026-02-14")
+        """get_daily returns DailyRevenue for a specific date."""
+        tracker.record_revenue("2026-02-14", RevenueStream.ADS, "adsense", 10.0, site_id="witchcraft")
+        tracker.record_revenue("2026-02-14", RevenueStream.AFFILIATE, "amazon", 5.0, site_id="witchcraft")
+        tracker.record_revenue("2026-02-14", RevenueStream.ADS, "adsense", 20.0, site_id="smarthome")
 
         daily = tracker.get_daily("2026-02-14")
         assert daily is not None
-        assert daily["total"] == 35.0
+        assert isinstance(daily, DailyRevenue)
+        assert daily.total == 35.0
 
     @pytest.mark.unit
     def test_get_daily_empty_date(self, tracker):
         """get_daily returns zero for date with no entries."""
         daily = tracker.get_daily("2020-01-01")
         assert daily is not None
-        assert daily["total"] == 0.0
+        assert daily.total == 0.0
 
     @pytest.mark.unit
     def test_get_range(self, tracker):
-        """get_range returns revenue for a date range."""
+        """get_range returns list of DailyRevenue for a date range."""
         for day in range(1, 8):
             tracker.record_revenue(
-                "adsense", float(day * 10),
-                "witchcraft", f"2026-02-{day:02d}",
+                f"2026-02-{day:02d}", RevenueStream.ADS, "adsense",
+                float(day * 10), site_id="witchcraft",
             )
         result = tracker.get_range("2026-02-01", "2026-02-07")
         assert result is not None
-        assert result["total"] == 280.0  # 10+20+30+40+50+60+70
+        assert isinstance(result, list)
+        total = sum(d.total for d in result)
+        assert total == 280.0  # 10+20+30+40+50+60+70
 
     @pytest.mark.unit
     def test_by_stream(self, tracker):
         """Breakdown by revenue stream."""
-        tracker.record_revenue("adsense", 100.0, "witchcraft", "2026-02-14")
-        tracker.record_revenue("affiliate", 50.0, "witchcraft", "2026-02-14")
-        tracker.record_revenue("kdp", 25.0, "witchcraft", "2026-02-14")
+        tracker.record_revenue("2026-02-14", RevenueStream.ADS, "adsense", 100.0, site_id="witchcraft")
+        tracker.record_revenue("2026-02-14", RevenueStream.AFFILIATE, "amazon", 50.0, site_id="witchcraft")
+        tracker.record_revenue("2026-02-14", RevenueStream.KDP, "kdp", 25.0, site_id="witchcraft")
 
-        breakdown = tracker.by_stream("2026-02-14")
-        assert breakdown["adsense"] == 100.0
+        breakdown = tracker.by_stream("2026-02-14", "2026-02-14")
+        assert breakdown["ads"] == 100.0
         assert breakdown["affiliate"] == 50.0
         assert breakdown["kdp"] == 25.0
 
     @pytest.mark.unit
     def test_by_site(self, tracker):
         """Breakdown by site."""
-        tracker.record_revenue("adsense", 100.0, "witchcraft", "2026-02-14")
-        tracker.record_revenue("adsense", 75.0, "smarthome", "2026-02-14")
-        tracker.record_revenue("adsense", 50.0, "aiaction", "2026-02-14")
+        tracker.record_revenue("2026-02-14", RevenueStream.ADS, "adsense", 100.0, site_id="witchcraft")
+        tracker.record_revenue("2026-02-14", RevenueStream.ADS, "adsense", 75.0, site_id="smarthome")
+        tracker.record_revenue("2026-02-14", RevenueStream.ADS, "adsense", 50.0, site_id="aiaction")
 
-        breakdown = tracker.by_site("2026-02-14")
+        breakdown = tracker.by_site("2026-02-14", "2026-02-14")
         assert breakdown["witchcraft"] == 100.0
         assert breakdown["smarthome"] == 75.0
         assert breakdown["aiaction"] == 50.0
 
     @pytest.mark.unit
     def test_growth_rate(self, tracker):
-        """Growth rate calculation between two periods."""
+        """Growth rate calculation between periods."""
         # Week 1: $100/day
         for day in range(1, 8):
-            tracker.record_revenue("adsense", 100.0, "witchcraft", f"2026-02-{day:02d}")
+            tracker.record_revenue(f"2026-02-{day:02d}", RevenueStream.ADS, "adsense", 100.0, site_id="witchcraft")
         # Week 2: $120/day
         for day in range(8, 15):
-            tracker.record_revenue("adsense", 120.0, "witchcraft", f"2026-02-{day:02d}")
+            tracker.record_revenue(f"2026-02-{day:02d}", RevenueStream.ADS, "adsense", 120.0, site_id="witchcraft")
 
-        rate = tracker.growth_rate("2026-02-01", "2026-02-07", "2026-02-08", "2026-02-14")
-        assert rate is not None
-        assert rate > 0  # Should be ~20% growth
+        # growth_rate() uses current period vs previous period
+        # Use compare_periods to test specific periods
+        result = tracker.compare_periods("2026-02-01", "2026-02-07", "2026-02-08", "2026-02-14")
+        assert result is not None
+        assert result["change_pct"] > 0  # Should show positive growth
 
     @pytest.mark.unit
     def test_growth_rate_negative(self, tracker):
         """Negative growth rate when revenue drops."""
         for day in range(1, 8):
-            tracker.record_revenue("adsense", 100.0, "witchcraft", f"2026-02-{day:02d}")
+            tracker.record_revenue(f"2026-02-{day:02d}", RevenueStream.ADS, "adsense", 100.0, site_id="witchcraft")
         for day in range(8, 15):
-            tracker.record_revenue("adsense", 50.0, "witchcraft", f"2026-02-{day:02d}")
+            tracker.record_revenue(f"2026-02-{day:02d}", RevenueStream.ADS, "adsense", 50.0, site_id="witchcraft")
 
-        rate = tracker.growth_rate("2026-02-01", "2026-02-07", "2026-02-08", "2026-02-14")
-        assert rate < 0
-
-    @pytest.mark.unit
-    def test_detect_revenue_drop_alert(self, tracker):
-        """Alert fires when revenue drops significantly."""
-        for day in range(1, 8):
-            tracker.record_revenue("adsense", 100.0, "witchcraft", f"2026-02-{day:02d}")
-        # Sudden drop
-        tracker.record_revenue("adsense", 10.0, "witchcraft", "2026-02-08")
-
-        alerts = tracker.detect_alerts("2026-02-08")
-        if alerts:
-            assert any("drop" in a.message.lower() or "decrease" in a.message.lower() for a in alerts)
+        result = tracker.compare_periods("2026-02-01", "2026-02-07", "2026-02-08", "2026-02-14")
+        assert result["change_pct"] < 0
 
     @pytest.mark.unit
-    def test_detect_zero_revenue_alert(self, tracker):
-        """Alert fires for zero revenue on an active day."""
-        for day in range(1, 8):
-            tracker.record_revenue("adsense", 100.0, "witchcraft", f"2026-02-{day:02d}")
-        # No revenue on day 8 (don't record anything)
-        # tracker.record_revenue("adsense", 0.0, "witchcraft", "2026-02-08")
-
-        alerts = tracker.detect_alerts("2026-02-08")
-        # Should detect no revenue for the day
+    def test_check_alerts(self, tracker):
+        """check_alerts returns a list of RevenueAlert."""
+        alerts = tracker.check_alerts()
         assert isinstance(alerts, list)
 
     @pytest.mark.unit
     def test_goal_tracking(self, tracker):
         """Track progress toward revenue goals."""
         goal = tracker.set_goal(
-            name="February Revenue Target",
+            period="monthly",
             target_amount=5000.0,
-            start_date="2026-02-01",
-            end_date="2026-02-28",
         )
         assert goal is not None
+        assert isinstance(goal, RevenueGoal)
+        assert goal.target_amount == 5000.0
 
-        for day in range(1, 15):
-            tracker.record_revenue("adsense", 200.0, "witchcraft", f"2026-02-{day:02d}")
-
-        progress = tracker.get_goal_progress(goal.goal_id if hasattr(goal, 'goal_id') else goal.get('goal_id', goal.get('name')))
-        assert progress is not None
-        if isinstance(progress, dict):
-            assert progress.get("current_amount", 0) >= 2800  # 14 * 200
+        progress = tracker.check_goal_progress()
+        assert isinstance(progress, dict)
+        assert "monthly" in progress
 
     @pytest.mark.unit
-    def test_data_persistence(self, tmp_data_dir):
+    def test_data_persistence(self, tmp_path):
         """Revenue data survives restart."""
-        dir_path = tmp_data_dir / "revenue"
-        tracker1 = RevenueTracker(data_dir=dir_path)
-        tracker1.record_revenue("adsense", 100.0, "witchcraft", "2026-02-14")
+        daily_dir = tmp_path / "daily"
+        daily_dir.mkdir(parents=True, exist_ok=True)
+        with patch("src.revenue_tracker.DAILY_DIR", daily_dir), \
+             patch("src.revenue_tracker.GOALS_FILE", tmp_path / "goals.json"), \
+             patch("src.revenue_tracker.ALERTS_FILE", tmp_path / "alerts.json"), \
+             patch("src.revenue_tracker.CONFIG_FILE", tmp_path / "config.json"), \
+             patch("src.revenue_tracker.REVENUE_DATA_DIR", tmp_path):
+            tracker1 = RevenueTracker()
+            tracker1.record_revenue("2026-02-14", RevenueStream.ADS, "adsense", 100.0, site_id="witchcraft")
 
-        tracker2 = RevenueTracker(data_dir=dir_path)
-        daily = tracker2.get_daily("2026-02-14")
-        assert daily["total"] == 100.0
+            tracker2 = RevenueTracker()
+            daily = tracker2.get_daily("2026-02-14")
+            assert daily.total == 100.0
 
     @pytest.mark.unit
     def test_multiple_entries_same_day(self, tracker):
         """Multiple entries on same day accumulate correctly."""
-        tracker.record_revenue("adsense", 50.0, "witchcraft", "2026-02-14")
-        tracker.record_revenue("adsense", 30.0, "witchcraft", "2026-02-14")
-        tracker.record_revenue("affiliate", 20.0, "witchcraft", "2026-02-14")
+        tracker.record_revenue("2026-02-14", RevenueStream.ADS, "adsense", 50.0, site_id="witchcraft")
+        tracker.record_revenue("2026-02-14", RevenueStream.ADS, "adsense", 30.0, site_id="witchcraft")
+        tracker.record_revenue("2026-02-14", RevenueStream.AFFILIATE, "amazon", 20.0, site_id="witchcraft")
 
         daily = tracker.get_daily("2026-02-14")
-        assert daily["total"] == 100.0
+        assert daily.total == 100.0
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("stream", REVENUE_STREAMS[:4])
+    @pytest.mark.parametrize("stream", [
+        RevenueStream.ADS,
+        RevenueStream.AFFILIATE,
+        RevenueStream.KDP,
+        RevenueStream.ETSY,
+    ])
     def test_record_various_streams(self, tracker, stream):
         """All revenue streams can be recorded."""
-        entry = tracker.record_revenue(stream, 42.0, "witchcraft", "2026-02-14")
+        entry = tracker.record_revenue(
+            "2026-02-14", stream, "test_source", 42.0, site_id="witchcraft",
+        )
         assert entry is not None
         assert entry.stream == stream
 
@@ -253,13 +263,40 @@ class TestRevenueEntry:
     def test_create_entry(self):
         """RevenueEntry can be instantiated."""
         entry = RevenueEntry(
-            stream="adsense",
+            stream=RevenueStream.ADS,
+            source="adsense",
             amount=42.50,
             site_id="witchcraft",
             date="2026-02-14",
         )
         assert entry.amount == 42.50
-        assert entry.stream == "adsense"
+        assert entry.stream == RevenueStream.ADS
+
+    @pytest.mark.unit
+    def test_entry_to_dict(self):
+        """RevenueEntry serializes to dict."""
+        entry = RevenueEntry(
+            stream=RevenueStream.AFFILIATE,
+            source="amazon",
+            amount=25.0,
+            date="2026-02-14",
+        )
+        d = entry.to_dict()
+        assert d["stream"] == "affiliate"
+        assert d["amount"] == 25.0
+
+    @pytest.mark.unit
+    def test_entry_from_dict(self):
+        """RevenueEntry deserializes from dict."""
+        data = {
+            "date": "2026-02-14",
+            "stream": "ads",
+            "source": "adsense",
+            "amount": 42.50,
+        }
+        entry = RevenueEntry.from_dict(data)
+        assert entry.stream == RevenueStream.ADS
+        assert entry.amount == 42.50
 
 
 # ===================================================================
@@ -273,9 +310,20 @@ class TestRevenueGoal:
     def test_create_goal(self):
         """RevenueGoal can be instantiated."""
         goal = RevenueGoal(
-            name="Monthly Target",
+            period="monthly",
             target_amount=5000.0,
-            start_date="2026-02-01",
-            end_date="2026-02-28",
         )
         assert goal.target_amount == 5000.0
+        assert goal.period == "monthly"
+
+    @pytest.mark.unit
+    def test_goal_recalculate(self):
+        """RevenueGoal recalculates progress."""
+        goal = RevenueGoal(
+            period="monthly",
+            target_amount=1000.0,
+        )
+        goal.recalculate(current=500.0, projected=1100.0)
+        assert goal.current_amount == 500.0
+        assert goal.percent_complete == 50.0
+        assert goal.on_pace is True

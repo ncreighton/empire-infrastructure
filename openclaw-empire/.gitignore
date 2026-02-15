@@ -20,12 +20,11 @@ credentials/
 *.pem
 *.key
 
-# Intelligence data (runtime learning — large, machine-specific)
-data/forge/*.json
-data/amplify/*.json
-data/vision/*.json
-data/screenshots/
-data/ui_dumps/
+# Runtime data (machine-specific state, generated at startup)
+data/
+
+# Keep data directory structure template
+!data/.gitkeep
 
 # Python
 __pycache__/

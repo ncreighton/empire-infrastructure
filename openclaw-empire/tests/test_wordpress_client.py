@@ -35,22 +35,45 @@ pytestmark = pytest.mark.skipif(not HAS_WP_CLIENT, reason="wordpress_client modu
 # ===================================================================
 
 def _make_site_config(**overrides):
-    """Create a SiteConfig for testing."""
+    """Create a SiteConfig for testing.
+
+    SiteConfig fields: domain, site_id, brand_color, accent_color, voice,
+    niche, posting_frequency, priority, theme, wp_user, app_password, flagship.
+    """
     defaults = {
         "site_id": "testsite",
         "domain": "testsite.com",
         "wp_user": "testuser",
-        "wp_app_password": "test pass word here",
-        "brand_name": "Test Site",
+        "app_password": "test pass word here",
+        "brand_color": "#FF0000",
         "niche": "test",
         "voice": "test-voice",
-        "brand_color": "#FF0000",
         "posting_frequency": "daily",
         "priority": 1,
         "theme": "blocksy",
     }
     defaults.update(overrides)
     return SiteConfig(**defaults)
+
+
+def _make_mock_session(response_mock):
+    """Create a mock aiohttp session whose .request() returns an async context manager.
+
+    The source uses ``async with session.request(method, url, **kwargs) as resp``
+    so we must mock ``session.request`` to return an async context manager that
+    yields the response mock.
+    """
+    mock_session = AsyncMock()
+
+    # session.request() must behave as an async context manager
+    ctx = AsyncMock()
+    ctx.__aenter__ = AsyncMock(return_value=response_mock)
+    ctx.__aexit__ = AsyncMock(return_value=False)
+    mock_session.request = MagicMock(return_value=ctx)
+
+    mock_session.close = AsyncMock()
+    mock_session.closed = False
+    return mock_session
 
 
 # ===================================================================
@@ -62,9 +85,9 @@ class TestSiteConfig:
 
     @pytest.mark.unit
     def test_base_url(self):
-        """base_url returns https domain."""
+        """base_url returns https domain wp-json root."""
         config = _make_site_config(domain="example.com")
-        assert config.base_url == "https://example.com"
+        assert config.base_url == "https://example.com/wp-json"
 
     @pytest.mark.unit
     def test_api_url(self):
@@ -75,17 +98,17 @@ class TestSiteConfig:
     @pytest.mark.unit
     def test_auth_header(self):
         """auth_header returns base64-encoded Basic auth."""
-        config = _make_site_config(wp_user="user", wp_app_password="pass")
+        config = _make_site_config(wp_user="user", app_password="pass")
         assert config.auth_header.startswith("Basic ")
         assert len(config.auth_header) > 10
 
     @pytest.mark.unit
     def test_is_configured(self):
         """is_configured requires both user and password."""
-        good = _make_site_config(wp_user="user", wp_app_password="pass")
+        good = _make_site_config(wp_user="user", app_password="pass")
         assert good.is_configured is True
 
-        bad = _make_site_config(wp_user="", wp_app_password="")
+        bad = _make_site_config(wp_user="", app_password="")
         assert bad.is_configured is False
 
     @pytest.mark.unit
@@ -115,9 +138,8 @@ class TestWordPressClient:
     async def test_create_post(self, client, mock_aiohttp_response, wp_post_response):
         """create_post sends POST and returns post data."""
         mock_resp = mock_aiohttp_response(201, wp_post_response)
-        mock_session = AsyncMock()
-        mock_session.post = MagicMock(return_value=mock_resp)
-        mock_session.close = AsyncMock()
+        mock_resp.headers = {"Content-Type": "application/json"}
+        mock_session = _make_mock_session(mock_resp)
 
         with patch.object(client, "_get_session", return_value=mock_session):
             result = await client.create_post(
@@ -133,9 +155,8 @@ class TestWordPressClient:
     async def test_get_post(self, client, mock_aiohttp_response, wp_post_response):
         """get_post sends GET and returns post data."""
         mock_resp = mock_aiohttp_response(200, wp_post_response)
-        mock_session = AsyncMock()
-        mock_session.get = MagicMock(return_value=mock_resp)
-        mock_session.close = AsyncMock()
+        mock_resp.headers = {"Content-Type": "application/json"}
+        mock_session = _make_mock_session(mock_resp)
 
         with patch.object(client, "_get_session", return_value=mock_session):
             result = await client.get_post(42)
@@ -147,9 +168,7 @@ class TestWordPressClient:
         """list_posts returns a list of posts."""
         mock_resp = mock_aiohttp_response(200, [wp_post_response])
         mock_resp.headers = {"X-WP-Total": "1", "X-WP-TotalPages": "1", "Content-Type": "application/json"}
-        mock_session = AsyncMock()
-        mock_session.get = MagicMock(return_value=mock_resp)
-        mock_session.close = AsyncMock()
+        mock_session = _make_mock_session(mock_resp)
 
         with patch.object(client, "_get_session", return_value=mock_session):
             result = await client.list_posts(per_page=10)
@@ -164,9 +183,8 @@ class TestWordPressClient:
         img_file.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100)
 
         mock_resp = mock_aiohttp_response(201, wp_media_response)
-        mock_session = AsyncMock()
-        mock_session.post = MagicMock(return_value=mock_resp)
-        mock_session.close = AsyncMock()
+        mock_resp.headers = {"Content-Type": "application/json"}
+        mock_session = _make_mock_session(mock_resp)
 
         with patch.object(client, "_get_session", return_value=mock_session):
             result = await client.upload_media(str(img_file))
@@ -178,9 +196,8 @@ class TestWordPressClient:
         """set_featured_image updates post with media ID."""
         updated_post = {**wp_post_response, "featured_media": 100}
         mock_resp = mock_aiohttp_response(200, updated_post)
-        mock_session = AsyncMock()
-        mock_session.post = MagicMock(return_value=mock_resp)
-        mock_session.close = AsyncMock()
+        mock_resp.headers = {"Content-Type": "application/json"}
+        mock_session = _make_mock_session(mock_resp)
 
         with patch.object(client, "_get_session", return_value=mock_session):
             result = await client.set_featured_image(42, 100)
@@ -191,9 +208,8 @@ class TestWordPressClient:
     async def test_set_seo(self, client, mock_aiohttp_response):
         """set_seo sends RankMath fields."""
         mock_resp = mock_aiohttp_response(200, {"id": 42})
-        mock_session = AsyncMock()
-        mock_session.post = MagicMock(return_value=mock_resp)
-        mock_session.close = AsyncMock()
+        mock_resp.headers = {"Content-Type": "application/json"}
+        mock_session = _make_mock_session(mock_resp)
 
         with patch.object(client, "_get_session", return_value=mock_session):
             result = await client.set_seo(
@@ -209,10 +225,8 @@ class TestWordPressClient:
     async def test_purge_cache(self, client, mock_aiohttp_response):
         """purge_cache sends purge request."""
         mock_resp = mock_aiohttp_response(200, {"success": True})
-        mock_session = AsyncMock()
-        mock_session.get = MagicMock(return_value=mock_resp)
-        mock_session.post = MagicMock(return_value=mock_resp)
-        mock_session.close = AsyncMock()
+        mock_resp.headers = {"Content-Type": "application/json"}
+        mock_session = _make_mock_session(mock_resp)
 
         with patch.object(client, "_get_session", return_value=mock_session):
             result = await client.purge_cache()
@@ -227,9 +241,8 @@ class TestWordPressClient:
             "description": "A test",
             "url": "https://testsite.com",
         })
-        mock_session = AsyncMock()
-        mock_session.get = MagicMock(return_value=mock_resp)
-        mock_session.close = AsyncMock()
+        mock_resp.headers = {"Content-Type": "application/json"}
+        mock_session = _make_mock_session(mock_resp)
 
         with patch.object(client, "_get_session", return_value=mock_session):
             result = await client.check_health()
@@ -240,11 +253,29 @@ class TestWordPressClient:
     @pytest.mark.asyncio
     async def test_publish_convenience(self, client, mock_aiohttp_response, wp_post_response):
         """publish() creates, SEOs, and caches in one call."""
-        mock_resp = mock_aiohttp_response(201, wp_post_response)
+        mock_resp_201 = mock_aiohttp_response(201, wp_post_response)
+        mock_resp_201.headers = {"Content-Type": "application/json"}
+        mock_resp_200 = mock_aiohttp_response(200, {"id": 42})
+        mock_resp_200.headers = {"Content-Type": "application/json"}
+
+        # publish() makes multiple requests: create_post (201), then set_seo (200), then purge_cache (200)
+        # We return different responses on successive calls
+        responses = [mock_resp_201, mock_resp_200, mock_resp_200, mock_resp_200]
+        call_count = {"n": 0}
+
         mock_session = AsyncMock()
-        mock_session.post = MagicMock(return_value=mock_resp)
-        mock_session.get = MagicMock(return_value=mock_aiohttp_response(200, {}))
         mock_session.close = AsyncMock()
+        mock_session.closed = False
+
+        def make_ctx(*args, **kwargs):
+            idx = min(call_count["n"], len(responses) - 1)
+            call_count["n"] += 1
+            ctx = AsyncMock()
+            ctx.__aenter__ = AsyncMock(return_value=responses[idx])
+            ctx.__aexit__ = AsyncMock(return_value=False)
+            return ctx
+
+        mock_session.request = MagicMock(side_effect=make_ctx)
 
         with patch.object(client, "_get_session", return_value=mock_session):
             result = await client.publish(
@@ -286,7 +317,7 @@ class TestLoadSiteRegistry:
 # ===================================================================
 
 class TestEmpireManager:
-    """Test EmpireManager — multi-site coordination."""
+    """Test EmpireManager -- multi-site coordination."""
 
     @pytest.fixture
     def manager(self, site_registry_file):
@@ -329,10 +360,18 @@ class TestEmpireManager:
         mock_resp = mock_aiohttp_response(200, {
             "name": "Test", "url": "https://test.com",
         })
+        mock_resp.headers = {"Content-Type": "application/json"}
+
         mock_session = AsyncMock()
-        mock_session.get = MagicMock(return_value=mock_resp)
-        mock_session.post = MagicMock(return_value=mock_resp)
         mock_session.close = AsyncMock()
+        mock_session.closed = False
+
+        ctx = AsyncMock()
+        ctx.__aenter__ = AsyncMock(return_value=mock_resp)
+        ctx.__aexit__ = AsyncMock(return_value=False)
+        mock_session.request = MagicMock(return_value=ctx)
+        mock_session.get = MagicMock(return_value=ctx)
+        mock_session.post = MagicMock(return_value=ctx)
 
         with patch("aiohttp.ClientSession", return_value=mock_session):
             results = await manager.health_check_all()

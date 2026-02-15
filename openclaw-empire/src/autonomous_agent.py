@@ -142,6 +142,22 @@ class ModuleName(str, Enum):
     CONTENT_CALENDAR = "content_calendar"
     WORDPRESS = "wordpress_client"
     INTELLIGENCE = "intelligence_hub"
+    # Phase 6 modules
+    CONTENT_PIPELINE = "content_pipeline"
+    UNIFIED_ORCHESTRATOR = "unified_orchestrator"
+    DEVICE_POOL = "device_pool"
+    CONTENT_QUALITY = "content_quality_scorer"
+    RAG_MEMORY = "rag_memory"
+    AB_TESTING = "ab_testing"
+    SEO_AUDITOR = "seo_auditor"
+    AFFILIATE = "affiliate_manager"
+    INTERNAL_LINKER = "internal_linker"
+    SOCIAL_PUBLISHER = "social_publisher"
+    REVENUE = "revenue_tracker"
+    BRAND_VOICE = "brand_voice_engine"
+    SUBSTACK = "substack_agent"
+    BACKUP = "backup_manager"
+    ANOMALY = "anomaly_detector"
 
 
 # Module import mapping
@@ -160,6 +176,22 @@ MODULE_IMPORTS = {
     ModuleName.CONTENT_GEN: ("src.content_generator", "get_content_generator"),
     ModuleName.CONTENT_CALENDAR: ("src.content_calendar", "get_calendar"),
     ModuleName.WORDPRESS: ("src.wordpress_client", "get_wordpress_client"),
+    # Phase 6 module imports
+    ModuleName.CONTENT_PIPELINE: ("src.content_pipeline", "get_pipeline"),
+    ModuleName.UNIFIED_ORCHESTRATOR: ("src.unified_orchestrator", "get_orchestrator"),
+    ModuleName.DEVICE_POOL: ("src.device_pool", "get_pool"),
+    ModuleName.CONTENT_QUALITY: ("src.content_quality_scorer", "get_scorer"),
+    ModuleName.RAG_MEMORY: ("src.rag_memory", "get_rag"),
+    ModuleName.AB_TESTING: ("src.ab_testing", "get_ab_testing"),
+    ModuleName.SEO_AUDITOR: ("src.seo_auditor", "get_seo_auditor"),
+    ModuleName.AFFILIATE: ("src.affiliate_manager", "get_affiliate_manager"),
+    ModuleName.INTERNAL_LINKER: ("src.internal_linker", "get_linker"),
+    ModuleName.SOCIAL_PUBLISHER: ("src.social_publisher", "get_publisher"),
+    ModuleName.REVENUE: ("src.revenue_tracker", "get_revenue_tracker"),
+    ModuleName.BRAND_VOICE: ("src.brand_voice_engine", "get_brand_voice_engine"),
+    ModuleName.SUBSTACK: ("src.substack_agent", "get_agent"),
+    ModuleName.BACKUP: ("src.backup_manager", "get_backup_manager"),
+    ModuleName.ANOMALY: ("src.anomaly_detector", "get_detector"),
 }
 
 PRIORITY_ORDER = {
@@ -299,6 +331,37 @@ GOAL_PATTERNS = {
         SubGoal(description="Search Play Store", module="app_discovery", method="search_play_store"),
         SubGoal(description="Evaluate app", module="app_discovery", method="evaluate_app"),
         SubGoal(description="Install app", module="app_discovery", method="install_app"),
+    ],
+    # Phase 6: Content pipeline patterns
+    "publish content": [
+        SubGoal(description="Detect content gaps", module="content_calendar", method="auto_fill_gaps"),
+        SubGoal(description="Execute content pipeline", module="content_pipeline", method="execute_sync", args={"site_id": ""}),
+        SubGoal(description="Create social campaign", module="social_publisher", method="create_campaign_from_article"),
+    ],
+    "publish article": [
+        SubGoal(description="Generate article via pipeline", module="content_pipeline", method="execute_sync", args={"site_id": "", "title": ""}),
+        SubGoal(description="Generate social posts", module="social_publisher", method="create_campaign_from_article"),
+    ],
+    "check revenue": [
+        SubGoal(description="Get revenue summary", module="revenue_tracker", method="get_summary"),
+        SubGoal(description="Check for anomalies", module="anomaly_detector", method="detect_sync"),
+    ],
+    "write newsletter": [
+        SubGoal(description="Write daily newsletter", module="substack_agent", method="daily_routine_sync"),
+    ],
+    "run backup": [
+        SubGoal(description="Execute full backup", module="backup_manager", method="full_backup_sync"),
+    ],
+    "seo audit": [
+        SubGoal(description="Run SEO audit", module="seo_auditor", method="audit_site_sync"),
+        SubGoal(description="Generate recommendations", module="seo_auditor", method="get_recommendations_sync"),
+    ],
+    "content quality": [
+        SubGoal(description="Score content quality", module="content_quality_scorer", method="score_sync"),
+    ],
+    "device status": [
+        SubGoal(description="Discover all devices", module="device_pool", method="discover_all_sync"),
+        SubGoal(description="Get fleet health", module="device_pool", method="health_report_sync"),
     ],
 }
 
@@ -865,6 +928,160 @@ class AutonomousAgent:
     def quick_action_sync(self, module: str, method: str, **kwargs) -> Any:
         return _run_sync(self.quick_action(module, method, **kwargs))
 
+    # ── Conversation mode (Phase 6) ──
+
+    async def converse(
+        self,
+        message: str,
+        session_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Conversational interface to the agent.
+
+        Uses RAGMemory for context retrieval and Sonnet for response
+        generation. Maintains conversation history per session.
+
+        Args:
+            message: User's natural language message.
+            session_id: Optional session ID for continuity.
+
+        Returns:
+            Dict with response text, suggested actions, and context used.
+        """
+        if not session_id:
+            session_id = uuid.uuid4().hex[:12]
+
+        result: Dict[str, Any] = {
+            "session_id": session_id,
+            "response": "",
+            "suggested_actions": [],
+            "context_used": [],
+        }
+
+        # Load conversation history from data dir
+        conv_file = self._data_dir / f"conversation_{session_id}.json"
+        history = _load_json(conv_file, default=[])
+        if not isinstance(history, list):
+            history = []
+
+        # Build RAG context from agent memory
+        rag_context = ""
+        try:
+            rag = self._get_module("rag_memory")
+            if rag:
+                rag_context = rag.build_context(message, max_tokens=1500)
+                if rag_context:
+                    result["context_used"].append("rag_memory")
+        except Exception as exc:
+            logger.debug("RAG context retrieval failed: %s", exc)
+
+        # Build status context
+        status = self.status()
+        status_context = (
+            f"Active goals: {status['pending_goals']} pending, "
+            f"{status['completed_goals']} completed, "
+            f"{status['failed_goals']} failed. "
+            f"Modules loaded: {', '.join(status['modules_loaded'][:10])}."
+        )
+
+        # Generate response via Sonnet
+        try:
+            import anthropic
+            client = anthropic.Anthropic()
+
+            system_text = (
+                "You are the OpenClaw Empire assistant. You help manage 16 WordPress "
+                "publishing sites, phone automation, content pipelines, and revenue tracking.\n\n"
+                f"Agent Status: {status_context}\n"
+            )
+            if rag_context:
+                system_text += f"\nRelevant Memory Context:\n{rag_context}\n"
+
+            # Build messages from history + new message
+            messages = []
+            for h in history[-10:]:
+                messages.append({"role": h.get("role", "user"), "content": h.get("content", "")})
+            messages.append({"role": "user", "content": message})
+
+            response = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=1000,
+                system=[{
+                    "type": "text",
+                    "text": system_text,
+                    "cache_control": {"type": "ephemeral"},
+                }],
+                messages=messages,
+            )
+
+            response_text = response.content[0].text
+            result["response"] = response_text
+
+            # Detect action suggestions from response
+            action_keywords = {
+                "publish": "publish content",
+                "newsletter": "write newsletter",
+                "backup": "run backup",
+                "audit": "seo audit",
+                "revenue": "check revenue",
+                "device": "device status",
+            }
+            for keyword, action in action_keywords.items():
+                if keyword in response_text.lower():
+                    result["suggested_actions"].append(action)
+
+        except Exception as exc:
+            logger.error("Conversation generation failed: %s", exc)
+            result["response"] = f"I encountered an error: {exc}. Try again or check the logs."
+
+        # Save conversation history
+        history.append({"role": "user", "content": message})
+        history.append({"role": "assistant", "content": result["response"]})
+        # Keep last 50 messages
+        history = history[-50:]
+        _save_json(conv_file, history)
+
+        return result
+
+    def converse_sync(self, message: str, session_id: Optional[str] = None) -> Dict[str, Any]:
+        """Synchronous wrapper for converse."""
+        return _run_sync(self.converse(message, session_id))
+
+    # ── Orchestrator delegation (Phase 6) ──
+
+    async def delegate_to_orchestrator(
+        self,
+        mission_type: str,
+        params: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Delegate a high-level mission to the UnifiedOrchestrator.
+
+        Args:
+            mission_type: One of the MissionType values from workflow_templates.
+            params: Parameters for the mission template.
+
+        Returns:
+            Mission execution result from the orchestrator.
+        """
+        orchestrator = self._get_module("unified_orchestrator")
+        if orchestrator is None:
+            return {"success": False, "error": "UnifiedOrchestrator not available"}
+
+        try:
+            if hasattr(orchestrator, "execute_mission"):
+                result = await orchestrator.execute_mission(mission_type, params or {})
+                return result
+            return {"success": False, "error": "execute_mission not found on orchestrator"}
+        except Exception as exc:
+            logger.error("Orchestrator delegation failed: %s", exc)
+            return {"success": False, "error": str(exc)}
+
+    def delegate_to_orchestrator_sync(
+        self, mission_type: str, params: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        return _run_sync(self.delegate_to_orchestrator(mission_type, params))
+
     # ── Sync wrappers ──
 
     def set_goal_sync(self, text: str, **kwargs) -> Goal:
@@ -946,6 +1163,21 @@ def _cli_action(args: argparse.Namespace) -> None:
     _print_json(result if isinstance(result, (dict, list)) else {"result": str(result)})
 
 
+def _cli_converse(args: argparse.Namespace) -> None:
+    agent = get_autonomous_agent()
+    result = agent.converse_sync(args.message, session_id=args.session)
+    print(f"\n{result.get('response', '')}\n")
+    if result.get("suggested_actions"):
+        print(f"Suggested actions: {', '.join(result['suggested_actions'])}")
+
+
+def _cli_delegate(args: argparse.Namespace) -> None:
+    agent = get_autonomous_agent()
+    params = json.loads(args.params) if args.params else {}
+    result = agent.delegate_to_orchestrator_sync(args.mission, params)
+    _print_json(result)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="autonomous_agent",
@@ -990,6 +1222,18 @@ def main() -> None:
     ac.add_argument("--method", required=True)
     ac.add_argument("--args", default=None, help="JSON dict of arguments")
     ac.set_defaults(func=_cli_action)
+
+    # converse (Phase 6)
+    cv = sub.add_parser("converse", help="Chat with the agent")
+    cv.add_argument("--message", required=True, help="Message to send")
+    cv.add_argument("--session", default=None, help="Session ID for continuity")
+    cv.set_defaults(func=_cli_converse)
+
+    # delegate (Phase 6)
+    dl = sub.add_parser("delegate", help="Delegate mission to orchestrator")
+    dl.add_argument("--mission", required=True, help="Mission type")
+    dl.add_argument("--params", default=None, help="JSON dict of params")
+    dl.set_defaults(func=_cli_delegate)
 
     args = parser.parse_args()
 

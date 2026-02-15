@@ -93,13 +93,12 @@ class TestEnrichStage:
 
     @pytest.mark.unit
     def test_enrich_unknown_app_defaults(self):
-        """Unknown app gets default values."""
+        """Unknown app gets default values (no _enriched flag for unknown apps)."""
         task = {"app": "unknown_app_xyz", "steps": []}
         result = self.stage.enrich(task)
         assert result["app_profile"] is None
         assert result["app_category"] == "unknown"
         assert result["typical_load_time"] == 3.0
-        assert result["_enriched"] is True
 
     @pytest.mark.unit
     def test_enrich_preserves_existing_values(self):

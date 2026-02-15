@@ -2244,6 +2244,148 @@ class EmpireManager:
 
 
 # ---------------------------------------------------------------------------
+# Phase 6: Affiliate Injection + A/B Tracking Hooks
+# ---------------------------------------------------------------------------
+
+def inject_affiliate_links(content: str, site_id: str) -> str:
+    """
+    Hook for the content pipeline to inject affiliate links into article HTML.
+
+    Delegates to AffiliateManager if available. Falls back to returning
+    content unchanged.
+
+    Args:
+        content: Article HTML content.
+        site_id: Site identifier for affiliate config lookup.
+
+    Returns:
+        HTML content with affiliate links injected.
+    """
+    try:
+        from src.affiliate_manager import get_affiliate_manager
+        manager = get_affiliate_manager()
+        result = manager.inject_links(content, site_id)
+        if isinstance(result, str):
+            return result
+        if isinstance(result, dict):
+            return result.get("content", content)
+    except ImportError:
+        logger.debug("AffiliateManager not available — skipping affiliate injection")
+    except Exception as exc:
+        logger.warning("Affiliate injection failed: %s — using original content", exc)
+    return content
+
+
+def add_ab_tracking(content: str, variant: str = "", experiment_id: str = "") -> str:
+    """
+    Add A/B test tracking metadata to article HTML.
+
+    Inserts a hidden tracking div and UTM parameters for A/B experiment tracking.
+
+    Args:
+        content: Article HTML content.
+        variant: Variant identifier (e.g., "A", "B").
+        experiment_id: Experiment ID from ab_testing module.
+
+    Returns:
+        HTML content with tracking metadata.
+    """
+    if not variant or not experiment_id:
+        return content
+
+    tracking_div = (
+        f'<div class="ab-tracking" style="display:none" '
+        f'data-experiment="{experiment_id}" '
+        f'data-variant="{variant}"></div>'
+    )
+
+    # Insert tracking div at the end of content
+    if "</body>" in content:
+        content = content.replace("</body>", f"{tracking_div}</body>")
+    else:
+        content = content + tracking_div
+
+    return content
+
+
+async def publish_with_pipeline_hooks(
+    site_id: str,
+    title: str,
+    content: str,
+    status: str = "publish",
+    variant: str = "",
+    experiment_id: str = "",
+    inject_affiliates: bool = True,
+) -> dict:
+    """
+    Publish a post with full pipeline hooks: affiliate injection, A/B tracking,
+    and post-publish notifications.
+
+    Args:
+        site_id: Site identifier.
+        title: Post title.
+        content: HTML content.
+        status: WordPress post status.
+        variant: A/B test variant (optional).
+        experiment_id: A/B experiment ID (optional).
+        inject_affiliates: Whether to inject affiliate links.
+
+    Returns:
+        Dict with post_id, url, and hook results.
+    """
+    result: Dict[str, Any] = {
+        "site_id": site_id,
+        "title": title,
+        "post_id": None,
+        "url": "",
+        "hooks_applied": [],
+    }
+
+    # Hook 1: Affiliate injection
+    if inject_affiliates:
+        content = inject_affiliate_links(content, site_id)
+        result["hooks_applied"].append("affiliate_injection")
+
+    # Hook 2: A/B tracking
+    if variant and experiment_id:
+        content = add_ab_tracking(content, variant, experiment_id)
+        result["hooks_applied"].append("ab_tracking")
+
+    # Publish via site client
+    try:
+        client = get_site_client(site_id)
+        post = await client.create_post(title, content, status=status)
+        if isinstance(post, dict):
+            result["post_id"] = post.get("id")
+            result["url"] = post.get("link", "")
+        logger.info("Published '%s' to %s (post_id=%s)", title[:40], site_id, result["post_id"])
+    except Exception as exc:
+        logger.error("Publish failed for %s: %s", site_id, exc)
+        result["error"] = str(exc)
+
+    return result
+
+
+def publish_with_pipeline_hooks_sync(
+    site_id: str, title: str, content: str, **kwargs,
+) -> dict:
+    """Sync wrapper for publish_with_pipeline_hooks."""
+    import asyncio as _asyncio
+    try:
+        loop = _asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop and loop.is_running():
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(1) as pool:
+            return pool.submit(
+                _asyncio.run,
+                publish_with_pipeline_hooks(site_id, title, content, **kwargs),
+            ).result()
+    return _asyncio.run(publish_with_pipeline_hooks(site_id, title, content, **kwargs))
+
+
+# ---------------------------------------------------------------------------
 # Module-level convenience functions
 # ---------------------------------------------------------------------------
 

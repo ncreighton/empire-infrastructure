@@ -130,6 +130,33 @@ def _import_autonomous_agent():
     return get_autonomous_agent
 
 
+# ── Phase 6 lazy imports ──
+
+def _import_content_pipeline():
+    from src.content_pipeline import get_pipeline
+    return get_pipeline
+
+
+def _import_device_pool():
+    from src.device_pool import get_pool
+    return get_pool
+
+
+def _import_content_quality():
+    from src.content_quality_scorer import get_scorer
+    return get_scorer
+
+
+def _import_circuit_breaker():
+    from src.circuit_breaker import get_breaker, with_retry
+    return get_breaker, with_retry
+
+
+def _import_audit_logger():
+    from src.audit_logger import get_audit_logger
+    return get_audit_logger
+
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
@@ -1046,6 +1073,193 @@ class IntelligenceHub:
             "started_at": record.started_at,
             "completed_at": record.completed_at,
         }
+
+    # ==================================================================
+    # Phase 6: Content Pipeline Integration
+    # ==================================================================
+
+    async def publish_content(
+        self,
+        site_id: str,
+        title: Optional[str] = None,
+        max_articles: int = 1,
+    ) -> dict:
+        """
+        Execute the full content pipeline for a site.
+
+        Delegates to ContentPipeline which orchestrates: gap detection ->
+        topic selection -> research -> outline -> generate -> voice validate ->
+        quality check -> SEO -> affiliate -> internal link -> WP publish ->
+        image -> social -> n8n notify.
+
+        Args:
+            site_id: Target site identifier.
+            title: Optional specific article title. If None, auto-selects from gaps.
+            max_articles: Maximum number of articles to produce.
+
+        Returns:
+            Dict with pipeline execution results.
+        """
+        result: Dict[str, Any] = {
+            "site_id": site_id,
+            "title": title,
+            "success": False,
+            "articles_published": 0,
+            "errors": [],
+        }
+
+        try:
+            get_pipeline = _import_content_pipeline()
+            pipeline = get_pipeline()
+
+            if title:
+                pipeline_result = await pipeline.execute(site_id, title)
+                result["pipeline_result"] = pipeline_result
+                result["success"] = pipeline_result.get("success", False)
+                result["articles_published"] = 1 if result["success"] else 0
+            else:
+                batch_result = await pipeline.execute_batch([site_id], max_articles=max_articles)
+                result["batch_result"] = batch_result
+                result["success"] = batch_result.get("success", False)
+                result["articles_published"] = batch_result.get("articles_published", 0)
+
+        except Exception as exc:
+            logger.error("Content pipeline failed for %s: %s", site_id, exc)
+            result["errors"].append(str(exc))
+
+        return result
+
+    def publish_content_sync(
+        self, site_id: str, title: Optional[str] = None, max_articles: int = 1,
+    ) -> dict:
+        return _run_sync(self.publish_content(site_id, title, max_articles))
+
+    # ==================================================================
+    # Phase 6: Device Pool Integration
+    # ==================================================================
+
+    async def get_device_pool_status(self) -> dict:
+        """
+        Get unified status of all devices (physical phones + GeeLark cloud).
+
+        Returns fleet overview: total devices, healthy/unhealthy, load, costs.
+        """
+        result: Dict[str, Any] = {
+            "available": False,
+            "total_devices": 0,
+            "healthy": 0,
+            "unhealthy": 0,
+            "devices": [],
+        }
+
+        try:
+            get_pool = _import_device_pool()
+            pool = get_pool()
+
+            await pool.discover_all()
+            devices = pool.list_devices()
+            result["available"] = True
+            result["total_devices"] = len(devices)
+
+            for d in devices:
+                device_info = {
+                    "id": d.get("id", ""),
+                    "name": d.get("name", ""),
+                    "type": d.get("type", "unknown"),
+                    "status": d.get("status", "unknown"),
+                    "current_task": d.get("current_task", ""),
+                }
+                result["devices"].append(device_info)
+                if d.get("status") == "healthy":
+                    result["healthy"] += 1
+                else:
+                    result["unhealthy"] += 1
+
+        except Exception as exc:
+            logger.warning("Device pool unavailable: %s", exc)
+            result["error"] = str(exc)
+
+        return result
+
+    def get_device_pool_status_sync(self) -> dict:
+        return _run_sync(self.get_device_pool_status())
+
+    # ==================================================================
+    # Phase 6: Structured Vision Analysis
+    # ==================================================================
+
+    async def analyze_screen_structured(
+        self,
+        screenshot_path: Optional[str] = None,
+    ) -> dict:
+        """
+        Take a screenshot and return structured analysis with element locations,
+        text content, and actionable suggestions.
+
+        If screenshot_path is None, captures a fresh screenshot from the phone.
+
+        Returns dict with: app, screen, elements, text, suggestions, errors.
+        """
+        result: Dict[str, Any] = {
+            "screenshot_path": screenshot_path,
+            "app": "",
+            "screen": "",
+            "elements": [],
+            "text_content": [],
+            "errors_detected": [],
+            "suggestions": [],
+        }
+
+        # Capture screenshot if not provided
+        if not screenshot_path and self.phone is not None:
+            try:
+                screenshot_path = await self.phone.screenshot()
+                result["screenshot_path"] = screenshot_path
+            except Exception as exc:
+                result["errors_detected"].append(f"Screenshot failed: {exc}")
+                return result
+
+        if not screenshot_path:
+            result["errors_detected"].append("No screenshot available (phone not connected)")
+            return result
+
+        # Full vision analysis
+        if self.vision is not None:
+            try:
+                analysis = await self.vision.analyze_screen(image_path=screenshot_path)
+                result["app"] = getattr(analysis, "current_app", "")
+                result["screen"] = getattr(analysis, "current_screen", "")
+                result["text_content"] = getattr(analysis, "visible_text", [])[:30]
+                result["elements"] = [
+                    {"text": e.get("text", ""), "type": e.get("type", ""), "bounds": e.get("bounds", {})}
+                    for e in getattr(analysis, "tappable_elements", [])[:20]
+                ]
+
+                # Error detection
+                errors = await self.vision.detect_errors(image_path=screenshot_path)
+                if getattr(errors, "has_errors", False):
+                    result["errors_detected"].append(getattr(errors, "error_message", "Unknown error"))
+
+            except Exception as exc:
+                logger.warning("Structured vision analysis failed: %s", exc)
+                result["errors_detected"].append(f"Vision analysis error: {exc}")
+
+        # Quality check via ContentQualityScorer if text content available
+        try:
+            get_scorer = _import_content_quality()
+            scorer = get_scorer()
+            if result["text_content"] and hasattr(scorer, "quick_score"):
+                combined_text = " ".join(result["text_content"][:10])
+                if len(combined_text) > 100:
+                    score = scorer.quick_score(combined_text)
+                    result["content_quality_score"] = score
+        except Exception:
+            pass
+
+        return result
+
+    def analyze_screen_structured_sync(self, screenshot_path: Optional[str] = None) -> dict:
+        return _run_sync(self.analyze_screen_structured(screenshot_path))
 
 
 # ===================================================================
