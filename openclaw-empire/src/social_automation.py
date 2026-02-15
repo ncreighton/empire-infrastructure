@@ -3187,3 +3187,842 @@ class LinkedInBot(BasePlatformBot):
             f"-d file://{device_path}"
         )
         await self.cool_down(1.0)
+
+
+# ---------------------------------------------------------------------------
+# CampaignManager — Multi-step campaign orchestration
+# ---------------------------------------------------------------------------
+
+
+class CampaignManager:
+    """
+    Create, schedule, run, and track multi-step social media campaigns.
+    Campaigns are persisted to JSON and can be run on any device.
+    """
+
+    def __init__(self, bots: Dict[str, BasePlatformBot]) -> None:
+        self._bots = bots
+
+    def create_campaign(
+        self,
+        name: str,
+        platform: str,
+        actions: List[Dict[str, Any]],
+    ) -> SocialCampaign:
+        """Define a new campaign with a list of action steps."""
+        campaign = SocialCampaign(
+            name=name,
+            platform=platform,
+            actions=[CampaignAction(
+                action_type=a.get("action_type", ""),
+                params=a.get("params", {}),
+            ) for a in actions],
+        )
+        self._save_campaign(campaign)
+        logger.info("Created campaign: %s", campaign.summary())
+        return campaign
+
+    def schedule_campaign(self, campaign_id: str, cron_expr: str) -> Optional[SocialCampaign]:
+        """Attach a cron expression to a campaign for recurring execution."""
+        campaign = self.get_campaign(campaign_id)
+        if not campaign:
+            logger.error("Campaign %s not found", campaign_id)
+            return None
+        campaign.schedule = cron_expr
+        campaign.status = CampaignStatus.SCHEDULED.value
+        campaign.updated_at = datetime.now(timezone.utc).isoformat()
+        self._update_campaign(campaign)
+        logger.info("Scheduled campaign %s: %s", campaign_id, cron_expr)
+        return campaign
+
+    async def run_campaign(self, campaign_id: str) -> Optional[SocialCampaign]:
+        """Execute all actions in a campaign sequentially."""
+        campaign = self.get_campaign(campaign_id)
+        if not campaign:
+            logger.error("Campaign %s not found", campaign_id)
+            return None
+
+        platform = campaign.platform.lower()
+        bot = self._bots.get(platform)
+        if not bot:
+            logger.error("No bot for platform: %s", platform)
+            campaign.status = CampaignStatus.FAILED.value
+            self._update_campaign(campaign)
+            return campaign
+
+        campaign.status = CampaignStatus.RUNNING.value
+        self._update_campaign(campaign)
+        logger.info("Running campaign: %s", campaign.summary())
+
+        success_count = 0
+        fail_count = 0
+
+        for action in campaign.actions:
+            if action.status == "completed":
+                success_count += 1
+                continue
+
+            try:
+                result = await self._execute_action(bot, action)
+                action.status = "completed" if result.success else "failed"
+                action.result = result.to_dict()
+                action.executed_at = datetime.now(timezone.utc).isoformat()
+
+                if result.success:
+                    success_count += 1
+                else:
+                    fail_count += 1
+                    logger.warning("Campaign action failed: %s -- %s",
+                                   action.action_type, result.error)
+
+            except Exception as exc:
+                action.status = "failed"
+                action.result = {"error": str(exc)}
+                fail_count += 1
+                logger.error("Campaign action error: %s", exc)
+
+            # Rest between actions
+            await asyncio.sleep(random.uniform(5.0, 15.0))
+
+        campaign.status = (CampaignStatus.COMPLETED.value
+                           if fail_count == 0
+                           else CampaignStatus.FAILED.value)
+        campaign.results = {
+            "total": len(campaign.actions),
+            "success": success_count,
+            "failed": fail_count,
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+        }
+        campaign.updated_at = datetime.now(timezone.utc).isoformat()
+        self._update_campaign(campaign)
+        logger.info("Campaign %s finished: %d/%d success",
+                     campaign_id, success_count, len(campaign.actions))
+        return campaign
+
+    def run_campaign_sync(self, campaign_id: str) -> Optional[SocialCampaign]:
+        """Synchronous wrapper for run_campaign."""
+        return _run_sync(self.run_campaign(campaign_id))
+
+    async def _execute_action(
+        self, bot: BasePlatformBot, action: CampaignAction,
+    ) -> ActionRecord:
+        """Dispatch a campaign action to the appropriate bot method."""
+        atype = action.action_type.lower()
+        params = action.params
+
+        # Map action types to bot methods
+        if atype == "post_photo" and isinstance(bot, InstagramBot):
+            return await bot.post_photo(
+                params.get("image_path", ""), params.get("caption", ""),
+                params.get("hashtags"), params.get("location"),
+            )
+        elif atype == "post_story" and isinstance(bot, InstagramBot):
+            return await bot.post_story(
+                params.get("image_path", ""), params.get("stickers"),
+                params.get("text_overlay"),
+            )
+        elif atype == "post_reel" and isinstance(bot, InstagramBot):
+            return await bot.post_reel(
+                params.get("video_path", ""), params.get("caption", ""),
+                params.get("hashtags"), params.get("audio_name"),
+            )
+        elif atype == "like_posts" and isinstance(bot, InstagramBot):
+            return await bot.like_posts(
+                params.get("hashtag", ""), params.get("count", 10),
+            )
+        elif atype == "upload_video" and isinstance(bot, TikTokBot):
+            return await bot.upload_video(
+                params.get("video_path", ""), params.get("caption", ""),
+                params.get("hashtags"), params.get("sounds"),
+            )
+        elif atype == "create_pin" and isinstance(bot, PinterestBot):
+            return await bot.create_pin(
+                params.get("image_path", ""), params.get("title", ""),
+                params.get("description", ""), params.get("link", ""),
+                params.get("board_name", ""),
+            )
+        elif atype == "bulk_pin" and isinstance(bot, PinterestBot):
+            return await bot.bulk_pin(params.get("pins_data", []))
+        elif atype == "create_post" and isinstance(bot, (FacebookBot, LinkedInBot)):
+            return await bot.create_post(
+                params.get("text", ""), params.get("images"),
+            )
+        elif atype == "post_tweet" and isinstance(bot, TwitterBot):
+            return await bot.post_tweet(
+                params.get("text", ""), params.get("images"),
+                params.get("poll_options"),
+            )
+        else:
+            # Generic: try calling method by name
+            method = getattr(bot, atype, None)
+            if method and callable(method):
+                return await method(**params)
+            return ActionRecord(
+                platform=bot.package_name_to_platform(),
+                category="unknown",
+                description=f"Unknown action: {atype}",
+                error=f"No handler for action type: {atype}",
+            )
+
+    def campaign_results(self, campaign_id: str) -> Dict[str, Any]:
+        """Get success/failure stats for a campaign."""
+        campaign = self.get_campaign(campaign_id)
+        if not campaign:
+            return {"error": f"Campaign {campaign_id} not found"}
+        return {
+            "campaign_id": campaign.campaign_id,
+            "name": campaign.name,
+            "platform": campaign.platform,
+            "status": campaign.status,
+            "results": campaign.results,
+            "actions": [{
+                "type": a.action_type,
+                "status": a.status,
+                "executed_at": a.executed_at,
+            } for a in campaign.actions],
+        }
+
+    # -- Persistence -------------------------------------------------------
+
+    def get_campaign(self, campaign_id: str) -> Optional[SocialCampaign]:
+        """Load a campaign by ID."""
+        for c in _load_json(CAMPAIGNS_FILE, default=[]):
+            if c.get("campaign_id") == campaign_id:
+                return SocialCampaign.from_dict(c)
+        return None
+
+    def list_campaigns(
+        self,
+        platform: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: int = 20,
+    ) -> List[SocialCampaign]:
+        """List campaigns with optional filters."""
+        raw = _load_json(CAMPAIGNS_FILE, default=[])
+        if platform:
+            raw = [c for c in raw if c.get("platform") == platform.lower()]
+        if status:
+            raw = [c for c in raw if c.get("status") == status.lower()]
+        raw = raw[-limit:]
+        raw.reverse()
+        return [SocialCampaign.from_dict(c) for c in raw]
+
+    def _save_campaign(self, campaign: SocialCampaign) -> None:
+        """Append a new campaign to storage."""
+        _bounded_append(CAMPAIGNS_FILE, [campaign.to_dict()], MAX_CAMPAIGNS)
+
+    def _update_campaign(self, campaign: SocialCampaign) -> None:
+        """Update an existing campaign in storage."""
+        raw = _load_json(CAMPAIGNS_FILE, default=[])
+        for i, c in enumerate(raw):
+            if c.get("campaign_id") == campaign.campaign_id:
+                raw[i] = campaign.to_dict()
+                _save_json(CAMPAIGNS_FILE, raw)
+                return
+        # Not found: append
+        raw.append(campaign.to_dict())
+        if len(raw) > MAX_CAMPAIGNS:
+            raw = raw[-MAX_CAMPAIGNS:]
+        _save_json(CAMPAIGNS_FILE, raw)
+
+
+# ---------------------------------------------------------------------------
+# AnalyticsScraper — Cross-platform analytics extraction
+# ---------------------------------------------------------------------------
+
+
+class AnalyticsScraper:
+    """
+    Scrape analytics from any platform by navigating to the analytics
+    screen and extracting metrics via OCR/vision. Tracks daily growth.
+    """
+
+    def __init__(self, bots: Dict[str, BasePlatformBot]) -> None:
+        self._bots = bots
+
+    async def scrape_analytics(
+        self,
+        platform: str,
+        metric_names: Optional[List[str]] = None,
+    ) -> AnalyticsSnapshot:
+        """Navigate to analytics on a platform and extract metrics."""
+        platform = platform.lower()
+        bot = self._bots.get(platform)
+        if not bot:
+            return AnalyticsSnapshot(
+                platform=platform,
+                metrics={"error": f"No bot for platform: {platform}"},
+            )
+
+        # Each bot has a check_analytics or check_insights method
+        if isinstance(bot, InstagramBot):
+            snapshot = await bot.check_insights()
+        elif isinstance(bot, TikTokBot):
+            snapshot = await bot.check_analytics()
+        elif isinstance(bot, PinterestBot):
+            snapshot = await bot.check_analytics()
+        elif isinstance(bot, FacebookBot):
+            snapshot = await bot.check_page_insights("default")
+        elif isinstance(bot, TwitterBot):
+            snapshot = await bot.check_analytics()
+        elif isinstance(bot, LinkedInBot):
+            snapshot = await bot.check_profile_views()
+        else:
+            snapshot = AnalyticsSnapshot(
+                platform=platform,
+                metrics={"error": "No analytics method"},
+            )
+
+        # Filter to requested metrics
+        if metric_names and isinstance(snapshot.metrics, dict):
+            filtered = {k: v for k, v in snapshot.metrics.items()
+                        if k in metric_names or k in ("error", "raw")}
+            if filtered:
+                snapshot.metrics = filtered
+
+        # Persist
+        _bounded_append(ANALYTICS_FILE, [snapshot.to_dict()], MAX_ANALYTICS)
+        return snapshot
+
+    def scrape_analytics_sync(
+        self,
+        platform: str,
+        metric_names: Optional[List[str]] = None,
+    ) -> AnalyticsSnapshot:
+        """Synchronous wrapper for scrape_analytics."""
+        return _run_sync(self.scrape_analytics(platform, metric_names))
+
+    async def track_growth(self, platform: str, days: int = 30) -> List[Dict[str, Any]]:
+        """Return daily analytics snapshots for growth tracking."""
+        all_snapshots = _load_json(ANALYTICS_FILE, default=[])
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        filtered = [
+            s for s in all_snapshots
+            if s.get("platform") == platform.lower()
+            and s.get("captured_at", "") >= cutoff
+        ]
+        # Group by date
+        by_date: Dict[str, Dict[str, Any]] = {}
+        for s in filtered:
+            d = s.get("captured_at", "")[:10]
+            if d not in by_date:
+                by_date[d] = s.get("metrics", {})
+        return [{"date": d, "metrics": m} for d, m in sorted(by_date.items())]
+
+    def track_growth_sync(self, platform: str, days: int = 30) -> List[Dict[str, Any]]:
+        """Synchronous wrapper for track_growth."""
+        return _run_sync(self.track_growth(platform, days))
+
+    def get_latest_snapshot(self, platform: str) -> Optional[AnalyticsSnapshot]:
+        """Return the most recent analytics snapshot for a platform."""
+        all_snapshots = _load_json(ANALYTICS_FILE, default=[])
+        platform_snaps = [
+            s for s in all_snapshots
+            if s.get("platform") == platform.lower()
+        ]
+        if platform_snaps:
+            return AnalyticsSnapshot.from_dict(platform_snaps[-1])
+        return None
+
+
+# ---------------------------------------------------------------------------
+# SocialBot — Orchestrator with all platform bots
+# ---------------------------------------------------------------------------
+
+
+class SocialBot:
+    """
+    Central orchestrator that provides access to all platform bots,
+    the campaign manager, action limiter, and analytics scraper.
+
+    Usage:
+        bot = get_social_bot()
+        await bot.instagram.post_photo(...)
+        await bot.campaigns.run_campaign(campaign_id)
+        snapshot = await bot.analytics.scrape_analytics("instagram")
+    """
+
+    def __init__(
+        self,
+        controller: Any = None,
+        vision: Any = None,
+    ) -> None:
+        # Late-import to avoid circular dependencies
+        if controller is None:
+            from src.phone_controller import PhoneController
+            controller = PhoneController()
+        if vision is None:
+            from src.phone_controller import VisionLoop
+            vision = VisionLoop(controller)
+
+        self.controller = controller
+        self.vision = vision
+        self.behavior = HumanBehavior()
+        self.limiter = ActionLimiter()
+
+        # Initialize all platform bots
+        self.instagram = InstagramBot(controller, vision, self.behavior, self.limiter)
+        self.tiktok = TikTokBot(controller, vision, self.behavior, self.limiter)
+        self.pinterest = PinterestBot(controller, vision, self.behavior, self.limiter)
+        self.facebook = FacebookBot(controller, vision, self.behavior, self.limiter)
+        self.twitter = TwitterBot(controller, vision, self.behavior, self.limiter)
+        self.linkedin = LinkedInBot(controller, vision, self.behavior, self.limiter)
+
+        self._bots: Dict[str, BasePlatformBot] = {
+            "instagram": self.instagram,
+            "tiktok": self.tiktok,
+            "pinterest": self.pinterest,
+            "facebook": self.facebook,
+            "twitter": self.twitter,
+            "linkedin": self.linkedin,
+        }
+
+        self.campaigns = CampaignManager(self._bots)
+        self.analytics = AnalyticsScraper(self._bots)
+
+        logger.info("SocialBot initialized with %d platforms", len(self._bots))
+
+    def get_bot(self, platform: str) -> Optional[BasePlatformBot]:
+        """Get a specific platform bot by name."""
+        return self._bots.get(platform.lower())
+
+    async def connect(self) -> bool:
+        """Connect to the Android device."""
+        return await self.controller.connect()
+
+    async def close(self) -> None:
+        """Close all connections."""
+        await self.controller.close()
+
+    async def __aenter__(self):
+        await self.connect()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.close()
+
+
+# ---------------------------------------------------------------------------
+# Singleton factory
+# ---------------------------------------------------------------------------
+
+_social_bot_instance: Optional[SocialBot] = None
+
+
+def get_social_bot(
+    controller: Any = None,
+    vision: Any = None,
+) -> SocialBot:
+    """Get or create the singleton SocialBot instance."""
+    global _social_bot_instance
+    if _social_bot_instance is None:
+        _social_bot_instance = SocialBot(controller=controller, vision=vision)
+    return _social_bot_instance
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+
+def _cli_instagram(args: argparse.Namespace) -> None:
+    """Handle Instagram subcommands."""
+    bot = get_social_bot()
+    action = args.action
+
+    if action == "post-photo":
+        result = _run_sync(bot.instagram.post_photo(
+            args.image, args.caption,
+            args.hashtags.split(",") if args.hashtags else None,
+            args.location,
+        ))
+        _print_action_result(result)
+    elif action == "post-story":
+        result = _run_sync(bot.instagram.post_story(
+            args.image, text_overlay=args.text,
+        ))
+        _print_action_result(result)
+    elif action == "post-reel":
+        result = _run_sync(bot.instagram.post_reel(
+            args.video, args.caption,
+            args.hashtags.split(",") if args.hashtags else None,
+        ))
+        _print_action_result(result)
+    elif action == "like":
+        result = _run_sync(bot.instagram.like_posts(
+            args.hashtag, args.count,
+        ))
+        _print_action_result(result)
+    elif action == "follow":
+        result = _run_sync(bot.instagram.follow_users(
+            args.hashtag, args.count,
+        ))
+        _print_action_result(result)
+    elif action == "unfollow":
+        result = _run_sync(bot.instagram.unfollow_users(args.count))
+        _print_action_result(result)
+    elif action == "insights":
+        snapshot = _run_sync(bot.instagram.check_insights())
+        print(json.dumps(snapshot.to_dict(), indent=2))
+    else:
+        print(f"Unknown Instagram action: {action}")
+
+
+def _cli_tiktok(args: argparse.Namespace) -> None:
+    """Handle TikTok subcommands."""
+    bot = get_social_bot()
+    action = args.action
+
+    if action == "upload":
+        result = _run_sync(bot.tiktok.upload_video(
+            args.video, args.caption,
+            args.hashtags.split(",") if args.hashtags else None,
+        ))
+        _print_action_result(result)
+    elif action == "engage":
+        result = _run_sync(bot.tiktok.engage_fyp(
+            args.duration, args.like_ratio,
+        ))
+        _print_action_result(result)
+    elif action == "analytics":
+        snapshot = _run_sync(bot.tiktok.check_analytics())
+        print(json.dumps(snapshot.to_dict(), indent=2))
+    else:
+        print(f"Unknown TikTok action: {action}")
+
+
+def _cli_pinterest(args: argparse.Namespace) -> None:
+    """Handle Pinterest subcommands."""
+    bot = get_social_bot()
+    action = args.action
+
+    if action == "create-pin":
+        result = _run_sync(bot.pinterest.create_pin(
+            args.image, args.title, args.description,
+            args.link, args.board,
+        ))
+        _print_action_result(result)
+    elif action == "create-board":
+        result = _run_sync(bot.pinterest.create_board(
+            args.name, args.description,
+        ))
+        _print_action_result(result)
+    elif action == "analytics":
+        snapshot = _run_sync(bot.pinterest.check_analytics())
+        print(json.dumps(snapshot.to_dict(), indent=2))
+    else:
+        print(f"Unknown Pinterest action: {action}")
+
+
+def _cli_facebook(args: argparse.Namespace) -> None:
+    """Handle Facebook subcommands."""
+    bot = get_social_bot()
+    action = args.action
+
+    if action == "post":
+        result = _run_sync(bot.facebook.create_post(
+            args.text, link=args.link,
+        ))
+        _print_action_result(result)
+    elif action == "group-post":
+        result = _run_sync(bot.facebook.post_to_group(
+            args.group, args.text,
+        ))
+        _print_action_result(result)
+    elif action == "insights":
+        snapshot = _run_sync(bot.facebook.check_page_insights(
+            args.page or "default",
+        ))
+        print(json.dumps(snapshot.to_dict(), indent=2))
+    else:
+        print(f"Unknown Facebook action: {action}")
+
+
+def _cli_twitter(args: argparse.Namespace) -> None:
+    """Handle Twitter subcommands."""
+    bot = get_social_bot()
+    action = args.action
+
+    if action == "tweet":
+        result = _run_sync(bot.twitter.post_tweet(args.text))
+        _print_action_result(result)
+    elif action == "like":
+        result = _run_sync(bot.twitter.like_tweets(
+            args.hashtag, args.count,
+        ))
+        _print_action_result(result)
+    elif action == "follow":
+        result = _run_sync(bot.twitter.follow_from_topic(
+            args.topic, args.count,
+        ))
+        _print_action_result(result)
+    elif action == "analytics":
+        snapshot = _run_sync(bot.twitter.check_analytics())
+        print(json.dumps(snapshot.to_dict(), indent=2))
+    else:
+        print(f"Unknown Twitter action: {action}")
+
+
+def _cli_linkedin(args: argparse.Namespace) -> None:
+    """Handle LinkedIn subcommands."""
+    bot = get_social_bot()
+    action = args.action
+
+    if action == "post":
+        result = _run_sync(bot.linkedin.create_post(args.text))
+        _print_action_result(result)
+    elif action == "connect":
+        result = _run_sync(bot.linkedin.connect_with(
+            args.profile, args.note,
+        ))
+        _print_action_result(result)
+    elif action == "engage":
+        result = _run_sync(bot.linkedin.engage_feed(
+            args.duration, args.like_ratio,
+        ))
+        _print_action_result(result)
+    elif action == "views":
+        snapshot = _run_sync(bot.linkedin.check_profile_views())
+        print(json.dumps(snapshot.to_dict(), indent=2))
+    else:
+        print(f"Unknown LinkedIn action: {action}")
+
+
+def _cli_campaign(args: argparse.Namespace) -> None:
+    """Handle campaign subcommands."""
+    bot = get_social_bot()
+    action = args.action
+
+    if action == "create":
+        actions = json.loads(args.actions) if args.actions else []
+        campaign = bot.campaigns.create_campaign(
+            args.name, args.platform, actions,
+        )
+        print(f"Created: {campaign.summary()}")
+    elif action == "run":
+        campaign = _run_sync(bot.campaigns.run_campaign(args.id))
+        if campaign:
+            print(f"Result: {campaign.summary()}")
+            print(json.dumps(campaign.results, indent=2))
+        else:
+            print(f"Campaign {args.id} not found")
+    elif action == "list":
+        campaigns = bot.campaigns.list_campaigns(
+            platform=args.platform, limit=args.limit,
+        )
+        if not campaigns:
+            print("No campaigns found.")
+        else:
+            for c in campaigns:
+                print(f"  {c.summary()}")
+    elif action == "results":
+        results = bot.campaigns.campaign_results(args.id)
+        print(json.dumps(results, indent=2))
+    else:
+        print(f"Unknown campaign action: {action}")
+
+
+def _cli_limits(args: argparse.Namespace) -> None:
+    """Handle limits subcommands."""
+    bot = get_social_bot()
+    action = args.action
+
+    if action == "show":
+        print(bot.limiter.summary())
+    elif action == "set":
+        bot.limiter.set_limit(args.platform, args.limit_action, args.value)
+        print(f"Set {args.platform}/{args.limit_action} = {args.value}")
+    elif action == "remaining":
+        remaining = bot.limiter.get_remaining(args.platform, args.limit_action)
+        print(f"{args.platform}/{args.limit_action}: {remaining} remaining")
+    else:
+        print(f"Unknown limits action: {action}")
+
+
+def _cli_analytics(args: argparse.Namespace) -> None:
+    """Handle analytics subcommands."""
+    bot = get_social_bot()
+    action = args.action
+
+    if action == "scrape":
+        snapshot = bot.analytics.scrape_analytics_sync(args.platform)
+        print(json.dumps(snapshot.to_dict(), indent=2))
+    elif action == "latest":
+        snapshot = bot.analytics.get_latest_snapshot(args.platform)
+        if snapshot:
+            print(json.dumps(snapshot.to_dict(), indent=2))
+        else:
+            print(f"No analytics found for {args.platform}")
+    else:
+        print(f"Unknown analytics action: {action}")
+
+
+def _cli_growth(args: argparse.Namespace) -> None:
+    """Handle growth tracking subcommands."""
+    bot = get_social_bot()
+    data = bot.analytics.track_growth_sync(args.platform, args.days)
+    if not data:
+        print(f"No growth data for {args.platform}")
+        return
+    print(f"\nGrowth tracking: {args.platform} ({args.days} days)")
+    print("-" * 50)
+    for entry in data:
+        metrics_str = ", ".join(f"{k}={v}" for k, v in entry["metrics"].items()
+                                if k not in ("error", "raw"))
+        print(f"  {entry['date']}: {metrics_str or '(no metrics)'}")
+
+
+def _print_action_result(record: ActionRecord) -> None:
+    """Pretty-print an ActionRecord."""
+    status = "OK" if record.success else "FAILED"
+    print(f"\n[{status}] {record.platform} / {record.category}")
+    print(f"  {record.description}")
+    if record.error:
+        print(f"  Error: {record.error}")
+    if record.metadata:
+        print(f"  Details: {json.dumps(record.metadata)}")
+    print(f"  Duration: {record.duration_ms:.0f}ms")
+
+
+def main() -> None:
+    """CLI entry point with subcommands for each platform and system."""
+    parser = argparse.ArgumentParser(
+        prog="social_automation",
+        description="In-App Social Media Automation -- OpenClaw Empire",
+    )
+    parser.add_argument("--verbose", "-v", action="store_true",
+                        help="Enable verbose logging")
+    sub = parser.add_subparsers(dest="command", help="Platform or system command")
+
+    # --- Instagram ---
+    ig = sub.add_parser("instagram", help="Instagram automation")
+    ig.add_argument("action", choices=[
+        "post-photo", "post-story", "post-reel", "like", "follow",
+        "unfollow", "comment", "dm", "insights", "save",
+    ])
+    ig.add_argument("--image", default="")
+    ig.add_argument("--video", default="")
+    ig.add_argument("--caption", default="")
+    ig.add_argument("--hashtags", default=None)
+    ig.add_argument("--location", default=None)
+    ig.add_argument("--text", default=None)
+    ig.add_argument("--hashtag", default="")
+    ig.add_argument("--count", type=int, default=10)
+    ig.add_argument("--username", default="")
+    ig.add_argument("--message", default="")
+    ig.set_defaults(func=_cli_instagram)
+
+    # --- TikTok ---
+    tt = sub.add_parser("tiktok", help="TikTok automation")
+    tt.add_argument("action", choices=["upload", "live", "engage", "follow", "analytics", "reply"])
+    tt.add_argument("--video", default="")
+    tt.add_argument("--caption", default="")
+    tt.add_argument("--hashtags", default=None)
+    tt.add_argument("--title", default="")
+    tt.add_argument("--duration", type=int, default=10)
+    tt.add_argument("--like-ratio", type=float, default=0.3)
+    tt.add_argument("--count", type=int, default=10)
+    tt.set_defaults(func=_cli_tiktok)
+
+    # --- Pinterest ---
+    pi = sub.add_parser("pinterest", help="Pinterest automation")
+    pi.add_argument("action", choices=[
+        "create-pin", "idea-pin", "create-board", "save-pin",
+        "follow-board", "analytics", "bulk-pin",
+    ])
+    pi.add_argument("--image", default="")
+    pi.add_argument("--title", default="")
+    pi.add_argument("--description", default="")
+    pi.add_argument("--link", default="")
+    pi.add_argument("--board", default="")
+    pi.add_argument("--name", default="")
+    pi.set_defaults(func=_cli_pinterest)
+
+    # --- Facebook ---
+    fb = sub.add_parser("facebook", help="Facebook automation")
+    fb.add_argument("action", choices=[
+        "post", "group-post", "join-group", "share", "messages", "insights", "invite",
+    ])
+    fb.add_argument("--text", default="")
+    fb.add_argument("--link", default=None)
+    fb.add_argument("--group", default="")
+    fb.add_argument("--page", default=None)
+    fb.set_defaults(func=_cli_facebook)
+
+    # --- Twitter ---
+    tw = sub.add_parser("twitter", help="Twitter/X automation")
+    tw.add_argument("action", choices=[
+        "tweet", "reply", "retweet", "quote", "like", "follow", "analytics", "dm",
+    ])
+    tw.add_argument("--text", default="")
+    tw.add_argument("--hashtag", default="")
+    tw.add_argument("--topic", default="")
+    tw.add_argument("--count", type=int, default=10)
+    tw.add_argument("--url", default="")
+    tw.set_defaults(func=_cli_twitter)
+
+    # --- LinkedIn ---
+    li = sub.add_parser("linkedin", help="LinkedIn automation")
+    li.add_argument("action", choices=[
+        "post", "share", "connect", "engage", "views", "message",
+    ])
+    li.add_argument("--text", default="")
+    li.add_argument("--profile", default="")
+    li.add_argument("--note", default=None)
+    li.add_argument("--duration", type=int, default=10)
+    li.add_argument("--like-ratio", type=float, default=0.3)
+    li.set_defaults(func=_cli_linkedin)
+
+    # --- Campaign ---
+    cp = sub.add_parser("campaign", help="Campaign management")
+    cp.add_argument("action", choices=["create", "run", "list", "results", "schedule"])
+    cp.add_argument("--name", default="")
+    cp.add_argument("--platform", default=None)
+    cp.add_argument("--actions", default=None, help="JSON array of action objects")
+    cp.add_argument("--id", default="")
+    cp.add_argument("--cron", default="")
+    cp.add_argument("--limit", type=int, default=20)
+    cp.set_defaults(func=_cli_campaign)
+
+    # --- Limits ---
+    lm = sub.add_parser("limits", help="Action limit management")
+    lm.add_argument("action", choices=["show", "set", "remaining"])
+    lm.add_argument("--platform", default="instagram")
+    lm.add_argument("--limit-action", default="likes")
+    lm.add_argument("--value", type=int, default=100)
+    lm.set_defaults(func=_cli_limits)
+
+    # --- Analytics ---
+    an = sub.add_parser("analytics", help="Analytics scraping")
+    an.add_argument("action", choices=["scrape", "latest"])
+    an.add_argument("--platform", required=True)
+    an.set_defaults(func=_cli_analytics)
+
+    # --- Growth ---
+    gr = sub.add_parser("growth", help="Growth tracking")
+    gr.add_argument("--platform", required=True)
+    gr.add_argument("--days", type=int, default=30)
+    gr.set_defaults(func=_cli_growth)
+
+    args = parser.parse_args()
+
+    if args.verbose:
+        logging.basicConfig(level=logging.DEBUG,
+                            format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+    else:
+        logging.basicConfig(level=logging.INFO,
+                            format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+
+    if not args.command:
+        parser.print_help()
+        sys.exit(1)
+
+    if hasattr(args, "func"):
+        args.func(args)
+    else:
+        parser.print_help()
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
