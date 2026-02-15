@@ -78,6 +78,58 @@ def _import_screenpipe():
     return ScreenpipeAgent
 
 
+# ── Phase 5: Autonomous AI Phone Agent lazy imports ──
+
+def _import_agent_memory():
+    from src.agent_memory import get_memory
+    return get_memory
+
+
+def _import_phone_os():
+    from src.phone_os_agent import get_phone_os_agent
+    return get_phone_os_agent
+
+
+def _import_browser():
+    from src.browser_controller import get_browser
+    return get_browser
+
+
+def _import_identity():
+    from src.identity_manager import get_identity_manager
+    return get_identity_manager
+
+
+def _import_app_learner():
+    from src.app_learner import get_app_learner
+    return get_app_learner
+
+
+def _import_app_discovery():
+    from src.app_discovery import get_app_discovery
+    return get_app_discovery
+
+
+def _import_email_agent():
+    from src.email_agent import get_email_agent
+    return get_email_agent
+
+
+def _import_account_factory():
+    from src.account_factory import get_account_factory
+    return get_account_factory
+
+
+def _import_social_agent():
+    from src.social_media_agent import get_social_agent
+    return get_social_agent
+
+
+def _import_autonomous_agent():
+    from src.autonomous_agent import get_autonomous_agent
+    return get_autonomous_agent
+
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------

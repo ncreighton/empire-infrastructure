@@ -241,6 +241,77 @@ MODULE_REGISTRY: Dict[str, Dict[str, Any]] = {
         "commands": ["start"],
         "deps": ["fastapi", "uvicorn"],
     },
+    # ── Phase 5: Autonomous AI Phone Agent ──
+    "memory": {
+        "module": "src.agent_memory",
+        "description": "Agent long-term memory",
+        "entry": "main",
+        "commands": ["store", "recall", "stats", "consolidate", "export", "import", "session", "prune", "tags", "detail"],
+        "deps": [],
+    },
+    "phone-os": {
+        "module": "src.phone_os_agent",
+        "description": "Full Android OS control",
+        "entry": "main",
+        "commands": ["settings", "files", "contacts", "apps", "system", "profile", "clipboard", "call", "sms"],
+        "deps": [],
+    },
+    "browser": {
+        "module": "src.browser_controller",
+        "description": "Browser automation",
+        "entry": "main",
+        "commands": ["navigate", "search", "tabs", "extract", "form", "bookmarks", "history", "download", "click", "browsers"],
+        "deps": [],
+    },
+    "identity": {
+        "module": "src.identity_manager",
+        "description": "Digital identity generator",
+        "entry": "main",
+        "commands": ["generate", "list", "show", "profile", "search", "group", "export", "import", "stats", "warming", "burn", "clone"],
+        "deps": [],
+    },
+    "learner": {
+        "module": "src.app_learner",
+        "description": "Self-teaching app navigator",
+        "entry": "main",
+        "commands": ["explore", "knowledge", "path", "playbook", "correct", "delete", "export", "import", "apps"],
+        "deps": [],
+    },
+    "apps": {
+        "module": "src.app_discovery",
+        "description": "App discovery & installation",
+        "entry": "main",
+        "commands": ["search", "install", "uninstall", "update", "evaluate", "inventory", "sideload", "tag", "stats"],
+        "deps": [],
+    },
+    "email": {
+        "module": "src.email_agent",
+        "description": "Email account management",
+        "entry": "main",
+        "commands": ["create", "inbox", "send", "verify", "accounts", "login", "stats"],
+        "deps": [],
+    },
+    "factory": {
+        "module": "src.account_factory",
+        "description": "Account creation engine",
+        "entry": "main",
+        "commands": ["create", "templates", "warm", "jobs", "status"],
+        "deps": [],
+    },
+    "social-agent": {
+        "module": "src.social_media_agent",
+        "description": "AI social media manager",
+        "entry": "main",
+        "commands": ["strategy", "engage", "analytics", "growth", "competitor", "dms", "post", "stats", "strategies"],
+        "deps": ["anthropic"],
+    },
+    "agent": {
+        "module": "src.autonomous_agent",
+        "description": "Autonomous AI brain",
+        "entry": "main",
+        "commands": ["goal", "run", "status", "goals", "sessions", "action"],
+        "deps": ["anthropic"],
+    },
 }
 
 
