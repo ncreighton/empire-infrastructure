@@ -1,0 +1,46 @@
+# ===========================================================================
+# OpenClaw Empire — Production Overrides (Contabo VPS)
+# ===========================================================================
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# This file overrides the base docker-compose.yml for production deployment
+# on vmi2976539.contaboserver.net.
+# ===========================================================================
+
+services:
+  openclaw-api:
+    # Build in place on the server (no registry push needed)
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # Resource limits — conservative for shared Contabo VPS
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+        reservations:
+          memory: 256M
+          cpus: "0.25"
+    environment:
+      # Production auth is always enabled
+      - OPENCLAW_AUTH_DISABLED=false
+      # Production CORS — gateway, dashboard, and VPS itself
+      - OPENCLAW_CORS_ORIGINS=https://vmi2976539.contaboserver.net,http://vmi2976539.contaboserver.net:8766,http://localhost:8765
+      # Point to co-located services on the VPS
+      - N8N_BASE_URL=http://host.docker.internal:5678
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  openclaw-dashboard:
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"

@@ -1,0 +1,112 @@
+# ===========================================================================
+# OpenClaw Empire — Docker Compose (Base Configuration)
+# ===========================================================================
+# Usage:
+#   docker compose up -d                     # Development
+#   docker compose -f docker-compose.yml \
+#     -f docker-compose.prod.yml up -d       # Production (Contabo)
+# ===========================================================================
+
+services:
+  # -------------------------------------------------------------------------
+  # OpenClaw API Server — FastAPI with 58+ endpoints
+  # -------------------------------------------------------------------------
+  openclaw-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: openclaw-api
+    ports:
+      - "8765:8765"
+    volumes:
+      - ./data:/app/data                  # Persistent data (FORGE, AMPLIFY, scheduler, revenue)
+      - ./configs:/app/configs:ro         # Site registry, app registry (read-only)
+    env_file:
+      - .env
+    environment:
+      # --- Core ---
+      - OPENCLAW_API_PORT=8765
+      - OPENCLAW_AUTH_DISABLED=false
+      - OPENCLAW_CORS_ORIGINS=${OPENCLAW_CORS_ORIGINS:-http://localhost:3000,http://localhost:8765}
+      # --- External Service URLs ---
+      - OPENCLAW_NODE_URL=${OPENCLAW_NODE_URL:-http://host.docker.internal:18789}
+      - OPENCLAW_ANDROID_NODE=${OPENCLAW_ANDROID_NODE:-android}
+      - VISION_SERVICE_URL=${VISION_SERVICE_URL:-http://host.docker.internal:8002}
+      - SCREENPIPE_URL=${SCREENPIPE_URL:-http://host.docker.internal:3030}
+      - N8N_BASE_URL=${N8N_BASE_URL:-http://host.docker.internal:5678}
+      # --- API Keys (from .env) ---
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENCLAW_API_TOKEN=${OPENCLAW_API_TOKEN}
+      - N8N_API_KEY=${N8N_API_KEY}
+      - N8N_WEBHOOK_SECRET=${N8N_WEBHOOK_SECRET}
+      # --- WordPress App Passwords (from .env) ---
+      - WP_WITCHCRAFT_APP_PASSWORD=${WP_WITCHCRAFT_APP_PASSWORD:-}
+      - WP_SMARTHOME_APP_PASSWORD=${WP_SMARTHOME_APP_PASSWORD:-}
+      - WP_AIACTION_APP_PASSWORD=${WP_AIACTION_APP_PASSWORD:-}
+      - WP_AIDISCOVERY_APP_PASSWORD=${WP_AIDISCOVERY_APP_PASSWORD:-}
+      - WP_WEALTHAI_APP_PASSWORD=${WP_WEALTHAI_APP_PASSWORD:-}
+      - WP_FAMILY_APP_PASSWORD=${WP_FAMILY_APP_PASSWORD:-}
+      - WP_MYTHICAL_APP_PASSWORD=${WP_MYTHICAL_APP_PASSWORD:-}
+      - WP_BULLETJOURNALS_APP_PASSWORD=${WP_BULLETJOURNALS_APP_PASSWORD:-}
+      - WP_CRYSTALWITCHCRAFT_APP_PASSWORD=${WP_CRYSTALWITCHCRAFT_APP_PASSWORD:-}
+      - WP_HERBALWITCHERY_APP_PASSWORD=${WP_HERBALWITCHERY_APP_PASSWORD:-}
+      - WP_MOONPHASEWITCH_APP_PASSWORD=${WP_MOONPHASEWITCH_APP_PASSWORD:-}
+      - WP_TAROTBEGINNERS_APP_PASSWORD=${WP_TAROTBEGINNERS_APP_PASSWORD:-}
+      - WP_SPELLSRITUALS_APP_PASSWORD=${WP_SPELLSRITUALS_APP_PASSWORD:-}
+      - WP_PAGANPATHWAYS_APP_PASSWORD=${WP_PAGANPATHWAYS_APP_PASSWORD:-}
+      - WP_WITCHYHOMEDECOR_APP_PASSWORD=${WP_WITCHYHOMEDECOR_APP_PASSWORD:-}
+      - WP_SEASONALWITCHCRAFT_APP_PASSWORD=${WP_SEASONALWITCHCRAFT_APP_PASSWORD:-}
+      # --- Social / Platform Keys (from .env) ---
+      - PINTEREST_ACCESS_TOKEN=${PINTEREST_ACCESS_TOKEN:-}
+      - ETSY_API_KEY=${ETSY_API_KEY:-}
+      - KDP_EMAIL=${KDP_EMAIL:-}
+      # --- Notifications (from .env) ---
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_FROM=${SMTP_FROM:-}
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - empire-net
+
+  # -------------------------------------------------------------------------
+  # OpenClaw Dashboard — Static file server
+  # -------------------------------------------------------------------------
+  openclaw-dashboard:
+    image: nginx:alpine
+    container_name: openclaw-dashboard
+    ports:
+      - "8766:80"
+    volumes:
+      - ./dashboard:/usr/share/nginx/html:ro
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+    networks:
+      - empire-net
+
+# ---------------------------------------------------------------------------
+# Networks
+# ---------------------------------------------------------------------------
+networks:
+  empire-net:
+    driver: bridge
+
+# ---------------------------------------------------------------------------
+# Named volumes (alternative to bind mounts — uncomment to use)
+# ---------------------------------------------------------------------------
+# volumes:
+#   openclaw-data:
+#     driver: local
