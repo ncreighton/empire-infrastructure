@@ -1,43 +1,42 @@
 """
-Etsy Print-on-Demand Manager -- OpenClaw Empire Edition
-=======================================================
+Etsy POD Manager — OpenClaw Empire Edition
 
-Complete Etsy POD pipeline management for Nick Creighton's witchcraft
-sub-niche print-on-demand empire. Covers design concept management,
-Printify product creation, Etsy listing optimization, SEO title/tag
-generation, order tracking, sales analytics, and inventory management
-across 6 witchcraft sub-niche shops.
+Manages Etsy print-on-demand operations across 6 witchcraft sub-niche shops
+for Nick Creighton's publishing empire. Handles product listings, SEO
+optimization via Claude AI, Printify integration, sales tracking, analytics,
+fee calculation, and seasonal recommendations.
 
-Sub-niches:
-    cosmic_witch   -- Celestial, galaxy, astrology, zodiac
-    cottage_witch  -- Cozy, botanical, herbs, cottagecore
-    green_witch    -- Plants, earth, forest, natural
-    sea_witch      -- Ocean, shells, tides, maritime
-    moon_witch     -- Lunar phases, silver, night sky
-    crystal_witch  -- Gemstones, geometric, prismatic, sparkle
-
-Product types:
-    tshirt, mug, tote, sticker, phonecase, tapestry, journal, card
+Sub-niche shops:
+    cosmic-witch     — Celestial, galaxy, astrology designs
+    cottage-witch    — Cozy, botanical, herb designs
+    green-witch      — Plants, earth, forest designs
+    sea-witch        — Ocean, shells, tides designs
+    moon-witch       — Lunar phases, silver, night designs
+    crystal-witch    — Gemstones, geometric, prism designs
 
 Data persisted to: data/etsy/
 
 Usage:
     from src.etsy_manager import get_manager
 
-    mgr = get_manager()
-    concept = mgr.create_concept("cosmic_witch", "Moon Phase Crystals",
-                                  "Celestial crystal arrangement following lunar cycle")
-    products = mgr.bulk_create_products(concept.concept_id, ["tshirt", "mug", "sticker"])
+    manager = get_manager()
+    product = manager.add_product("cosmic-witch", "Moon Phase Crystal Tee",
+                                  price=24.99, cost=12.50, tags=["cosmic witch"])
+    tags = await manager.generate_tags(product)
+    report = manager.monthly_report()
 
 CLI:
-    python -m src.etsy_manager concept --niche cosmic_witch --title "Moon Phase Crystals"
-    python -m src.etsy_manager product --concept-id ID --types tshirt,mug,sticker
-    python -m src.etsy_manager seo --niche cosmic_witch
+    python -m src.etsy_manager shops
+    python -m src.etsy_manager products --shop cosmic-witch
+    python -m src.etsy_manager add --shop cosmic-witch --title "Moon Tee" --price 24.99 --cost 12.50
     python -m src.etsy_manager sales --period month
-    python -m src.etsy_manager top --count 20
-    python -m src.etsy_manager profit --period month
-    python -m src.etsy_manager niches
-    python -m src.etsy_manager design-prompt --concept-id ID
+    python -m src.etsy_manager report --shop cosmic-witch
+    python -m src.etsy_manager tags --product-id PROD_ID
+    python -m src.etsy_manager optimize --product-id PROD_ID
+    python -m src.etsy_manager margins --shop cosmic-witch
+    python -m src.etsy_manager search --query "moon phase"
+    python -m src.etsy_manager analytics --shop cosmic-witch
+    python -m src.etsy_manager seasonal
 """
 
 from __future__ import annotations
@@ -47,10 +46,13 @@ import asyncio
 import json
 import logging
 import os
+import re
 import sys
 import uuid
+from collections import defaultdict
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timedelta, timezone
+from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
 
@@ -61,246 +63,65 @@ logger = logging.getLogger("etsy_manager")
 # ---------------------------------------------------------------------------
 
 BASE_DIR = Path(r"D:\Claude Code Projects\openclaw-empire")
-ETSY_DATA_DIR = BASE_DIR / "data" / "etsy"
-CONCEPTS_FILE = ETSY_DATA_DIR / "concepts.json"
-PRODUCTS_FILE = ETSY_DATA_DIR / "products.json"
-SALES_FILE = ETSY_DATA_DIR / "sales.json"
-LISTINGS_FILE = ETSY_DATA_DIR / "listings.json"
-REPORTS_DIR = ETSY_DATA_DIR / "reports"
+DATA_DIR = BASE_DIR / "data" / "etsy"
+PRODUCTS_FILE = DATA_DIR / "products.json"
+SHOPS_FILE = DATA_DIR / "shops.json"
+SALES_FILE = DATA_DIR / "sales.json"
+ANALYTICS_FILE = DATA_DIR / "analytics.json"
+CONFIG_FILE = DATA_DIR / "config.json"
 
 # Ensure directories exist on import
-ETSY_DATA_DIR.mkdir(parents=True, exist_ok=True)
-REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 # ---------------------------------------------------------------------------
-# Constants -- Anthropic models (cost-optimized per CLAUDE.md)
+# Constants — Anthropic models (cost-optimized per CLAUDE.md)
 # ---------------------------------------------------------------------------
 
-HAIKU_MODEL = "claude-haiku-4-5-20251001"   # SEO title/tag/description generation
-SONNET_MODEL = "claude-sonnet-4-20250514"   # Complex content tasks
-MAX_SEO_TOKENS = 500                         # Titles, tags
-MAX_DESCRIPTION_TOKENS = 1500                # Full product descriptions
+HAIKU_MODEL = "claude-haiku-4-5-20251001"       # Tags, classification
+SONNET_MODEL = "claude-sonnet-4-20250514"        # Descriptions, optimization
+MAX_TAGS_TOKENS = 200                            # Short tag list output
+MAX_TITLE_TOKENS = 150                           # Optimized title output
+MAX_DESCRIPTION_TOKENS = 1500                    # Full product description
+MAX_SUGGESTION_TOKENS = 500                      # Price/seasonal suggestions
 
 # ---------------------------------------------------------------------------
-# Etsy fee structure
+# Etsy fee constants (as of 2026)
 # ---------------------------------------------------------------------------
 
-ETSY_LISTING_FEE = 0.20           # Per listing
-ETSY_TRANSACTION_FEE_PCT = 0.065  # 6.5% of sale price
-ETSY_PAYMENT_PROCESSING_PCT = 0.03  # 3% payment processing
+ETSY_LISTING_FEE = 0.20            # Per listing, per 4-month renewal
+ETSY_TRANSACTION_FEE_PCT = 0.065   # 6.5% of item price + shipping
+ETSY_PAYMENT_PROCESSING_PCT = 0.03 # 3% of item total
 ETSY_PAYMENT_PROCESSING_FLAT = 0.25  # $0.25 per transaction
+ETSY_OFFSITE_ADS_PCT = 0.15       # 15% for shops under $10K/yr (optional)
 
-ETSY_MAX_TITLE_LENGTH = 140
 ETSY_MAX_TAGS = 13
+ETSY_TITLE_MAX_LENGTH = 140
 
 # ---------------------------------------------------------------------------
-# Valid niche IDs
+# Data bounds
 # ---------------------------------------------------------------------------
 
-VALID_NICHES = [
-    "cosmic_witch", "cottage_witch", "green_witch",
-    "sea_witch", "moon_witch", "crystal_witch",
-]
+MAX_PRODUCTS = 2000
+MAX_SALES_RECORDS = 10000
 
 # ---------------------------------------------------------------------------
-# Sub-Niche Profiles
+# Product types from SKILL.md
 # ---------------------------------------------------------------------------
 
-NICHES: dict[str, dict[str, Any]] = {
-    "cosmic_witch": {
-        "name": "Cosmic Witch",
-        "style": "Celestial, galaxy, astrology, zodiac",
-        "colors": ["#1a0533", "#4B0082", "#FFD700", "#C0C0C0"],
-        "audience": "Astrology lovers, new witches, cosmic aesthetic fans",
-        "keywords": [
-            "cosmic witch", "celestial", "zodiac", "astrology", "galaxy witch",
-            "cosmic witchcraft", "star witch", "celestial witch aesthetic",
-        ],
-        "hashtags": [
-            "#cosmicwitch", "#celestialwitch", "#zodiacwitch", "#astrologyaesthetic",
-            "#galaxywitch", "#starwitch", "#witchyvibes", "#cosmicmagic",
-        ],
-        "themes": [
-            "moon phases", "zodiac signs", "constellations", "cosmic energy",
-            "starry night", "planetary magic", "galaxy patterns", "astral projection",
-        ],
-    },
-    "cottage_witch": {
-        "name": "Cottage Witch",
-        "style": "Cozy, botanical, herbs, cottagecore",
-        "colors": ["#8B7355", "#567D46", "#F5DEB3", "#DEB887"],
-        "audience": "Nature lovers, kitchen witches, cottagecore fans",
-        "keywords": [
-            "cottage witch", "kitchen witch", "herbal", "botanical", "cottagecore",
-            "cottage witchcraft", "herb witch", "cozy witch aesthetic",
-        ],
-        "hashtags": [
-            "#cottagewitch", "#kitchenwitch", "#herbalwitch", "#cottagecore",
-            "#botanicalwitch", "#cozywitch", "#herbmagic", "#witchykitchen",
-        ],
-        "themes": [
-            "herbs and flowers", "mushrooms", "tea and potions", "garden witch",
-            "cozy spells", "baking magic", "preserving herbs", "wildflower bouquets",
-        ],
-    },
-    "green_witch": {
-        "name": "Green Witch",
-        "style": "Plants, earth, forest, natural",
-        "colors": ["#228B22", "#2E8B57", "#8B4513", "#DAA520"],
-        "audience": "Herbalists, eco-conscious, plant lovers",
-        "keywords": [
-            "green witch", "earth witch", "plant witch", "forest witch", "herbal magic",
-            "green witchcraft", "nature witch", "plant magic",
-        ],
-        "hashtags": [
-            "#greenwitch", "#earthwitch", "#plantwitch", "#forestwitch",
-            "#herbalmagic", "#naturewitch", "#greenwitchcraft", "#plantmagic",
-        ],
-        "themes": [
-            "ancient trees", "fern patterns", "moss and lichen", "sacred groves",
-            "herbal remedies", "forest floor", "root magic", "earth elementals",
-        ],
-    },
-    "sea_witch": {
-        "name": "Sea Witch",
-        "style": "Ocean, shells, tides, maritime",
-        "colors": ["#006994", "#20B2AA", "#F0F8FF", "#2F4F4F"],
-        "audience": "Beach lovers, water element, coastal aesthetic",
-        "keywords": [
-            "sea witch", "ocean witch", "water witch", "coastal witch", "maritime magic",
-            "sea witchcraft", "mermaid witch", "tidal magic",
-        ],
-        "hashtags": [
-            "#seawitch", "#oceanwitch", "#waterwitch", "#coastalwitch",
-            "#maritimemagic", "#mermaidwitch", "#tidalmagic", "#seawitchcraft",
-        ],
-        "themes": [
-            "seashells and coral", "ocean waves", "lighthouse magic", "mermaid tails",
-            "tidal patterns", "deep sea creatures", "saltwater spells", "storm magic",
-        ],
-    },
-    "moon_witch": {
-        "name": "Moon Witch",
-        "style": "Lunar phases, silver, night sky",
-        "colors": ["#C0C0C0", "#1a1a2e", "#B0C4DE", "#4169E1"],
-        "audience": "Moon followers, night owls, lunar cycle practitioners",
-        "keywords": [
-            "moon witch", "lunar witch", "moon phase", "moonlight magic", "lunar cycle",
-            "moon witchcraft", "full moon witch", "crescent moon witch",
-        ],
-        "hashtags": [
-            "#moonwitch", "#lunarwitch", "#moonphase", "#moonlightmagic",
-            "#lunarcycle", "#fullmoonwitch", "#moonmagic", "#moonwitchcraft",
-        ],
-        "themes": [
-            "moon phases cycle", "lunar eclipse", "moonlit rituals", "silver moonlight",
-            "crescent symbolism", "full moon energy", "moon water", "night sky magic",
-        ],
-    },
-    "crystal_witch": {
-        "name": "Crystal Witch",
-        "style": "Gemstones, geometric, prismatic, sparkle",
-        "colors": ["#9B59B6", "#E8D5F5", "#00CED1", "#FF69B4"],
-        "audience": "Crystal collectors, gem enthusiasts, healing practitioners",
-        "keywords": [
-            "crystal witch", "gem witch", "crystal healing", "gemstone magic",
-            "crystal witchcraft", "crystal lover", "gemstone witch", "crystal grid",
-        ],
-        "hashtags": [
-            "#crystalwitch", "#gemwitch", "#crystalhealing", "#gemstonemagic",
-            "#crystalwitchcraft", "#crystallover", "#crystalgrid", "#healingcrystals",
-        ],
-        "themes": [
-            "amethyst clusters", "crystal grids", "rainbow prisms", "geode interiors",
-            "quartz formations", "crystal ball", "gem facets", "chakra stones",
-        ],
-    },
-}
+PRODUCT_TYPES = (
+    "t-shirt", "mug", "tote-bag", "sticker", "phone-case",
+    "tapestry", "wall-art", "journal", "notebook", "greeting-card",
+)
 
-# ---------------------------------------------------------------------------
-# Product Types with Specs
-# ---------------------------------------------------------------------------
-
-PRODUCT_TYPES: dict[str, dict[str, Any]] = {
-    "tshirt": {
-        "printify_blueprint": "Bella+Canvas 3001",
-        "base_cost": 8.50,
-        "retail_min": 24.99,
-        "retail_max": 29.99,
-        "default_price": 27.99,
-        "sizes": ["S", "M", "L", "XL", "2XL"],
-        "description_snippet": "Unisex heavy cotton tee. Pre-shrunk. Seamless collar.",
-    },
-    "mug": {
-        "printify_blueprint": "Generic 11oz/15oz Mug",
-        "base_cost": 5.50,
-        "retail_min": 16.99,
-        "retail_max": 16.99,
-        "default_price": 16.99,
-        "variants": ["11oz", "15oz"],
-        "description_snippet": "Ceramic mug. Dishwasher and microwave safe.",
-    },
-    "tote": {
-        "printify_blueprint": "Generic Canvas Tote",
-        "base_cost": 7.00,
-        "retail_min": 19.99,
-        "retail_max": 19.99,
-        "default_price": 19.99,
-        "description_snippet": "Durable canvas tote bag. Sturdy handles. Roomy interior.",
-    },
-    "sticker": {
-        "printify_blueprint": "Generic Die-Cut Sticker",
-        "base_cost": 1.50,
-        "retail_min": 4.99,
-        "retail_max": 4.99,
-        "default_price": 4.99,
-        "variants": ["3x3", "4x4", "5x5"],
-        "description_snippet": "Vinyl die-cut sticker. Waterproof. UV resistant.",
-    },
-    "phonecase": {
-        "printify_blueprint": "Generic Tough Phone Case",
-        "base_cost": 6.00,
-        "retail_min": 18.99,
-        "retail_max": 18.99,
-        "default_price": 18.99,
-        "description_snippet": "Tough phone case. Dual-layer protection. Matte finish.",
-    },
-    "tapestry": {
-        "printify_blueprint": "Generic Wall Tapestry",
-        "base_cost": 15.00,
-        "retail_min": 39.99,
-        "retail_max": 39.99,
-        "default_price": 39.99,
-        "variants": ["51x60", "68x80"],
-        "description_snippet": "Lightweight polyester tapestry. Vivid print. Machine washable.",
-    },
-    "journal": {
-        "printify_blueprint": "Generic Hardcover Journal",
-        "base_cost": 8.00,
-        "retail_min": 19.99,
-        "retail_max": 19.99,
-        "default_price": 19.99,
-        "pages": 128,
-        "description_snippet": "128-page hardcover journal. Lined pages. Lay-flat binding.",
-    },
-    "card": {
-        "printify_blueprint": "Generic Greeting Card",
-        "base_cost": 2.00,
-        "retail_min": 5.99,
-        "retail_max": 5.99,
-        "default_price": 5.99,
-        "variants": ["single", "pack_of_10"],
-        "description_snippet": "Premium cardstock greeting card. Blank inside. Includes envelope.",
-    },
-}
+PRODUCT_STATUSES = ("draft", "active", "sold_out", "deactivated", "removed")
 
 
 # ---------------------------------------------------------------------------
-# JSON helpers (atomic writes) -- matching revenue_tracker.py pattern
+# JSON helpers (atomic writes)
 # ---------------------------------------------------------------------------
 
 def _load_json(path: Path, default: Any = None) -> Any:
-    """Load JSON from *path*, returning *default* when missing or corrupt."""
+    """Load JSON from *path*, returning *default* when the file is missing or corrupt."""
     if default is None:
         default = {}
     try:
@@ -314,9 +135,14 @@ def _save_json(path: Path, data: Any) -> None:
     """Atomically write *data* as pretty-printed JSON to *path*."""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(data, fh, indent=2, default=str)
-    tmp.replace(path)
+    try:
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, indent=2, default=str, ensure_ascii=False)
+        os.replace(str(tmp), str(path))
+    except Exception:
+        if tmp.exists():
+            tmp.unlink(missing_ok=True)
+        raise
 
 
 def _now_utc() -> datetime:
@@ -331,11 +157,6 @@ def _today_iso() -> str:
     return _now_utc().strftime("%Y-%m-%d")
 
 
-def _new_id() -> str:
-    """Generate a new UUID4 hex string."""
-    return uuid.uuid4().hex
-
-
 def _round_amount(amount: float) -> float:
     return round(float(amount), 2)
 
@@ -343,51 +164,6 @@ def _round_amount(amount: float) -> float:
 def _parse_date(d: str) -> date:
     """Parse YYYY-MM-DD string to date object."""
     return date.fromisoformat(d)
-
-
-def _slugify(text: str) -> str:
-    """Create a URL-friendly slug from text."""
-    import re
-    slug = text.lower().strip()
-    slug = re.sub(r"[^a-z0-9\s-]", "", slug)
-    slug = re.sub(r"[\s_]+", "-", slug)
-    slug = re.sub(r"-+", "-", slug)
-    return slug.strip("-")[:80]
-
-
-# ---------------------------------------------------------------------------
-# Period helpers
-# ---------------------------------------------------------------------------
-
-def _period_bounds(period: str) -> tuple[str, str]:
-    """Return (start, end) ISO date strings for the given period name."""
-    today = _now_utc().date()
-    if period == "week":
-        monday = today - timedelta(days=today.weekday())
-        sunday = monday + timedelta(days=6)
-        return monday.isoformat(), sunday.isoformat()
-    elif period == "month":
-        first = today.replace(day=1)
-        if today.month == 12:
-            last = today.replace(year=today.year + 1, month=1, day=1) - timedelta(days=1)
-        else:
-            last = today.replace(month=today.month + 1, day=1) - timedelta(days=1)
-        return first.isoformat(), last.isoformat()
-    elif period == "quarter":
-        q_start_month = ((today.month - 1) // 3) * 3 + 1
-        q_start = today.replace(month=q_start_month, day=1)
-        q_end_month = q_start_month + 2
-        if q_end_month == 12:
-            q_end = today.replace(month=12, day=31)
-        else:
-            q_end = today.replace(month=q_end_month + 1, day=1) - timedelta(days=1)
-        return q_start.isoformat(), q_end.isoformat()
-    elif period == "year":
-        return f"{today.year}-01-01", f"{today.year}-12-31"
-    else:
-        # Default to last 30 days
-        start = (today - timedelta(days=30)).isoformat()
-        return start, today.isoformat()
 
 
 def _date_range(start: str, end: str) -> list[str]:
@@ -402,1821 +178,2164 @@ def _date_range(start: str, end: str) -> list[str]:
     return days
 
 
+def _month_bounds() -> tuple[str, str]:
+    """Return (first day, last day) of the current month."""
+    today = _now_utc().date()
+    first = today.replace(day=1)
+    if today.month == 12:
+        last = today.replace(year=today.year + 1, month=1, day=1) - timedelta(days=1)
+    else:
+        last = today.replace(month=today.month + 1, day=1) - timedelta(days=1)
+    return first.isoformat(), last.isoformat()
+
+
+def _week_bounds() -> tuple[str, str]:
+    """Return (Monday, Sunday) of the current ISO week."""
+    today = _now_utc().date()
+    monday = today - timedelta(days=today.weekday())
+    sunday = monday + timedelta(days=6)
+    return monday.isoformat(), sunday.isoformat()
+
+
+def _slugify(text: str) -> str:
+    """Convert text to a URL-safe slug."""
+    slug = text.lower().strip()
+    slug = re.sub(r"[^\w\s-]", "", slug)
+    slug = re.sub(r"[\s_]+", "-", slug)
+    slug = re.sub(r"-+", "-", slug)
+    return slug.strip("-")[:80]
+
+
+# ===================================================================
+# Enums
+# ===================================================================
+
+
+class ShopNiche(Enum):
+    """The 6 witchcraft sub-niche Etsy shops."""
+    COSMIC_WITCH = "cosmic-witch"
+    COTTAGE_WITCH = "cottage-witch"
+    GREEN_WITCH = "green-witch"
+    SEA_WITCH = "sea-witch"
+    MOON_WITCH = "moon-witch"
+    CRYSTAL_WITCH = "crystal-witch"
+
+    @classmethod
+    def from_string(cls, value: str) -> ShopNiche:
+        """Parse a niche from a loose string (case-insensitive, flexible separators)."""
+        normalized = value.strip().lower().replace("_", "-").replace(" ", "-")
+        for member in cls:
+            if member.value == normalized or member.name.lower().replace("_", "-") == normalized:
+                return member
+        raise ValueError(f"Unknown shop niche: {value!r}. Valid: {[m.value for m in cls]}")
+
+
+class ProductStatus(Enum):
+    """Etsy product listing status."""
+    DRAFT = "draft"
+    ACTIVE = "active"
+    SOLD_OUT = "sold_out"
+    DEACTIVATED = "deactivated"
+    REMOVED = "removed"
+
+    @classmethod
+    def from_string(cls, value: str) -> ProductStatus:
+        normalized = value.strip().lower().replace("-", "_").replace(" ", "_")
+        for member in cls:
+            if member.value == normalized or member.name.lower() == normalized:
+                return member
+        raise ValueError(f"Unknown product status: {value!r}")
+
+
+# ===================================================================
+# Niche Metadata Registry
+# ===================================================================
+
+
+NICHE_METADATA: dict[str, dict[str, Any]] = {
+    "cosmic-witch": {
+        "display_name": "Cosmic Witch Prints",
+        "style": "Celestial, galaxy, astrology",
+        "colors": ["deep purple", "midnight blue", "gold"],
+        "target_audience": "Astrology lovers, new witches",
+        "keywords_seed": [
+            "cosmic witch", "celestial", "astrology", "galaxy",
+            "zodiac", "constellation", "star sign", "mystical",
+        ],
+    },
+    "cottage-witch": {
+        "display_name": "Cottage Witch Co",
+        "style": "Cozy, botanical, herbs",
+        "colors": ["sage green", "warm cream", "brown"],
+        "target_audience": "Nature lovers, kitchen witches",
+        "keywords_seed": [
+            "cottage witch", "botanical", "herbalist", "cottagecore",
+            "cozy witch", "kitchen witch", "herb garden", "apothecary",
+        ],
+    },
+    "green-witch": {
+        "display_name": "Green Witch Garden",
+        "style": "Plants, earth, forest",
+        "colors": ["forest green", "earth brown", "moss"],
+        "target_audience": "Herbalists, eco-conscious",
+        "keywords_seed": [
+            "green witch", "plant witch", "earth magic", "forest",
+            "herbalism", "nature witch", "eco witch", "botanical",
+        ],
+    },
+    "sea-witch": {
+        "display_name": "Sea Witch Treasures",
+        "style": "Ocean, shells, tides",
+        "colors": ["ocean blue", "teal", "pearl white"],
+        "target_audience": "Beach lovers, water element",
+        "keywords_seed": [
+            "sea witch", "ocean magic", "mermaid", "shell",
+            "tidal", "water witch", "beach witch", "nautical",
+        ],
+    },
+    "moon-witch": {
+        "display_name": "Moon Witch Studio",
+        "style": "Lunar phases, silver, night",
+        "colors": ["silver", "black", "pale blue"],
+        "target_audience": "Moon followers, night owls",
+        "keywords_seed": [
+            "moon witch", "lunar", "moon phase", "crescent",
+            "full moon", "moonlight", "celestial", "night sky",
+        ],
+    },
+    "crystal-witch": {
+        "display_name": "Crystal Witch Designs",
+        "style": "Gemstones, geometric, prisms",
+        "colors": ["amethyst purple", "clear", "rainbow"],
+        "target_audience": "Crystal collectors",
+        "keywords_seed": [
+            "crystal witch", "gemstone", "amethyst", "quartz",
+            "crystal magic", "mineral", "healing crystals", "geode",
+        ],
+    },
+}
+
+
 # ===================================================================
 # Data Classes
 # ===================================================================
 
-@dataclass
-class DesignConcept:
-    """A design concept for POD products."""
-    concept_id: str = ""
-    niche: str = ""
-    title: str = ""
-    description: str = ""
-    style_keywords: list[str] = field(default_factory=list)
-    colors: list[str] = field(default_factory=list)
-    target_products: list[str] = field(default_factory=list)
-    status: str = "concept"  # concept | generated | approved | listed
-    image_path: Optional[str] = None
-    created_at: str = ""
-
-    def __post_init__(self) -> None:
-        if not self.concept_id:
-            self.concept_id = _new_id()
-        if not self.created_at:
-            self.created_at = _now_iso()
-        if self.niche and self.niche not in VALID_NICHES:
-            raise ValueError(f"Invalid niche: {self.niche!r}. Must be one of {VALID_NICHES}")
-        if self.status not in ("concept", "generated", "approved", "listed"):
-            raise ValueError(f"Invalid status: {self.status!r}")
-
-    def to_dict(self) -> dict:
-        return asdict(self)
-
-    @classmethod
-    def from_dict(cls, data: dict) -> DesignConcept:
-        data = dict(data)
-        return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
-
 
 @dataclass
-class Product:
-    """A single product linked to a design concept."""
-    product_id: str = ""
-    design_concept_id: str = ""
-    printify_id: Optional[str] = None
-    etsy_listing_id: Optional[str] = None
-    product_type: str = ""
-    title: str = ""
-    description: str = ""
-    tags: list[str] = field(default_factory=list)
-    price: float = 0.0
-    cost: float = 0.0
-    profit_margin: float = 0.0
-    status: str = "draft"  # draft | active | sold_out | deactivated
-    variants: list[dict] = field(default_factory=list)
-    sales_count: int = 0
+class EtsyShop:
+    """An Etsy POD shop in one of the witchcraft sub-niches."""
+    shop_id: str = ""
+    shop_name: str = ""
+    niche: str = ""                              # ShopNiche value string
+    url: str = ""
+    api_key_env: str = ""                        # env var name for API key
+    product_count: int = 0
     revenue: float = 0.0
-    created_at: str = ""
+    active: bool = True
+    metadata: dict = field(default_factory=dict)
+    created_at: str = field(default_factory=_now_iso)
+    updated_at: str = field(default_factory=_now_iso)
 
     def __post_init__(self) -> None:
-        if not self.product_id:
-            self.product_id = _new_id()
-        if not self.created_at:
-            self.created_at = _now_iso()
-        if self.product_type and self.product_type not in PRODUCT_TYPES:
-            raise ValueError(
-                f"Invalid product_type: {self.product_type!r}. "
-                f"Must be one of {list(PRODUCT_TYPES.keys())}"
-            )
-        self.price = _round_amount(self.price)
-        self.cost = _round_amount(self.cost)
-        self.profit_margin = _round_amount(self.profit_margin)
         self.revenue = _round_amount(self.revenue)
 
     def to_dict(self) -> dict:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict) -> Product:
+    def from_dict(cls, data: dict) -> EtsyShop:
         data = dict(data)
-        return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
+        known = {f.name for f in cls.__dataclass_fields__.values()}
+        filtered = {k: v for k, v in data.items() if k in known}
+        return cls(**filtered)
+
+    @property
+    def niche_meta(self) -> dict:
+        """Return the niche metadata for this shop."""
+        return NICHE_METADATA.get(self.niche, {})
 
 
 @dataclass
-class EtsyListing:
-    """Cached Etsy listing data for analytics."""
-    listing_id: str = ""
-    product_id: str = ""
+class EtsyProduct:
+    """A single product listing on Etsy, fulfilled via Printify."""
+    product_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    shop_id: str = ""
     title: str = ""
     description: str = ""
     tags: list[str] = field(default_factory=list)
     price: float = 0.0
-    category_id: str = ""
-    shipping_profile_id: str = ""
-    status: str = "draft"
+    cost: float = 0.0                            # Printify production cost
+    profit_margin: float = 0.0                   # Computed: net per unit
+    product_type: str = "t-shirt"
+    mockup_urls: list[str] = field(default_factory=list)
+    printify_id: str = ""
+    etsy_listing_id: str = ""
+    status: str = "draft"                        # ProductStatus value
+    sales_count: int = 0
     views: int = 0
     favorites: int = 0
-    sales: int = 0
-    conversion_rate: float = 0.0
-    last_synced: str = ""
+    design_file: str = ""
+    niche: str = ""                              # Copied from shop on creation
+    metadata: dict = field(default_factory=dict)
+    created_at: str = field(default_factory=_now_iso)
+    updated_at: str = field(default_factory=_now_iso)
 
     def __post_init__(self) -> None:
         self.price = _round_amount(self.price)
-        self.conversion_rate = _round_amount(self.conversion_rate)
-        if not self.last_synced:
-            self.last_synced = _now_iso()
+        self.cost = _round_amount(self.cost)
+        if self.price > 0 and self.cost >= 0:
+            self.profit_margin = _round_amount(self._calculate_net_profit())
 
-    def recalculate_conversion(self) -> None:
-        """Recalculate conversion rate from views and sales."""
-        if self.views > 0:
-            self.conversion_rate = _round_amount((self.sales / self.views) * 100)
+    def _calculate_net_profit(self) -> float:
+        """Calculate net profit per unit after all Etsy + Printify fees."""
+        fees = calculate_etsy_fees(self.price, self.cost)
+        return fees["net_profit"]
+
+    def recalculate_margin(self) -> None:
+        """Recalculate profit margin from current price and cost."""
+        if self.price > 0:
+            self.profit_margin = _round_amount(self._calculate_net_profit())
         else:
-            self.conversion_rate = 0.0
+            self.profit_margin = 0.0
+
+    @property
+    def conversion_rate(self) -> float:
+        """Views-to-sales conversion rate as a percentage."""
+        if self.views <= 0:
+            return 0.0
+        return _round_amount((self.sales_count / self.views) * 100)
+
+    @property
+    def favorites_rate(self) -> float:
+        """Views-to-favorites rate as a percentage."""
+        if self.views <= 0:
+            return 0.0
+        return _round_amount((self.favorites / self.views) * 100)
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        d = asdict(self)
+        d["conversion_rate"] = self.conversion_rate
+        d["favorites_rate"] = self.favorites_rate
+        return d
 
     @classmethod
-    def from_dict(cls, data: dict) -> EtsyListing:
+    def from_dict(cls, data: dict) -> EtsyProduct:
         data = dict(data)
-        return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
+        data.pop("conversion_rate", None)
+        data.pop("favorites_rate", None)
+        known = {f.name for f in cls.__dataclass_fields__.values()}
+        filtered = {k: v for k, v in data.items() if k in known}
+        return cls(**filtered)
 
 
 @dataclass
-class SubNiche:
-    """Resolved sub-niche profile with computed fields."""
-    niche_id: str = ""
-    name: str = ""
-    style: str = ""
-    colors: list[str] = field(default_factory=list)
-    target_audience: str = ""
-    keywords: list[str] = field(default_factory=list)
-    hashtags: list[str] = field(default_factory=list)
-    bestselling_themes: list[str] = field(default_factory=list)
-
-    def to_dict(self) -> dict:
-        return asdict(self)
-
-    @classmethod
-    def from_niche_id(cls, niche_id: str) -> SubNiche:
-        """Build a SubNiche from the NICHES registry."""
-        if niche_id not in NICHES:
-            raise ValueError(f"Unknown niche: {niche_id!r}")
-        profile = NICHES[niche_id]
-        return cls(
-            niche_id=niche_id,
-            name=profile["name"],
-            style=profile["style"],
-            colors=list(profile["colors"]),
-            target_audience=profile["audience"],
-            keywords=list(profile["keywords"]),
-            hashtags=list(profile["hashtags"]),
-            bestselling_themes=list(profile["themes"]),
-        )
-
-
-@dataclass
-class SalesReport:
-    """Aggregated sales report for a time period."""
-    period: str = ""
-    niche: Optional[str] = None
-    total_revenue: float = 0.0
-    total_orders: int = 0
-    total_units: int = 0
-    avg_order_value: float = 0.0
-    top_products: list[dict] = field(default_factory=list)
-    top_niches: list[dict] = field(default_factory=list)
-    costs: dict = field(default_factory=dict)
+class SaleRecord:
+    """A single sale transaction."""
+    sale_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    product_id: str = ""
+    shop_id: str = ""
+    date: str = ""                               # ISO YYYY-MM-DD
+    quantity: int = 1
+    unit_price: float = 0.0
+    gross_revenue: float = 0.0
+    etsy_fees: float = 0.0
+    printify_cost: float = 0.0
     net_profit: float = 0.0
+    customer_location: str = ""
+    order_id: str = ""
+    metadata: dict = field(default_factory=dict)
+    recorded_at: str = field(default_factory=_now_iso)
 
     def __post_init__(self) -> None:
-        self.total_revenue = _round_amount(self.total_revenue)
-        self.avg_order_value = _round_amount(self.avg_order_value)
+        self.unit_price = _round_amount(self.unit_price)
+        self.gross_revenue = _round_amount(self.gross_revenue)
+        self.etsy_fees = _round_amount(self.etsy_fees)
+        self.printify_cost = _round_amount(self.printify_cost)
         self.net_profit = _round_amount(self.net_profit)
 
     def to_dict(self) -> dict:
         return asdict(self)
 
+    @classmethod
+    def from_dict(cls, data: dict) -> SaleRecord:
+        data = dict(data)
+        known = {f.name for f in cls.__dataclass_fields__.values()}
+        filtered = {k: v for k, v in data.items() if k in known}
+        return cls(**filtered)
+
+
+@dataclass
+class SalesReport:
+    """Aggregated sales report for a time period."""
+    period: str = ""                             # "day", "week", "month", "custom"
+    start_date: str = ""
+    end_date: str = ""
+    total_sales: int = 0
+    total_units: int = 0
+    gross_revenue: float = 0.0
+    total_fees: float = 0.0
+    total_cost: float = 0.0
+    net_profit: float = 0.0
+    by_shop: dict[str, dict] = field(default_factory=dict)
+    by_product_type: dict[str, dict] = field(default_factory=dict)
+    top_products: list[dict] = field(default_factory=list)
+    daily_breakdown: list[dict] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass
+class ProductAnalytics:
+    """Analytics snapshot for a product."""
+    product_id: str = ""
+    title: str = ""
+    shop_id: str = ""
+    views: int = 0
+    sales_count: int = 0
+    favorites: int = 0
+    conversion_rate: float = 0.0
+    favorites_rate: float = 0.0
+    revenue: float = 0.0
+    profit: float = 0.0
+    performance_score: float = 0.0               # 0-100 composite score
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
 
 # ===================================================================
-# Anthropic API helper
+# Fee Calculator (module-level utility)
+# ===================================================================
+
+
+def calculate_etsy_fees(
+    item_price: float,
+    printify_cost: float,
+    shipping_price: float = 0.0,
+    include_offsite_ads: bool = False,
+) -> dict:
+    """
+    Calculate all Etsy fees for a single transaction.
+
+    Args:
+        item_price: Retail price charged to customer.
+        printify_cost: Printify production + shipping cost.
+        shipping_price: Shipping charged to customer (often $0 for free shipping).
+        include_offsite_ads: Whether to include the 15% offsite ads fee.
+
+    Returns:
+        Dict with fee breakdown and net profit.
+    """
+    listing_fee = ETSY_LISTING_FEE
+    transaction_fee = _round_amount(
+        (item_price + shipping_price) * ETSY_TRANSACTION_FEE_PCT
+    )
+    payment_processing = _round_amount(
+        (item_price + shipping_price) * ETSY_PAYMENT_PROCESSING_PCT
+        + ETSY_PAYMENT_PROCESSING_FLAT
+    )
+
+    offsite_ads_fee = 0.0
+    if include_offsite_ads:
+        offsite_ads_fee = _round_amount(item_price * ETSY_OFFSITE_ADS_PCT)
+
+    total_etsy_fees = _round_amount(
+        listing_fee + transaction_fee + payment_processing + offsite_ads_fee
+    )
+
+    total_cost = _round_amount(printify_cost + total_etsy_fees)
+    net_profit = _round_amount(item_price - total_cost)
+    margin_pct = _round_amount(
+        (net_profit / item_price * 100) if item_price > 0 else 0.0
+    )
+
+    return {
+        "item_price": _round_amount(item_price),
+        "printify_cost": _round_amount(printify_cost),
+        "listing_fee": listing_fee,
+        "transaction_fee": transaction_fee,
+        "payment_processing": payment_processing,
+        "offsite_ads_fee": offsite_ads_fee,
+        "total_etsy_fees": total_etsy_fees,
+        "total_cost": total_cost,
+        "net_profit": net_profit,
+        "margin_pct": margin_pct,
+    }
+
+
+# ===================================================================
+# Seasonal data for witchcraft POD
+# ===================================================================
+
+SEASONAL_DEMAND: dict[int, dict[str, Any]] = {
+    1: {"multiplier": 0.8, "themes": ["new year intentions", "winter solstice clearance"],
+        "notes": "Post-holiday slow period"},
+    2: {"multiplier": 0.9, "themes": ["Imbolc", "Valentine's witchy", "self-love spells"],
+        "notes": "Imbolc season, Valentine's gifting"},
+    3: {"multiplier": 1.0, "themes": ["Ostara", "spring equinox", "new beginnings"],
+        "notes": "Spring renewal themes pick up"},
+    4: {"multiplier": 1.0, "themes": ["earth day", "green witch", "garden magic"],
+        "notes": "Earth Day boosts green witch niche"},
+    5: {"multiplier": 1.1, "themes": ["Beltane", "fertility", "flower magic", "Mother's Day"],
+        "notes": "Beltane + Mother's Day gifting"},
+    6: {"multiplier": 1.1, "themes": ["Litha", "summer solstice", "sun magic"],
+        "notes": "Summer solstice celebrations"},
+    7: {"multiplier": 0.9, "themes": ["summer witch", "beach witch", "sea magic"],
+        "notes": "Summer slowdown, sea witch boost"},
+    8: {"multiplier": 1.1, "themes": ["Lughnasadh", "harvest", "back to school witchy"],
+        "notes": "Early fall interest begins"},
+    9: {"multiplier": 1.3, "themes": ["Mabon", "autumn equinox", "harvest magic"],
+        "notes": "Fall season ramp-up begins"},
+    10: {"multiplier": 2.0, "themes": ["Samhain", "Halloween", "spooky season", "witch aesthetic"],
+         "notes": "PEAK SEASON — Halloween drives massive demand"},
+    11: {"multiplier": 1.5, "themes": ["Black Friday", "Yule gifts", "winter witch"],
+         "notes": "Holiday gifting + Black Friday"},
+    12: {"multiplier": 1.4, "themes": ["Yule", "winter solstice", "holiday witch gifts"],
+         "notes": "Holiday gifting season, Yule celebrations"},
+}
+
+NICHE_SEASONAL_BOOST: dict[str, dict[int, float]] = {
+    "cosmic-witch": {1: 0.1, 3: 0.1, 9: 0.1},
+    "cottage-witch": {4: 0.2, 5: 0.2, 9: 0.1},
+    "green-witch": {3: 0.2, 4: 0.3, 5: 0.2},
+    "sea-witch": {6: 0.3, 7: 0.4, 8: 0.2},
+    "moon-witch": {1: 0.1, 6: 0.1, 12: 0.1},
+    "crystal-witch": {2: 0.1, 11: 0.2, 12: 0.2},
+}
+
+
+# ===================================================================
+# Anthropic API helpers
 # ===================================================================
 
 def _get_anthropic_client() -> Any:
-    """Lazily import and return an Anthropic client."""
+    """Lazily import and return an Anthropic client.
+
+    Returns None if the anthropic package is not installed or
+    ANTHROPIC_API_KEY is not set (allows offline operation).
+    """
     try:
         import anthropic
         api_key = os.environ.get("ANTHROPIC_API_KEY")
         if not api_key:
-            raise EnvironmentError(
-                "ANTHROPIC_API_KEY not set. Required for SEO generation."
-            )
+            logger.warning("ANTHROPIC_API_KEY not set — AI features disabled")
+            return None
         return anthropic.Anthropic(api_key=api_key)
     except ImportError:
-        raise ImportError(
-            "anthropic package not installed. Run: pip install anthropic"
-        )
+        logger.warning("anthropic package not installed — AI features disabled")
+        return None
 
 
-def _call_haiku(system_prompt: str, user_prompt: str, max_tokens: int = MAX_SEO_TOKENS) -> str:
-    """Send a prompt to Claude Haiku and return the text response."""
-    client = _get_anthropic_client()
-    system_parts = [{"type": "text", "text": system_prompt}]
-    if len(system_prompt) > 2048:
-        system_parts[0]["cache_control"] = {"type": "ephemeral"}
+async def _call_haiku(
+    system_prompt: str,
+    user_prompt: str,
+    max_tokens: int = MAX_TAGS_TOKENS,
+) -> Optional[str]:
+    """Call Claude Haiku for quick classification/tag tasks.
 
-    message = client.messages.create(
-        model=HAIKU_MODEL,
-        max_tokens=max_tokens,
-        system=system_parts,
-        messages=[{"role": "user", "content": user_prompt}],
-    )
-    return message.content[0].text.strip()
-
-
-async def _acall_haiku(system_prompt: str, user_prompt: str, max_tokens: int = MAX_SEO_TOKENS) -> str:
-    """Async wrapper for Haiku calls."""
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(
-        None, lambda: _call_haiku(system_prompt, user_prompt, max_tokens)
-    )
-
-
-# ===================================================================
-# Printify / Etsy HTTP helpers
-# ===================================================================
-
-def _get_printify_headers() -> dict[str, str]:
-    """Return authorization headers for Printify API."""
-    api_key = os.environ.get("PRINTIFY_API_KEY", "")
-    if not api_key:
-        raise EnvironmentError("PRINTIFY_API_KEY not set.")
-    return {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-
-
-def _get_etsy_headers() -> dict[str, str]:
-    """Return authorization headers for Etsy API v3."""
-    api_key = os.environ.get("ETSY_API_KEY", "")
-    if not api_key:
-        raise EnvironmentError("ETSY_API_KEY not set.")
-    return {
-        "x-api-key": api_key,
-        "Content-Type": "application/json",
-    }
-
-
-PRINTIFY_BASE_URL = "https://api.printify.com/v1"
-ETSY_BASE_URL = "https://openapi.etsy.com/v3/application"
-
-
-# ===================================================================
-# EtsyManager -- Main Class
-# ===================================================================
-
-
-class EtsyManager:
+    Uses prompt caching when system prompt exceeds 2048 tokens.
     """
-    Central Etsy POD management engine for the empire.
+    client = _get_anthropic_client()
+    if client is None:
+        return None
 
-    Handles design concepts, product creation, Printify/Etsy integration,
-    SEO optimization, sales tracking, and analytics across 6 witchcraft
-    sub-niche shops.
+    try:
+        system_arg: Any
+        if len(system_prompt) > 2048:
+            system_arg = [
+                {
+                    "type": "text",
+                    "text": system_prompt,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ]
+        else:
+            system_arg = system_prompt
+
+        response = await asyncio.to_thread(
+            client.messages.create,
+            model=HAIKU_MODEL,
+            max_tokens=max_tokens,
+            system=system_arg,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        return response.content[0].text.strip()
+    except Exception as exc:
+        logger.error("Haiku API call failed: %s", exc)
+        return None
+
+
+async def _call_sonnet(
+    system_prompt: str,
+    user_prompt: str,
+    max_tokens: int = MAX_DESCRIPTION_TOKENS,
+) -> Optional[str]:
+    """Call Claude Sonnet for description generation and optimization.
+
+    Uses prompt caching when system prompt exceeds 2048 tokens.
+    """
+    client = _get_anthropic_client()
+    if client is None:
+        return None
+
+    try:
+        system_arg: Any
+        if len(system_prompt) > 2048:
+            system_arg = [
+                {
+                    "type": "text",
+                    "text": system_prompt,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ]
+        else:
+            system_arg = system_prompt
+
+        response = await asyncio.to_thread(
+            client.messages.create,
+            model=SONNET_MODEL,
+            max_tokens=max_tokens,
+            system=system_arg,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        return response.content[0].text.strip()
+    except Exception as exc:
+        logger.error("Sonnet API call failed: %s", exc)
+        return None
+
+
+# ===================================================================
+# Default Shop Registry Builder
+# ===================================================================
+
+def _build_default_shops() -> list[dict]:
+    """Build the default 6-shop registry from niche metadata."""
+    shops: list[dict] = []
+    for niche_value, meta in NICHE_METADATA.items():
+        shop = {
+            "shop_id": niche_value,
+            "shop_name": meta["display_name"],
+            "niche": niche_value,
+            "url": f"https://www.etsy.com/shop/{_slugify(meta['display_name'])}",
+            "api_key_env": f"ETSY_API_KEY_{niche_value.upper().replace('-', '_')}",
+            "product_count": 0,
+            "revenue": 0.0,
+            "active": True,
+            "metadata": {
+                "style": meta["style"],
+                "colors": meta["colors"],
+                "target_audience": meta["target_audience"],
+            },
+        }
+        shops.append(shop)
+    return shops
+
+
+# ===================================================================
+# EtsyPODManager — Main Class
+# ===================================================================
+
+
+class EtsyPODManager:
+    """
+    Central Etsy print-on-demand management engine.
+
+    Handles shop registry, product CRUD, SEO optimization via Claude AI,
+    Printify integration hooks, sales tracking, analytics, and reporting
+    across 6 witchcraft sub-niche shops.
     """
 
     def __init__(self) -> None:
-        self._concepts: dict[str, dict] = _load_json(CONCEPTS_FILE, {})
-        self._products: dict[str, dict] = _load_json(PRODUCTS_FILE, {})
-        self._sales: list[dict] = _load_json(SALES_FILE, [])
-        self._listings: dict[str, dict] = _load_json(LISTINGS_FILE, {})
-        logger.info(
-            "EtsyManager initialized -- %d concepts, %d products, %d sales records",
-            len(self._concepts), len(self._products), len(self._sales),
-        )
+        self._shops: Optional[list[EtsyShop]] = None
+        self._products: Optional[list[EtsyProduct]] = None
+        self._sales: Optional[list[SaleRecord]] = None
+        self._config: dict = _load_json(CONFIG_FILE, {"offsite_ads_enabled": False})
+        logger.info("EtsyPODManager initialized — data dir: %s", DATA_DIR)
 
     # ------------------------------------------------------------------
-    # Persistence
+    # Persistence helpers
     # ------------------------------------------------------------------
 
-    def _save_concepts(self) -> None:
-        _save_json(CONCEPTS_FILE, self._concepts)
+    def _load_shops(self) -> list[EtsyShop]:
+        raw = _load_json(SHOPS_FILE, None)
+        if raw is None or not isinstance(raw, list) or len(raw) == 0:
+            defaults = _build_default_shops()
+            _save_json(SHOPS_FILE, defaults)
+            return [EtsyShop.from_dict(s) for s in defaults]
+        return [EtsyShop.from_dict(s) for s in raw]
+
+    def _save_shops(self) -> None:
+        if self._shops is None:
+            return
+        _save_json(SHOPS_FILE, [s.to_dict() for s in self._shops])
+
+    def _load_products(self) -> list[EtsyProduct]:
+        raw = _load_json(PRODUCTS_FILE, [])
+        if not isinstance(raw, list):
+            return []
+        return [EtsyProduct.from_dict(p) for p in raw]
 
     def _save_products(self) -> None:
-        _save_json(PRODUCTS_FILE, self._products)
+        if self._products is None:
+            return
+        _save_json(PRODUCTS_FILE, [p.to_dict() for p in self._products])
+
+    def _load_sales(self) -> list[SaleRecord]:
+        raw = _load_json(SALES_FILE, [])
+        if not isinstance(raw, list):
+            return []
+        return [SaleRecord.from_dict(s) for s in raw]
 
     def _save_sales(self) -> None:
-        _save_json(SALES_FILE, self._sales)
+        if self._sales is None:
+            return
+        if len(self._sales) > MAX_SALES_RECORDS:
+            self._sales = sorted(
+                self._sales, key=lambda s: s.date, reverse=True
+            )[:MAX_SALES_RECORDS]
+        _save_json(SALES_FILE, [s.to_dict() for s in self._sales])
 
-    def _save_listings(self) -> None:
-        _save_json(LISTINGS_FILE, self._listings)
+    def _save_config(self) -> None:
+        _save_json(CONFIG_FILE, self._config)
+
+    @property
+    def shops(self) -> list[EtsyShop]:
+        if self._shops is None:
+            self._shops = self._load_shops()
+        return self._shops
+
+    @property
+    def products(self) -> list[EtsyProduct]:
+        if self._products is None:
+            self._products = self._load_products()
+        return self._products
+
+    @property
+    def sales(self) -> list[SaleRecord]:
+        if self._sales is None:
+            self._sales = self._load_sales()
+        return self._sales
+
+    def reload(self) -> None:
+        """Force reload all data from disk."""
+        self._shops = None
+        self._products = None
+        self._sales = None
+        self._config = _load_json(CONFIG_FILE, {"offsite_ads_enabled": False})
 
     # ==================================================================
-    # DESIGN MANAGEMENT
+    # SHOP MANAGEMENT
     # ==================================================================
 
-    def create_concept(
+    def get_shop(self, shop_id: str) -> EtsyShop:
+        """Get a shop by ID. Raises KeyError if not found."""
+        for shop in self.shops:
+            if shop.shop_id == shop_id:
+                return shop
+        raise KeyError(
+            f"Shop not found: {shop_id!r}. "
+            f"Valid: {[s.shop_id for s in self.shops]}"
+        )
+
+    def list_shops(self, active_only: bool = False) -> list[EtsyShop]:
+        """List all shops, optionally filtering to active only."""
+        if active_only:
+            return [s for s in self.shops if s.active]
+        return list(self.shops)
+
+    def update_shop(self, shop_id: str, **kwargs: Any) -> EtsyShop:
+        """Update fields on a shop."""
+        shop = self.get_shop(shop_id)
+        for key, value in kwargs.items():
+            if hasattr(shop, key) and key not in ("shop_id", "created_at"):
+                setattr(shop, key, value)
+        shop.updated_at = _now_iso()
+        self._save_shops()
+        logger.info("Updated shop %s: %s", shop_id, list(kwargs.keys()))
+        return shop
+
+    def _refresh_shop_counts(self) -> None:
+        """Recompute product_count and revenue for all shops."""
+        shop_product_counts: dict[str, int] = defaultdict(int)
+        for product in self.products:
+            if product.status in ("active", "sold_out"):
+                shop_product_counts[product.shop_id] += 1
+
+        shop_revenues: dict[str, float] = defaultdict(float)
+        for sale in self.sales:
+            shop_revenues[sale.shop_id] += sale.gross_revenue
+
+        for shop in self.shops:
+            shop.product_count = shop_product_counts.get(shop.shop_id, 0)
+            shop.revenue = _round_amount(
+                shop_revenues.get(shop.shop_id, 0.0)
+            )
+
+        self._save_shops()
+
+    # ==================================================================
+    # PRODUCT MANAGEMENT
+    # ==================================================================
+
+    def add_product(
         self,
-        niche: str,
+        shop_id: str,
         title: str,
-        description: str,
-        style_keywords: Optional[list[str]] = None,
-        target_products: Optional[list[str]] = None,
-    ) -> DesignConcept:
-        """Create a new design concept for a given niche.
-
-        Automatically enriches style_keywords and colors from the niche
-        profile if not explicitly provided.
+        price: float = 0.0,
+        cost: float = 0.0,
+        product_type: str = "t-shirt",
+        tags: Optional[list[str]] = None,
+        description: str = "",
+        status: str = "draft",
+        printify_id: str = "",
+        design_file: str = "",
+        mockup_urls: Optional[list[str]] = None,
+        metadata: Optional[dict] = None,
+    ) -> EtsyProduct:
         """
-        if niche not in VALID_NICHES:
-            raise ValueError(f"Invalid niche: {niche!r}. Must be one of {VALID_NICHES}")
+        Add a new product to a shop.
 
-        niche_profile = NICHES[niche]
+        Args:
+            shop_id: The shop this product belongs to.
+            title: Product listing title (max 140 chars for Etsy).
+            price: Retail price in USD.
+            cost: Printify production cost in USD.
+            product_type: One of PRODUCT_TYPES.
+            tags: List of Etsy tags (max 13).
+            description: Product description.
+            status: Initial status (default: draft).
+            printify_id: Printify product ID if already created.
+            design_file: Path to the design file.
+            mockup_urls: List of mockup image URLs.
+            metadata: Additional metadata.
 
-        # Merge niche keywords with any user-supplied keywords
-        merged_keywords = list(style_keywords or [])
-        for kw in niche_profile.get("keywords", [])[:3]:
-            if kw not in merged_keywords:
-                merged_keywords.append(kw)
-
-        # Default target products: the most popular types
-        if not target_products:
-            target_products = ["tshirt", "mug", "sticker", "tote"]
-
-        # Validate target products
-        for pt in target_products:
-            if pt not in PRODUCT_TYPES:
-                raise ValueError(f"Invalid product type: {pt!r}")
-
-        concept = DesignConcept(
-            niche=niche,
-            title=title,
-            description=description,
-            style_keywords=merged_keywords,
-            colors=list(niche_profile["colors"]),
-            target_products=target_products,
-            status="concept",
-        )
-
-        self._concepts[concept.concept_id] = concept.to_dict()
-        self._save_concepts()
-
-        logger.info(
-            "Created concept %s: '%s' [%s] targeting %s",
-            concept.concept_id[:8], title, niche, target_products,
-        )
-        return concept
-
-    def generate_design_prompt(self, concept: DesignConcept) -> str:
-        """Generate an AI image generation prompt for a design concept.
-
-        The prompt is optimized for fal.ai / Midjourney / DALL-E and
-        incorporates the niche style, color palette, and product-specific
-        requirements (e.g. t-shirt designs need transparent backgrounds).
+        Returns:
+            The created EtsyProduct.
         """
-        niche_profile = NICHES.get(concept.niche, {})
-        style = niche_profile.get("style", "")
-        themes = niche_profile.get("themes", [])
-
-        # Build color description from hex codes
-        color_names = {
-            "#1a0533": "deep cosmic purple", "#4B0082": "indigo", "#FFD700": "gold",
-            "#C0C0C0": "silver", "#8B7355": "warm brown", "#567D46": "sage green",
-            "#F5DEB3": "wheat", "#DEB887": "burlywood", "#228B22": "forest green",
-            "#2E8B57": "sea green", "#8B4513": "saddle brown", "#DAA520": "goldenrod",
-            "#006994": "deep ocean blue", "#20B2AA": "light sea green",
-            "#F0F8FF": "alice blue", "#2F4F4F": "dark slate", "#1a1a2e": "midnight blue",
-            "#B0C4DE": "light steel blue", "#4169E1": "royal blue",
-            "#9B59B6": "amethyst purple", "#E8D5F5": "lavender", "#00CED1": "dark turquoise",
-            "#FF69B4": "hot pink",
-        }
-        palette_desc = ", ".join(
-            color_names.get(c, c) for c in concept.colors[:4]
-        )
-
-        # Determine output format based on primary target product
-        primary_product = concept.target_products[0] if concept.target_products else "tshirt"
-        if primary_product in ("tshirt", "tote"):
-            format_note = (
-                "Design on transparent/solid dark background, centered composition, "
-                "suitable for screen printing on fabric. No text unless integral to design."
-            )
-        elif primary_product == "sticker":
-            format_note = (
-                "Die-cut sticker design with clear edges, bold outlines, "
-                "vibrant colors. Compact composition."
-            )
-        elif primary_product in ("tapestry", "phonecase"):
-            format_note = (
-                "Full-bleed seamless pattern or centered artwork, "
-                "high detail, suitable for large-format printing."
-            )
-        elif primary_product == "mug":
-            format_note = (
-                "Wrap-around mug design, horizontal composition, "
-                "centered focal point. Avoid edge-critical elements."
-            )
-        elif primary_product == "journal":
-            format_note = (
-                "Book cover design, portrait orientation, "
-                "clear focal point with breathing room for title area."
-            )
-        else:
-            format_note = "Centered composition, high resolution, print-ready."
-
-        # Pick 2-3 relevant themes
-        relevant_themes = themes[:3] if themes else []
-        themes_desc = ", ".join(relevant_themes)
-
-        keywords_desc = ", ".join(concept.style_keywords[:6])
-
-        prompt = (
-            f"{concept.title} -- {concept.description}. "
-            f"Style: {style}. "
-            f"Color palette: {palette_desc}. "
-            f"Visual themes: {themes_desc}. "
-            f"Keywords: {keywords_desc}. "
-            f"{format_note} "
-            f"Aesthetic: hand-drawn illustration meets modern design, "
-            f"NOT generic AI art, NOT clip-art. "
-            f"Mystical, detailed, original. High resolution 300 DPI."
-        )
-
-        return prompt
-
-    def list_concepts(
-        self,
-        niche: Optional[str] = None,
-        status: Optional[str] = None,
-    ) -> list[DesignConcept]:
-        """List design concepts, optionally filtered by niche and/or status."""
-        results: list[DesignConcept] = []
-        for data in self._concepts.values():
-            if niche and data.get("niche") != niche:
-                continue
-            if status and data.get("status") != status:
-                continue
-            try:
-                results.append(DesignConcept.from_dict(data))
-            except (ValueError, TypeError) as exc:
-                logger.warning("Skipping malformed concept: %s", exc)
-        # Sort by creation date descending
-        results.sort(key=lambda c: c.created_at, reverse=True)
-        return results
-
-    def get_concept(self, concept_id: str) -> Optional[DesignConcept]:
-        """Retrieve a single concept by ID."""
-        data = self._concepts.get(concept_id)
-        if data is None:
-            return None
-        return DesignConcept.from_dict(data)
-
-    def approve_concept(self, concept_id: str, image_path: str) -> DesignConcept:
-        """Mark a concept as approved and attach the generated image path."""
-        data = self._concepts.get(concept_id)
-        if data is None:
-            raise KeyError(f"Concept not found: {concept_id}")
-
-        data["status"] = "approved"
-        data["image_path"] = image_path
-        self._concepts[concept_id] = data
-        self._save_concepts()
-
-        concept = DesignConcept.from_dict(data)
-        logger.info("Approved concept %s with image: %s", concept_id[:8], image_path)
-        return concept
-
-    def update_concept_status(self, concept_id: str, status: str) -> DesignConcept:
-        """Update the status of a concept."""
-        valid_statuses = ("concept", "generated", "approved", "listed")
-        if status not in valid_statuses:
-            raise ValueError(f"Invalid status: {status!r}. Must be one of {valid_statuses}")
-
-        data = self._concepts.get(concept_id)
-        if data is None:
-            raise KeyError(f"Concept not found: {concept_id}")
-
-        data["status"] = status
-        self._concepts[concept_id] = data
-        self._save_concepts()
-        return DesignConcept.from_dict(data)
-
-    # ==================================================================
-    # PRODUCT CREATION
-    # ==================================================================
-
-    def create_product(
-        self,
-        concept_id: str,
-        product_type: str,
-        custom_price: Optional[float] = None,
-    ) -> Product:
-        """Create a product from a design concept.
-
-        Generates Etsy SEO title (keyword-rich, 140 chars), 13 tags,
-        description, and calculates pricing with profit margin.
-        """
-        concept_data = self._concepts.get(concept_id)
-        if concept_data is None:
-            raise KeyError(f"Concept not found: {concept_id}")
-        concept = DesignConcept.from_dict(concept_data)
+        shop = self.get_shop(shop_id)
 
         if product_type not in PRODUCT_TYPES:
-            raise ValueError(f"Invalid product type: {product_type!r}")
+            logger.warning("Non-standard product type: %s", product_type)
 
-        type_spec = PRODUCT_TYPES[product_type]
-        niche_profile = NICHES.get(concept.niche, {})
+        if tags and len(tags) > ETSY_MAX_TAGS:
+            logger.warning(
+                "Too many tags (%d), truncating to %d", len(tags), ETSY_MAX_TAGS
+            )
+            tags = tags[:ETSY_MAX_TAGS]
 
-        # Pricing
-        price = custom_price or type_spec["default_price"]
-        cost = type_spec["base_cost"]
-        etsy_fees = self._calculate_etsy_fees(price)
-        net_after_fees = _round_amount(price - cost - etsy_fees)
-        margin = _round_amount((net_after_fees / price) * 100) if price > 0 else 0.0
+        if len(title) > ETSY_TITLE_MAX_LENGTH:
+            logger.warning(
+                "Title exceeds %d chars, truncating", ETSY_TITLE_MAX_LENGTH
+            )
+            title = title[:ETSY_TITLE_MAX_LENGTH]
 
-        # Generate SEO title
-        title = self.generate_etsy_title(concept.niche, product_type, concept.title)
-
-        # Generate tags
-        tags = self.generate_etsy_tags(concept.niche, product_type, concept.title)
-
-        # Build variants
-        variants = self._build_variants(product_type, type_spec)
-
-        product = Product(
-            design_concept_id=concept_id,
-            product_type=product_type,
+        product = EtsyProduct(
+            shop_id=shop_id,
             title=title,
-            description="",  # Will be generated on demand or via generate_etsy_description
-            tags=tags,
+            description=description,
+            tags=tags or [],
             price=price,
             cost=cost,
-            profit_margin=margin,
-            status="draft",
-            variants=variants,
+            product_type=product_type,
+            mockup_urls=mockup_urls or [],
+            printify_id=printify_id,
+            status=status,
+            design_file=design_file,
+            niche=shop.niche,
+            metadata=metadata or {},
         )
 
-        # Generate description
-        product.description = self.generate_etsy_description(product, concept)
-
-        self._products[product.product_id] = product.to_dict()
+        self.products.append(product)
+        self._enforce_max_products()
         self._save_products()
 
         logger.info(
-            "Created product %s: '%s' [%s] $%.2f (margin: %.1f%%)",
-            product.product_id[:8], title[:40], product_type, price, margin,
+            "Added product '%s' to shop %s (price=$%.2f, cost=$%.2f, margin=$%.2f)",
+            title, shop_id, price, cost, product.profit_margin,
         )
         return product
 
-    def bulk_create_products(
-        self,
-        concept_id: str,
-        product_types: list[str],
-    ) -> list[Product]:
-        """Create multiple product types from one design concept."""
-        products: list[Product] = []
-        for pt in product_types:
-            try:
-                product = self.create_product(concept_id, pt)
-                products.append(product)
-            except (ValueError, KeyError) as exc:
-                logger.warning("Failed to create %s for concept %s: %s", pt, concept_id[:8], exc)
-        logger.info(
-            "Bulk created %d/%d products for concept %s",
-            len(products), len(product_types), concept_id[:8],
-        )
-        return products
+    def update_product(self, product_id: str, **kwargs: Any) -> EtsyProduct:
+        """
+        Update fields on an existing product.
 
-    def get_product(self, product_id: str) -> Optional[Product]:
-        """Retrieve a single product by ID."""
-        data = self._products.get(product_id)
-        if data is None:
-            return None
-        return Product.from_dict(data)
+        Raises:
+            KeyError: If product_id not found.
+        """
+        product = self.get_product(product_id)
+
+        if "tags" in kwargs and kwargs["tags"] and len(kwargs["tags"]) > ETSY_MAX_TAGS:
+            kwargs["tags"] = kwargs["tags"][:ETSY_MAX_TAGS]
+
+        if "title" in kwargs and len(kwargs["title"]) > ETSY_TITLE_MAX_LENGTH:
+            kwargs["title"] = kwargs["title"][:ETSY_TITLE_MAX_LENGTH]
+
+        for key, value in kwargs.items():
+            if hasattr(product, key) and key not in ("product_id", "created_at"):
+                setattr(product, key, value)
+
+        product.recalculate_margin()
+        product.updated_at = _now_iso()
+        self._save_products()
+
+        logger.info("Updated product %s: %s", product_id[:8], list(kwargs.keys()))
+        return product
+
+    def get_product(self, product_id: str) -> EtsyProduct:
+        """Get a product by ID. Raises KeyError if not found."""
+        for product in self.products:
+            if product.product_id == product_id:
+                return product
+        raise KeyError(f"Product not found: {product_id}")
 
     def list_products(
         self,
-        concept_id: Optional[str] = None,
-        product_type: Optional[str] = None,
+        shop_id: Optional[str] = None,
         status: Optional[str] = None,
-        niche: Optional[str] = None,
-    ) -> list[Product]:
-        """List products with optional filters."""
-        results: list[Product] = []
-        for data in self._products.values():
-            if concept_id and data.get("design_concept_id") != concept_id:
-                continue
-            if product_type and data.get("product_type") != product_type:
-                continue
-            if status and data.get("status") != status:
-                continue
-            if niche:
-                # Look up concept niche
-                cdata = self._concepts.get(data.get("design_concept_id", ""), {})
-                if cdata.get("niche") != niche:
-                    continue
-            try:
-                results.append(Product.from_dict(data))
-            except (ValueError, TypeError) as exc:
-                logger.warning("Skipping malformed product: %s", exc)
-        results.sort(key=lambda p: p.created_at, reverse=True)
-        return results
-
-    def update_product_status(self, product_id: str, status: str) -> Product:
-        """Update the status of a product."""
-        valid_statuses = ("draft", "active", "sold_out", "deactivated")
-        if status not in valid_statuses:
-            raise ValueError(f"Invalid status: {status!r}. Must be one of {valid_statuses}")
-
-        data = self._products.get(product_id)
-        if data is None:
-            raise KeyError(f"Product not found: {product_id}")
-
-        data["status"] = status
-        self._products[product_id] = data
-        self._save_products()
-        return Product.from_dict(data)
-
-    # ------------------------------------------------------------------
-    # SEO Generation
-    # ------------------------------------------------------------------
-
-    def generate_etsy_title(self, niche: str, product_type: str, concept_title: str) -> str:
-        """Generate an Etsy SEO-optimized title (max 140 chars).
-
-        Format: [Primary Keyword] | [Secondary] | [Style] | [Product Type] | [Gift Occasion]
-        Falls back to a template-based approach if Claude Haiku is unavailable.
+        product_type: Optional[str] = None,
+        sort_by: str = "created_at",
+        limit: int = 100,
+    ) -> list[EtsyProduct]:
         """
-        niche_profile = NICHES.get(niche, {})
-        niche_name = niche_profile.get("name", niche.replace("_", " ").title())
-        primary_keywords = niche_profile.get("keywords", [])[:3]
-        product_label = product_type.replace("_", " ").title()
+        List products with optional filters.
 
-        try:
-            system_prompt = (
-                "You are an Etsy SEO expert specializing in witchcraft/spiritual products. "
-                "Generate a single Etsy listing title that maximizes search visibility. "
-                "Rules:\n"
-                "- Maximum 140 characters\n"
-                "- Use | as separator between keyword phrases\n"
-                "- Front-load the most searched keyword\n"
-                "- Include product type, style, and a gift occasion\n"
-                "- Do NOT use quotation marks in the title\n"
-                "- Return ONLY the title, nothing else"
-            )
-            user_prompt = (
-                f"Niche: {niche_name}\n"
-                f"Design: {concept_title}\n"
-                f"Product type: {product_label}\n"
-                f"Top keywords: {', '.join(primary_keywords)}\n"
-                f"Generate the Etsy title:"
-            )
-            title = _call_haiku(system_prompt, user_prompt, max_tokens=100)
-            # Clean up and enforce length
-            title = title.strip().strip('"').strip("'")
-            if len(title) > ETSY_MAX_TITLE_LENGTH:
-                # Truncate at last | before limit
-                truncated = title[:ETSY_MAX_TITLE_LENGTH]
-                last_pipe = truncated.rfind("|")
-                if last_pipe > 40:
-                    title = truncated[:last_pipe].strip()
-                else:
-                    title = truncated.strip()
-            return title
+        Args:
+            shop_id: Filter by shop.
+            status: Filter by status.
+            product_type: Filter by product type.
+            sort_by: Sort field (created_at, price, sales_count, views,
+                     favorites, profit_margin, title).
+            limit: Maximum results.
 
-        except Exception as exc:
-            logger.warning("Haiku title generation failed, using template: %s", exc)
-            return self._template_etsy_title(niche, product_type, concept_title)
-
-    def _template_etsy_title(self, niche: str, product_type: str, concept_title: str) -> str:
-        """Fallback template-based Etsy title generator."""
-        niche_profile = NICHES.get(niche, {})
-        niche_name = niche_profile.get("name", niche.replace("_", " ").title())
-        product_label = product_type.replace("_", " ").title()
-
-        # Build title segments
-        segments = [
-            concept_title,
-            niche_name,
-            product_label,
-            "Witchy Gift",
-        ]
-
-        # Add a style keyword if space permits
-        style = niche_profile.get("style", "")
-        if style:
-            first_style = style.split(",")[0].strip()
-            segments.insert(2, first_style)
-
-        title = " | ".join(segments)
-        if len(title) > ETSY_MAX_TITLE_LENGTH:
-            # Remove style keyword first
-            if len(segments) > 4:
-                segments.pop(2)
-            title = " | ".join(segments)
-
-        return title[:ETSY_MAX_TITLE_LENGTH]
-
-    def generate_etsy_tags(self, niche: str, product_type: str, concept_title: str) -> list[str]:
-        """Generate 13 Etsy-optimized tags for a product listing.
-
-        Falls back to keyword-based approach if Claude Haiku is unavailable.
+        Returns:
+            Filtered and sorted list of EtsyProduct.
         """
-        niche_profile = NICHES.get(niche, {})
-        niche_name = niche_profile.get("name", "")
-        keywords = niche_profile.get("keywords", [])
-        themes = niche_profile.get("themes", [])
-        product_label = product_type.replace("_", " ")
+        results = list(self.products)
 
-        try:
-            system_prompt = (
-                "You are an Etsy SEO expert. Generate exactly 13 tags for an Etsy listing. "
-                "Rules:\n"
-                "- Each tag max 20 characters\n"
-                "- Mix broad + long-tail keywords\n"
-                "- Include product type, niche, style, and gift tags\n"
-                "- Return as comma-separated list, nothing else\n"
-                "- No hashtags, just the tag phrases"
+        if shop_id:
+            results = [p for p in results if p.shop_id == shop_id]
+        if status:
+            results = [p for p in results if p.status == status]
+        if product_type:
+            results = [p for p in results if p.product_type == product_type]
+
+        sort_keys = {
+            "created_at": lambda p: p.created_at,
+            "price": lambda p: p.price,
+            "sales_count": lambda p: p.sales_count,
+            "views": lambda p: p.views,
+            "favorites": lambda p: p.favorites,
+            "profit_margin": lambda p: p.profit_margin,
+            "title": lambda p: p.title.lower(),
+        }
+        key_fn = sort_keys.get(sort_by, sort_keys["created_at"])
+        reverse = sort_by not in ("title", "created_at")
+        results.sort(key=key_fn, reverse=reverse)
+
+        return results[:limit]
+
+    def search_products(
+        self, query: str, shop_id: Optional[str] = None
+    ) -> list[EtsyProduct]:
+        """
+        Search products by title, tags, and description.
+
+        Returns:
+            Matching products, title matches first.
+        """
+        q = query.lower()
+        title_matches: list[EtsyProduct] = []
+        tag_matches: list[EtsyProduct] = []
+        desc_matches: list[EtsyProduct] = []
+
+        for product in self.products:
+            if shop_id and product.shop_id != shop_id:
+                continue
+            if q in product.title.lower():
+                title_matches.append(product)
+            elif any(q in tag.lower() for tag in product.tags):
+                tag_matches.append(product)
+            elif q in product.description.lower():
+                desc_matches.append(product)
+
+        return title_matches + tag_matches + desc_matches
+
+    def deactivate_product(self, product_id: str) -> EtsyProduct:
+        """Deactivate a product listing."""
+        return self.update_product(product_id, status="deactivated")
+
+    def activate_product(self, product_id: str) -> EtsyProduct:
+        """Activate a product listing."""
+        return self.update_product(product_id, status="active")
+
+    def _enforce_max_products(self) -> None:
+        """Keep products bounded at MAX_PRODUCTS by removing oldest deactivated."""
+        if len(self.products) <= MAX_PRODUCTS:
+            return
+        removable = sorted(
+            [p for p in self.products if p.status in ("removed", "deactivated")],
+            key=lambda p: p.created_at,
+        )
+        excess = len(self.products) - MAX_PRODUCTS
+        to_remove_ids = {p.product_id for p in removable[:excess]}
+        if to_remove_ids:
+            self._products = [
+                p for p in self.products if p.product_id not in to_remove_ids
+            ]
+            logger.info(
+                "Pruned %d old products to stay within MAX_PRODUCTS",
+                len(to_remove_ids),
             )
-            user_prompt = (
-                f"Niche: {niche_name}\n"
-                f"Design: {concept_title}\n"
-                f"Product: {product_label}\n"
-                f"Keywords: {', '.join(keywords[:5])}\n"
-                f"Themes: {', '.join(themes[:3])}\n"
-                f"Generate 13 tags:"
+
+    # ==================================================================
+    # SEO OPTIMIZATION (AI-powered)
+    # ==================================================================
+
+    async def generate_tags(self, product: EtsyProduct) -> list[str]:
+        """
+        Generate optimized Etsy tags using Claude Haiku.
+
+        Returns:
+            List of up to 13 optimized tags.
+        """
+        shop = self.get_shop(product.shop_id)
+        niche_meta = NICHE_METADATA.get(shop.niche, {})
+        seed_keywords = niche_meta.get("keywords_seed", [])
+
+        system_prompt = (
+            "You are an Etsy SEO expert specializing in witchcraft and spiritual "
+            "print-on-demand products. Generate exactly 13 Etsy tags (max 20 chars "
+            "each) for the given product. Tags must be:\n"
+            "- Highly relevant to the product and niche\n"
+            "- A mix of broad and long-tail keywords\n"
+            "- Include the product type (e.g., 'witch shirt', 'moon mug')\n"
+            "- Include gift-related tags (e.g., 'witchy gift for her')\n"
+            "- Include style/aesthetic tags (e.g., 'gothic tee', 'boho witch')\n"
+            "- NO duplicates, NO hashtags, NO commas within a single tag\n\n"
+            "Return ONLY the tags, one per line, no numbering."
+        )
+
+        user_prompt = (
+            f"Product: {product.title}\n"
+            f"Type: {product.product_type}\n"
+            f"Niche: {shop.niche} ({niche_meta.get('style', '')})\n"
+            f"Target audience: {niche_meta.get('target_audience', '')}\n"
+            f"Seed keywords: {', '.join(seed_keywords)}\n"
+            f"Current tags: {', '.join(product.tags) if product.tags else 'none'}"
+        )
+
+        result = await _call_haiku(system_prompt, user_prompt, MAX_TAGS_TOKENS)
+        if result is None:
+            logger.warning(
+                "Tag generation failed for product %s, using seed keywords",
+                product.product_id[:8],
             )
-            response = _call_haiku(system_prompt, user_prompt, max_tokens=200)
-            tags = [t.strip().strip('"').strip("'") for t in response.split(",")]
-            # Enforce 20-char limit and exactly 13 tags
-            tags = [t[:20] for t in tags if t][:ETSY_MAX_TAGS]
-            if len(tags) < ETSY_MAX_TAGS:
-                tags.extend(self._fallback_tags(niche, product_type, concept_title, len(tags)))
-            return tags[:ETSY_MAX_TAGS]
+            return seed_keywords[:ETSY_MAX_TAGS]
 
-        except Exception as exc:
-            logger.warning("Haiku tag generation failed, using fallback: %s", exc)
-            return self._fallback_tags(niche, product_type, concept_title, 0)
+        tags = []
+        for line in result.strip().split("\n"):
+            tag = line.strip().lstrip("0123456789.-) ").strip()
+            tag = tag.strip('"').strip("'")
+            if tag and len(tag) <= 20:
+                tags.append(tag.lower())
 
-    def _fallback_tags(
-        self, niche: str, product_type: str, concept_title: str, existing_count: int
-    ) -> list[str]:
-        """Generate fallback tags from niche keywords and product info."""
-        niche_profile = NICHES.get(niche, {})
-        keywords = niche_profile.get("keywords", [])
-        themes = niche_profile.get("themes", [])
-        product_label = product_type.replace("_", " ")
-
-        candidates: list[str] = []
-        # Niche keywords
-        for kw in keywords:
-            candidates.append(kw[:20])
-        # Product-based
-        candidates.append(f"witchy {product_label}"[:20])
-        candidates.append(f"{niche.replace('_', ' ')} gift"[:20])
-        candidates.append("witchcraft gift"[:20])
-        candidates.append("spiritual gift"[:20])
-        # Theme-based
-        for theme in themes[:3]:
-            candidates.append(theme[:20])
-        # Title words
-        for word in concept_title.lower().split():
-            if len(word) > 3:
-                candidates.append(word[:20])
-
-        # Deduplicate while preserving order
         seen: set[str] = set()
-        unique: list[str] = []
-        for tag in candidates:
-            tag_lower = tag.lower()
-            if tag_lower not in seen:
-                seen.add(tag_lower)
-                unique.append(tag)
+        unique_tags: list[str] = []
+        for tag in tags:
+            if tag not in seen:
+                seen.add(tag)
+                unique_tags.append(tag)
 
-        needed = ETSY_MAX_TAGS - existing_count
-        return unique[:needed]
+        final_tags = unique_tags[:ETSY_MAX_TAGS]
+        logger.info(
+            "Generated %d tags for product %s", len(final_tags), product.product_id[:8]
+        )
+        return final_tags
 
-    def generate_etsy_description(
-        self, product: Product, concept: Optional[DesignConcept] = None,
-    ) -> str:
-        """Generate an Etsy product description with hook, details, and CTA.
+    def generate_tags_sync(self, product: EtsyProduct) -> list[str]:
+        """Synchronous wrapper for generate_tags."""
+        return asyncio.run(self.generate_tags(product))
 
-        Falls back to template if Claude Haiku is unavailable.
+    async def optimize_title(self, product: EtsyProduct) -> str:
         """
-        if concept is None:
-            concept_data = self._concepts.get(product.design_concept_id, {})
-            if concept_data:
-                concept = DesignConcept.from_dict(concept_data)
+        Optimize product title for Etsy SEO using Claude Haiku.
 
-        niche_name = ""
-        if concept:
-            niche_profile = NICHES.get(concept.niche, {})
-            niche_name = niche_profile.get("name", "")
+        Front-loads primary keywords, includes product type and gift angle.
+        Max 140 characters per Etsy rules.
 
-        type_spec = PRODUCT_TYPES.get(product.product_type, {})
-        product_snippet = type_spec.get("description_snippet", "")
-
-        try:
-            system_prompt = (
-                "You are writing an Etsy product description for a witchcraft/spiritual POD product. "
-                "Structure:\n"
-                "1. Hook line (emotional, captures attention)\n"
-                "2. Product details (what it is, materials, sizing)\n"
-                "3. Gift angle (who it's perfect for)\n"
-                "4. Shop pitch (why buy from us)\n\n"
-                "Keep it warm, mystical, inviting. 150-250 words. "
-                "Use line breaks for readability. No markdown formatting."
-            )
-            user_prompt = (
-                f"Product: {product.title}\n"
-                f"Type: {product.product_type}\n"
-                f"Niche: {niche_name}\n"
-                f"Design description: {concept.description if concept else 'N/A'}\n"
-                f"Product details: {product_snippet}\n"
-                f"Price: ${product.price:.2f}\n"
-                f"Generate the description:"
-            )
-            return _call_haiku(system_prompt, user_prompt, max_tokens=MAX_DESCRIPTION_TOKENS)
-
-        except Exception as exc:
-            logger.warning("Haiku description generation failed, using template: %s", exc)
-            return self._template_description(product, concept, product_snippet)
-
-    def _template_description(
-        self, product: Product, concept: Optional[DesignConcept], product_snippet: str
-    ) -> str:
-        """Fallback template description."""
-        niche_name = ""
-        design_desc = ""
-        if concept:
-            niche_profile = NICHES.get(concept.niche, {})
-            niche_name = niche_profile.get("name", "")
-            design_desc = concept.description
-
-        lines = [
-            f"Embrace your inner {niche_name.lower()} with this stunning {product.product_type}.",
-            "",
-            design_desc,
-            "",
-            f"PRODUCT DETAILS:",
-            product_snippet,
-            "",
-            f"PERFECT GIFT FOR:",
-            f"- Anyone who loves {niche_name.lower()} aesthetics",
-            "- Witchcraft practitioners and spiritual seekers",
-            "- Birthday, holiday, or just-because gifts",
-            "",
-            "Designed with love and magic. Every purchase supports independent artists.",
-            "",
-            f"Add this {product.product_type} to your cart and let the magic begin!",
-        ]
-        return "\n".join(lines)
-
-    # ------------------------------------------------------------------
-    # Variant & Fee Helpers
-    # ------------------------------------------------------------------
-
-    def _build_variants(self, product_type: str, type_spec: dict) -> list[dict]:
-        """Build variant list from product type specification."""
-        variants: list[dict] = []
-        if "sizes" in type_spec:
-            for size in type_spec["sizes"]:
-                variants.append({
-                    "variant_type": "size",
-                    "value": size,
-                    "price_adjustment": 0.0,
-                    "in_stock": True,
-                })
-        if "variants" in type_spec:
-            for variant_name in type_spec["variants"]:
-                variants.append({
-                    "variant_type": "option",
-                    "value": variant_name,
-                    "price_adjustment": 0.0,
-                    "in_stock": True,
-                })
-        return variants
-
-    @staticmethod
-    def _calculate_etsy_fees(sale_price: float) -> float:
-        """Calculate total Etsy fees for a given sale price.
-
-        Fees:
-            - Listing fee: $0.20
-            - Transaction fee: 6.5% of sale price
-            - Payment processing: 3% + $0.25
+        Returns:
+            Optimized title string.
         """
-        listing_fee = ETSY_LISTING_FEE
-        transaction_fee = sale_price * ETSY_TRANSACTION_FEE_PCT
-        payment_fee = sale_price * ETSY_PAYMENT_PROCESSING_PCT + ETSY_PAYMENT_PROCESSING_FLAT
-        return _round_amount(listing_fee + transaction_fee + payment_fee)
+        shop = self.get_shop(product.shop_id)
+        niche_meta = NICHE_METADATA.get(shop.niche, {})
+
+        system_prompt = (
+            "You are an Etsy SEO title expert for witchcraft print-on-demand "
+            "products. Optimize the given product title following these rules:\n"
+            "- Max 140 characters\n"
+            "- Front-load the primary keyword\n"
+            "- Use pipes (|) to separate keyword groups\n"
+            "- Include: primary keyword | secondary keyword | style | product type | gift angle\n"
+            "- Example: Cosmic Witch Shirt | Celestial Astrology Tee | Witchy Aesthetic | Mystical Gift for Her\n"
+            "- NO all-caps, NO excessive punctuation\n"
+            "Return ONLY the optimized title, nothing else."
+        )
+
+        user_prompt = (
+            f"Current title: {product.title}\n"
+            f"Product type: {product.product_type}\n"
+            f"Niche: {shop.niche} ({niche_meta.get('style', '')})\n"
+            f"Tags: {', '.join(product.tags[:5]) if product.tags else 'none'}\n"
+            f"Target audience: {niche_meta.get('target_audience', '')}"
+        )
+
+        result = await _call_haiku(system_prompt, user_prompt, MAX_TITLE_TOKENS)
+        if result is None:
+            logger.warning(
+                "Title optimization failed for %s, keeping original",
+                product.product_id[:8],
+            )
+            return product.title
+
+        optimized = result.strip().strip('"').strip("'")
+        if len(optimized) > ETSY_TITLE_MAX_LENGTH:
+            optimized = optimized[:ETSY_TITLE_MAX_LENGTH]
+
+        logger.info(
+            "Optimized title for %s: %s", product.product_id[:8], optimized[:60]
+        )
+        return optimized
+
+    def optimize_title_sync(self, product: EtsyProduct) -> str:
+        """Synchronous wrapper for optimize_title."""
+        return asyncio.run(self.optimize_title(product))
+
+    async def generate_description(self, product: EtsyProduct) -> str:
+        """
+        Generate a full Etsy product description using Claude Sonnet.
+
+        Follows the template from SKILL.md:
+        - Hook (1 line about the design)
+        - Product details (material, sizing, care)
+        - Gift angle (who it is perfect for)
+        - Shop pitch (browse more designs)
+
+        Returns:
+            Full product description string.
+        """
+        shop = self.get_shop(product.shop_id)
+        niche_meta = NICHE_METADATA.get(shop.niche, {})
+
+        system_prompt = (
+            "You are a copywriter for a witchcraft print-on-demand Etsy shop. "
+            "Write compelling product descriptions that convert browsers into buyers.\n\n"
+            "Voice: Warm, mystical, inviting. Like a friend who happens to be a witch "
+            "recommending their favorite magical items.\n\n"
+            "Description structure:\n"
+            "1. HOOK — One captivating line about the design's meaning or energy\n"
+            "2. PRODUCT DETAILS — Material, sizing, care instructions for the product type\n"
+            "3. GIFT ANGLE — Who this is perfect for and what occasions\n"
+            "4. SHOP PITCH — Invite them to browse more designs in the collection\n\n"
+            "Product type details to include:\n"
+            "- T-Shirts: Bella+Canvas 3001 or Gildan 18000, unisex, pre-shrunk, true to size\n"
+            "- Mugs: 11oz or 15oz ceramic, dishwasher/microwave safe\n"
+            "- Tote bags: Heavy canvas, sturdy handles, flat bottom\n"
+            "- Stickers: Premium vinyl, waterproof, die-cut\n"
+            "- Phone cases: Impact-resistant, slim profile, raised edges\n"
+            "- Tapestries: Lightweight polyester, vibrant print, multiple sizes\n"
+            "- Journals/Notebooks: Hardcover, lined pages, lay-flat binding\n"
+            "- Greeting cards: Premium cardstock, blank inside, with envelope\n\n"
+            "Include relevant Etsy SEO keywords naturally in the description.\n"
+            "Use short paragraphs and line breaks for readability.\n"
+            "DO NOT use markdown formatting — write plain text suitable for Etsy."
+        )
+
+        user_prompt = (
+            f"Product: {product.title}\n"
+            f"Type: {product.product_type}\n"
+            f"Shop: {shop.shop_name}\n"
+            f"Niche: {shop.niche} — {niche_meta.get('style', '')}\n"
+            f"Target audience: {niche_meta.get('target_audience', '')}\n"
+            f"Tags: {', '.join(product.tags) if product.tags else 'none'}\n"
+            f"Price: ${product.price:.2f}"
+        )
+
+        result = await _call_sonnet(system_prompt, user_prompt, MAX_DESCRIPTION_TOKENS)
+        if result is None:
+            logger.warning(
+                "Description generation failed for %s", product.product_id[:8]
+            )
+            return product.description or (
+                f"Beautiful {product.product_type} from {shop.shop_name}."
+            )
+
+        logger.info(
+            "Generated description for %s (%d chars)",
+            product.product_id[:8],
+            len(result),
+        )
+        return result
+
+    def generate_description_sync(self, product: EtsyProduct) -> str:
+        """Synchronous wrapper for generate_description."""
+        return asyncio.run(self.generate_description(product))
+
+    async def full_seo_optimize(self, product_id: str) -> dict:
+        """
+        Run full SEO optimization on a product: title, tags, description.
+
+        Returns:
+            Dict with optimized title, tags, and description.
+        """
+        product = self.get_product(product_id)
+
+        title_task = asyncio.create_task(self.optimize_title(product))
+        tags_task = asyncio.create_task(self.generate_tags(product))
+
+        optimized_title = await title_task
+        optimized_tags = await tags_task
+
+        product.title = optimized_title
+        product.tags = optimized_tags
+
+        optimized_description = await self.generate_description(product)
+
+        self.update_product(
+            product_id,
+            title=optimized_title,
+            tags=optimized_tags,
+            description=optimized_description,
+        )
+
+        result = {
+            "product_id": product_id,
+            "title": optimized_title,
+            "tags": optimized_tags,
+            "description": optimized_description,
+            "optimized_at": _now_iso(),
+        }
+
+        logger.info(
+            "Full SEO optimization complete for product %s", product_id[:8]
+        )
+        return result
+
+    def full_seo_optimize_sync(self, product_id: str) -> dict:
+        """Synchronous wrapper for full_seo_optimize."""
+        return asyncio.run(self.full_seo_optimize(product_id))
 
     # ==================================================================
     # PRINTIFY INTEGRATION
     # ==================================================================
 
-    async def sync_to_printify(self, product: Product) -> str:
-        """Push a product to Printify and return the printify_id.
-
-        Sends a POST request to Printify's product creation endpoint.
-        Updates the local product record with the returned printify_id.
+    def create_mockup_record(
+        self,
+        product_id: str,
+        mockup_url: str,
+        printify_id: str = "",
+    ) -> EtsyProduct:
         """
-        import aiohttp
+        Record a mockup URL and optional Printify ID for a product.
 
-        concept_data = self._concepts.get(product.design_concept_id, {})
-        image_path = concept_data.get("image_path")
-        if not image_path:
-            raise ValueError(
-                f"Concept {product.design_concept_id[:8]} has no approved image. "
-                "Call approve_concept() first."
-            )
-
-        headers = _get_printify_headers()
-        shop_id = os.environ.get("PRINTIFY_SHOP_ID", "")
-        if not shop_id:
-            raise EnvironmentError("PRINTIFY_SHOP_ID not set.")
-
-        type_spec = PRODUCT_TYPES.get(product.product_type, {})
-        blueprint_title = type_spec.get("printify_blueprint", "Generic")
-
-        payload = {
-            "title": product.title,
-            "description": product.description,
-            "blueprint_id": blueprint_title,
-            "print_areas": {
-                "front": image_path,
-            },
-            "variants": [
-                {
-                    "id": v.get("value", "default"),
-                    "price": int(product.price * 100),  # cents
-                    "is_enabled": v.get("in_stock", True),
-                }
-                for v in product.variants
-            ] if product.variants else [
-                {"id": "default", "price": int(product.price * 100), "is_enabled": True}
-            ],
-        }
-
-        url = f"{PRINTIFY_BASE_URL}/shops/{shop_id}/products.json"
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=headers, json=payload) as resp:
-                if resp.status not in (200, 201):
-                    body = await resp.text()
-                    raise RuntimeError(
-                        f"Printify API error {resp.status}: {body}"
-                    )
-                data = await resp.json()
-                printify_id = str(data.get("id", ""))
-
-        # Update local product
-        product_data = self._products.get(product.product_id)
-        if product_data:
-            product_data["printify_id"] = printify_id
-            self._products[product.product_id] = product_data
-            self._save_products()
+        Returns:
+            The updated EtsyProduct.
+        """
+        product = self.get_product(product_id)
+        if mockup_url not in product.mockup_urls:
+            product.mockup_urls.append(mockup_url)
+        if printify_id:
+            product.printify_id = printify_id
+        product.updated_at = _now_iso()
+        self._save_products()
 
         logger.info(
-            "Synced product %s to Printify: %s", product.product_id[:8], printify_id
+            "Mockup recorded for product %s (printify=%s)",
+            product_id[:8],
+            printify_id or "N/A",
         )
-        return printify_id
+        return product
 
-    async def get_printify_status(self, printify_id: str) -> dict:
-        """Fetch product status from Printify."""
-        import aiohttp
-
-        headers = _get_printify_headers()
-        shop_id = os.environ.get("PRINTIFY_SHOP_ID", "")
-
-        url = f"{PRINTIFY_BASE_URL}/shops/{shop_id}/products/{printify_id}.json"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers) as resp:
-                if resp.status != 200:
-                    body = await resp.text()
-                    raise RuntimeError(f"Printify API error {resp.status}: {body}")
-                return await resp.json()
-
-    async def update_printify_product(self, printify_id: str, **kwargs: Any) -> bool:
-        """Update a product on Printify (title, description, price, etc.)."""
-        import aiohttp
-
-        headers = _get_printify_headers()
-        shop_id = os.environ.get("PRINTIFY_SHOP_ID", "")
-
-        url = f"{PRINTIFY_BASE_URL}/shops/{shop_id}/products/{printify_id}.json"
-        async with aiohttp.ClientSession() as session:
-            async with session.put(url, headers=headers, json=kwargs) as resp:
-                if resp.status not in (200, 204):
-                    body = await resp.text()
-                    logger.error("Printify update failed for %s: %s", printify_id, body)
-                    return False
-                logger.info("Updated Printify product %s", printify_id)
-                return True
-
-    # Sync wrappers for Printify
-    def sync_to_printify_sync(self, product: Product) -> str:
-        """Synchronous wrapper for sync_to_printify."""
-        return asyncio.get_event_loop().run_until_complete(self.sync_to_printify(product))
-
-    def get_printify_status_sync(self, printify_id: str) -> dict:
-        """Synchronous wrapper for get_printify_status."""
-        return asyncio.get_event_loop().run_until_complete(self.get_printify_status(printify_id))
-
-    # ==================================================================
-    # ETSY INTEGRATION
-    # ==================================================================
-
-    async def publish_to_etsy(self, product: Product) -> str:
-        """Publish a product as an Etsy listing and return the listing_id.
-
-        Creates a draft listing on Etsy via the Open API v3.
+    def track_production(
+        self, product_id: str, status_update: dict
+    ) -> EtsyProduct:
         """
-        import aiohttp
+        Update production/fulfillment tracking metadata.
 
-        headers = _get_etsy_headers()
-        etsy_shop_id = os.environ.get("ETSY_SHOP_ID", "")
-        if not etsy_shop_id:
-            raise EnvironmentError("ETSY_SHOP_ID not set.")
+        Args:
+            product_id: The product to update.
+            status_update: Dict with production status fields.
 
-        # Build Etsy listing payload
-        payload = {
-            "title": product.title[:ETSY_MAX_TITLE_LENGTH],
-            "description": product.description,
-            "price": product.price,
-            "quantity": 999,  # POD = unlimited
-            "tags": product.tags[:ETSY_MAX_TAGS],
-            "who_made": "i_did",
-            "when_made": "2020_2026",
-            "taxonomy_id": 2078,  # Clothing > Unisex Adult Clothing (adjust per type)
-            "is_digital": False,
-            "is_supply": False,
-            "should_auto_renew": True,
-            "state": "draft",
-        }
+        Returns:
+            The updated EtsyProduct.
+        """
+        product = self.get_product(product_id)
+        production = product.metadata.get("production", {})
+        production.update(status_update)
+        production["last_updated"] = _now_iso()
+        product.metadata["production"] = production
+        product.updated_at = _now_iso()
+        self._save_products()
 
-        # Adjust taxonomy for non-clothing items
-        taxonomy_map = {
-            "mug": 1643,       # Home & Living > Kitchen & Dining > Drinkware
-            "sticker": 2566,   # Craft Supplies > Stickers
-            "tote": 1631,      # Bags & Purses > Tote Bags
-            "phonecase": 2082, # Electronics & Accessories > Phone Cases
-            "tapestry": 1654,  # Home & Living > Home Decor > Tapestries
-            "journal": 1230,   # Books, Movies & Music > Books > Blank Books
-            "card": 1258,      # Paper & Party Supplies > Cards
-        }
-        if product.product_type in taxonomy_map:
-            payload["taxonomy_id"] = taxonomy_map[product.product_type]
-
-        url = f"{ETSY_BASE_URL}/shops/{etsy_shop_id}/listings"
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=headers, json=payload) as resp:
-                if resp.status not in (200, 201):
-                    body = await resp.text()
-                    raise RuntimeError(f"Etsy API error {resp.status}: {body}")
-                data = await resp.json()
-                listing_id = str(data.get("listing_id", ""))
-
-        # Update local product
-        product_data = self._products.get(product.product_id)
-        if product_data:
-            product_data["etsy_listing_id"] = listing_id
-            product_data["status"] = "active"
-            self._products[product.product_id] = product_data
-            self._save_products()
-
-        # Cache listing
-        listing = EtsyListing(
-            listing_id=listing_id,
-            product_id=product.product_id,
-            title=product.title,
-            description=product.description,
-            tags=product.tags,
-            price=product.price,
-            status="active",
+        logger.info(
+            "Production status updated for %s: %s",
+            product_id[:8],
+            list(status_update.keys()),
         )
-        self._listings[listing_id] = listing.to_dict()
-        self._save_listings()
+        return product
 
-        logger.info("Published to Etsy: listing %s for product %s", listing_id, product.product_id[:8])
-        return listing_id
+    def calculate_margins(
+        self, shop_id: Optional[str] = None
+    ) -> list[dict]:
+        """
+        Calculate profit margins for all active products (or one shop).
 
-    async def update_etsy_listing(self, listing_id: str, **kwargs: Any) -> bool:
-        """Update an existing Etsy listing."""
-        import aiohttp
+        Returns:
+            List of dicts with product_id, title, price, cost, fees,
+            net_profit, margin_pct. Sorted by margin descending.
+        """
+        products = self.list_products(shop_id=shop_id, status="active")
+        include_ads = self._config.get("offsite_ads_enabled", False)
 
-        headers = _get_etsy_headers()
-        etsy_shop_id = os.environ.get("ETSY_SHOP_ID", "")
-
-        url = f"{ETSY_BASE_URL}/shops/{etsy_shop_id}/listings/{listing_id}"
-        async with aiohttp.ClientSession() as session:
-            async with session.put(url, headers=headers, json=kwargs) as resp:
-                if resp.status not in (200, 204):
-                    body = await resp.text()
-                    logger.error("Etsy update failed for listing %s: %s", listing_id, body)
-                    return False
-
-        # Update local cache
-        listing_data = self._listings.get(listing_id, {})
-        listing_data.update(kwargs)
-        listing_data["last_synced"] = _now_iso()
-        self._listings[listing_id] = listing_data
-        self._save_listings()
-
-        logger.info("Updated Etsy listing %s", listing_id)
-        return True
-
-    async def get_etsy_stats(self, listing_id: str) -> dict:
-        """Fetch listing statistics from Etsy (views, favorites, sales)."""
-        import aiohttp
-
-        headers = _get_etsy_headers()
-        etsy_shop_id = os.environ.get("ETSY_SHOP_ID", "")
-
-        url = f"{ETSY_BASE_URL}/shops/{etsy_shop_id}/listings/{listing_id}"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers) as resp:
-                if resp.status != 200:
-                    body = await resp.text()
-                    raise RuntimeError(f"Etsy API error {resp.status}: {body}")
-                data = await resp.json()
-
-        stats = {
-            "listing_id": listing_id,
-            "views": data.get("views", 0),
-            "num_favorers": data.get("num_favorers", 0),
-            "quantity_sold": data.get("quantity_sold", 0),
-            "title": data.get("title", ""),
-            "state": data.get("state", ""),
-            "last_modified": data.get("last_modified_timestamp", ""),
-        }
-
-        # Update local cache
-        listing_data = self._listings.get(listing_id, {})
-        listing_data["views"] = stats["views"]
-        listing_data["favorites"] = stats["num_favorers"]
-        listing_data["sales"] = stats["quantity_sold"]
-        listing_data["last_synced"] = _now_iso()
-        if stats["views"] > 0:
-            listing_data["conversion_rate"] = _round_amount(
-                (stats["quantity_sold"] / stats["views"]) * 100
+        results: list[dict] = []
+        for product in products:
+            fees = calculate_etsy_fees(
+                product.price, product.cost, include_offsite_ads=include_ads
             )
-        self._listings[listing_id] = listing_data
-        self._save_listings()
+            results.append({
+                "product_id": product.product_id,
+                "title": product.title,
+                "shop_id": product.shop_id,
+                "product_type": product.product_type,
+                **fees,
+            })
 
-        return stats
-
-    async def optimize_listing_seo(self, listing_id: str) -> dict:
-        """Analyze an Etsy listing and return SEO improvement suggestions."""
-        listing_data = self._listings.get(listing_id)
-        if not listing_data:
-            raise KeyError(f"Listing not found in cache: {listing_id}")
-
-        listing = EtsyListing.from_dict(listing_data)
-        issues: list[str] = []
-        suggestions: list[str] = []
-
-        # Title checks
-        if len(listing.title) < 80:
-            issues.append(f"Title too short ({len(listing.title)} chars). Use all 140 characters.")
-        if "|" not in listing.title:
-            suggestions.append("Use | separators to pack more keywords into the title.")
-
-        # Tag checks
-        if len(listing.tags) < ETSY_MAX_TAGS:
-            issues.append(f"Only {len(listing.tags)}/{ETSY_MAX_TAGS} tags used. Use all 13.")
-        # Check for short tags (less effective)
-        short_tags = [t for t in listing.tags if len(t) < 5]
-        if short_tags:
-            suggestions.append(f"Replace short tags ({', '.join(short_tags)}) with longer phrases.")
-
-        # Description checks
-        if len(listing.description) < 200:
-            issues.append("Description too short. Aim for 200+ words.")
-
-        # Conversion analysis
-        listing.recalculate_conversion()
-        if listing.views > 50 and listing.conversion_rate < 1.0:
-            suggestions.append(
-                f"Low conversion rate ({listing.conversion_rate:.1f}%). "
-                "Consider updating photos, title, or price."
-            )
-        if listing.views > 50 and listing.favorites > 0:
-            fav_rate = (listing.favorites / listing.views) * 100
-            if fav_rate > 5 and listing.conversion_rate < 2:
-                suggestions.append(
-                    "High favorite rate but low conversion -- consider a sale or "
-                    "adding urgency to the description."
-                )
-
-        return {
-            "listing_id": listing_id,
-            "title": listing.title,
-            "issues": issues,
-            "suggestions": suggestions,
-            "current_stats": {
-                "views": listing.views,
-                "favorites": listing.favorites,
-                "sales": listing.sales,
-                "conversion_rate": listing.conversion_rate,
-                "tag_count": len(listing.tags),
-                "title_length": len(listing.title),
-            },
-        }
-
-    # Sync wrappers for Etsy
-    def publish_to_etsy_sync(self, product: Product) -> str:
-        """Synchronous wrapper for publish_to_etsy."""
-        return asyncio.get_event_loop().run_until_complete(self.publish_to_etsy(product))
-
-    def get_etsy_stats_sync(self, listing_id: str) -> dict:
-        """Synchronous wrapper for get_etsy_stats."""
-        return asyncio.get_event_loop().run_until_complete(self.get_etsy_stats(listing_id))
+        results.sort(key=lambda x: x["margin_pct"], reverse=True)
+        return results
 
     # ==================================================================
-    # SALES & ANALYTICS
+    # SALES TRACKING
     # ==================================================================
 
     def record_sale(
         self,
         product_id: str,
-        quantity: int,
-        revenue: float,
+        quantity: int = 1,
         sale_date: Optional[str] = None,
-    ) -> dict:
-        """Record a sale for a product.
-
-        Updates the product's cumulative sales_count and revenue,
-        and appends the sale to the sales ledger.
+        order_id: str = "",
+        customer_location: str = "",
+        metadata: Optional[dict] = None,
+    ) -> SaleRecord:
         """
+        Record a sale transaction.
+
+        Automatically calculates fees and updates product sales_count.
+
+        Returns:
+            The created SaleRecord.
+        """
+        product = self.get_product(product_id)
         if sale_date is None:
             sale_date = _today_iso()
 
-        product_data = self._products.get(product_id)
-        if product_data is None:
-            raise KeyError(f"Product not found: {product_id}")
+        unit_price = product.price
+        gross_revenue = _round_amount(unit_price * quantity)
+        include_ads = self._config.get("offsite_ads_enabled", False)
+        fees = calculate_etsy_fees(
+            unit_price, product.cost, include_offsite_ads=include_ads
+        )
+        etsy_fees_total = _round_amount(fees["total_etsy_fees"] * quantity)
+        printify_cost_total = _round_amount(product.cost * quantity)
+        net_profit = _round_amount(fees["net_profit"] * quantity)
 
-        # Look up concept for niche info
-        concept_data = self._concepts.get(product_data.get("design_concept_id", ""), {})
-        niche = concept_data.get("niche", "unknown")
+        sale = SaleRecord(
+            product_id=product_id,
+            shop_id=product.shop_id,
+            date=sale_date,
+            quantity=quantity,
+            unit_price=unit_price,
+            gross_revenue=gross_revenue,
+            etsy_fees=etsy_fees_total,
+            printify_cost=printify_cost_total,
+            net_profit=net_profit,
+            customer_location=customer_location,
+            order_id=order_id,
+            metadata=metadata or {},
+        )
 
-        sale_record = {
-            "sale_id": _new_id(),
-            "product_id": product_id,
-            "niche": niche,
-            "product_type": product_data.get("product_type", ""),
-            "quantity": quantity,
-            "revenue": _round_amount(revenue),
-            "cost": _round_amount(product_data.get("cost", 0) * quantity),
-            "etsy_fees": _round_amount(self._calculate_etsy_fees(revenue)),
-            "date": sale_date,
-            "recorded_at": _now_iso(),
-        }
-
-        self._sales.append(sale_record)
+        self.sales.append(sale)
         self._save_sales()
 
-        # Update product cumulative stats
-        product_data["sales_count"] = product_data.get("sales_count", 0) + quantity
-        product_data["revenue"] = _round_amount(
-            product_data.get("revenue", 0) + revenue
-        )
-        self._products[product_id] = product_data
+        product.sales_count += quantity
+        product.updated_at = _now_iso()
         self._save_products()
 
         logger.info(
-            "Recorded sale: %d x %s ($%.2f) on %s",
-            quantity, product_id[:8], revenue, sale_date,
+            "Recorded sale: %d x %s ($%.2f gross, $%.2f net)",
+            quantity, product.title[:40], gross_revenue, net_profit,
         )
-        return sale_record
+        return sale
 
-    def get_sales_report(
-        self,
-        period: str = "month",
-        niche: Optional[str] = None,
-    ) -> SalesReport:
-        """Generate a sales report for a given period and optional niche filter."""
-        start, end = _period_bounds(period)
-        start_date = _parse_date(start)
-        end_date = _parse_date(end)
+    def daily_sales(self, iso_date: Optional[str] = None) -> dict:
+        """
+        Get sales summary for a single day.
 
-        # Filter sales
-        filtered: list[dict] = []
-        for sale in self._sales:
-            sale_date_str = sale.get("date", "")
-            if not sale_date_str:
-                continue
-            try:
-                sd = _parse_date(sale_date_str)
-            except ValueError:
-                continue
-            if sd < start_date or sd > end_date:
-                continue
-            if niche and sale.get("niche") != niche:
-                continue
-            filtered.append(sale)
+        Returns:
+            Dict with date, total_sales, total_units, gross_revenue,
+            total_fees, net_profit, and by_shop breakdown.
+        """
+        target_date = iso_date or _today_iso()
+        day_sales = [s for s in self.sales if s.date == target_date]
 
-        total_revenue = sum(s.get("revenue", 0) for s in filtered)
-        total_orders = len(filtered)
-        total_units = sum(s.get("quantity", 0) for s in filtered)
-        avg_order = _round_amount(total_revenue / total_orders) if total_orders > 0 else 0.0
-
-        # Top products
-        product_revenue: dict[str, float] = {}
-        product_units: dict[str, int] = {}
-        for sale in filtered:
-            pid = sale.get("product_id", "")
-            product_revenue[pid] = product_revenue.get(pid, 0) + sale.get("revenue", 0)
-            product_units[pid] = product_units.get(pid, 0) + sale.get("quantity", 0)
-        top_products = sorted(
-            [
-                {
-                    "product_id": pid,
-                    "revenue": _round_amount(rev),
-                    "units": product_units.get(pid, 0),
-                    "title": self._products.get(pid, {}).get("title", "Unknown"),
+        by_shop: dict[str, dict] = {}
+        for sale in day_sales:
+            if sale.shop_id not in by_shop:
+                by_shop[sale.shop_id] = {
+                    "sales": 0, "units": 0, "gross": 0.0, "fees": 0.0, "net": 0.0,
                 }
-                for pid, rev in product_revenue.items()
-            ],
-            key=lambda x: x["revenue"],
-            reverse=True,
+            by_shop[sale.shop_id]["sales"] += 1
+            by_shop[sale.shop_id]["units"] += sale.quantity
+            by_shop[sale.shop_id]["gross"] = _round_amount(
+                by_shop[sale.shop_id]["gross"] + sale.gross_revenue
+            )
+            by_shop[sale.shop_id]["fees"] = _round_amount(
+                by_shop[sale.shop_id]["fees"] + sale.etsy_fees
+            )
+            by_shop[sale.shop_id]["net"] = _round_amount(
+                by_shop[sale.shop_id]["net"] + sale.net_profit
+            )
+
+        return {
+            "date": target_date,
+            "total_sales": len(day_sales),
+            "total_units": sum(s.quantity for s in day_sales),
+            "gross_revenue": _round_amount(sum(s.gross_revenue for s in day_sales)),
+            "total_fees": _round_amount(sum(s.etsy_fees for s in day_sales)),
+            "total_cost": _round_amount(sum(s.printify_cost for s in day_sales)),
+            "net_profit": _round_amount(sum(s.net_profit for s in day_sales)),
+            "by_shop": by_shop,
+        }
+
+    def _get_sales_range(
+        self, start_date: str, end_date: str
+    ) -> list[SaleRecord]:
+        """Get sales within a date range (inclusive)."""
+        start = _parse_date(start_date)
+        end = _parse_date(end_date)
+        return [
+            s for s in self.sales
+            if start <= _parse_date(s.date) <= end
+        ]
+
+    def monthly_report(
+        self, shop_id: Optional[str] = None
+    ) -> SalesReport:
+        """Generate a sales report for the current month."""
+        start, end = _month_bounds()
+        return self._build_report("month", start, end, shop_id)
+
+    def weekly_report(
+        self, shop_id: Optional[str] = None
+    ) -> SalesReport:
+        """Generate a sales report for the current week."""
+        start, end = _week_bounds()
+        return self._build_report("week", start, end, shop_id)
+
+    def custom_report(
+        self,
+        start_date: str,
+        end_date: str,
+        shop_id: Optional[str] = None,
+    ) -> SalesReport:
+        """Generate a sales report for a custom date range."""
+        return self._build_report("custom", start_date, end_date, shop_id)
+
+    def _build_report(
+        self,
+        period: str,
+        start_date: str,
+        end_date: str,
+        shop_id: Optional[str] = None,
+    ) -> SalesReport:
+        """Build a SalesReport for the given period."""
+        sales = self._get_sales_range(start_date, end_date)
+        if shop_id:
+            sales = [s for s in sales if s.shop_id == shop_id]
+
+        total_sales = len(sales)
+        total_units = sum(s.quantity for s in sales)
+        gross_revenue = _round_amount(sum(s.gross_revenue for s in sales))
+        total_fees = _round_amount(sum(s.etsy_fees for s in sales))
+        total_cost = _round_amount(sum(s.printify_cost for s in sales))
+        net_profit = _round_amount(sum(s.net_profit for s in sales))
+
+        # By shop breakdown
+        by_shop: dict[str, dict] = {}
+        for sale in sales:
+            if sale.shop_id not in by_shop:
+                by_shop[sale.shop_id] = {
+                    "sales": 0, "units": 0, "gross": 0.0,
+                    "fees": 0.0, "cost": 0.0, "net": 0.0,
+                }
+            entry = by_shop[sale.shop_id]
+            entry["sales"] += 1
+            entry["units"] += sale.quantity
+            entry["gross"] = _round_amount(entry["gross"] + sale.gross_revenue)
+            entry["fees"] = _round_amount(entry["fees"] + sale.etsy_fees)
+            entry["cost"] = _round_amount(entry["cost"] + sale.printify_cost)
+            entry["net"] = _round_amount(entry["net"] + sale.net_profit)
+
+        # By product type breakdown
+        by_product_type: dict[str, dict] = {}
+        product_lookup = {p.product_id: p for p in self.products}
+        for sale in sales:
+            prod = product_lookup.get(sale.product_id)
+            ptype = prod.product_type if prod else "unknown"
+            if ptype not in by_product_type:
+                by_product_type[ptype] = {
+                    "sales": 0, "units": 0, "gross": 0.0, "net": 0.0,
+                }
+            by_product_type[ptype]["sales"] += 1
+            by_product_type[ptype]["units"] += sale.quantity
+            by_product_type[ptype]["gross"] = _round_amount(
+                by_product_type[ptype]["gross"] + sale.gross_revenue
+            )
+            by_product_type[ptype]["net"] = _round_amount(
+                by_product_type[ptype]["net"] + sale.net_profit
+            )
+
+        # Top products by units
+        product_sales: dict[str, dict] = {}
+        for sale in sales:
+            pid = sale.product_id
+            if pid not in product_sales:
+                prod = product_lookup.get(pid)
+                product_sales[pid] = {
+                    "product_id": pid,
+                    "title": prod.title if prod else "Unknown",
+                    "shop_id": sale.shop_id,
+                    "units": 0,
+                    "gross": 0.0,
+                    "net": 0.0,
+                }
+            product_sales[pid]["units"] += sale.quantity
+            product_sales[pid]["gross"] = _round_amount(
+                product_sales[pid]["gross"] + sale.gross_revenue
+            )
+            product_sales[pid]["net"] = _round_amount(
+                product_sales[pid]["net"] + sale.net_profit
+            )
+
+        top_products = sorted(
+            product_sales.values(), key=lambda x: x["units"], reverse=True
         )[:20]
 
-        # Top niches
-        niche_revenue: dict[str, float] = {}
-        niche_orders: dict[str, int] = {}
-        for sale in filtered:
-            n = sale.get("niche", "unknown")
-            niche_revenue[n] = niche_revenue.get(n, 0) + sale.get("revenue", 0)
-            niche_orders[n] = niche_orders.get(n, 0) + 1
-        top_niches = sorted(
-            [
-                {
-                    "niche": n,
-                    "revenue": _round_amount(rev),
-                    "orders": niche_orders.get(n, 0),
-                }
-                for n, rev in niche_revenue.items()
-            ],
-            key=lambda x: x["revenue"],
-            reverse=True,
-        )
-
-        # Costs breakdown
-        total_product_cost = _round_amount(sum(s.get("cost", 0) for s in filtered))
-        total_etsy_fees = _round_amount(sum(s.get("etsy_fees", 0) for s in filtered))
-        costs = {
-            "product_cost": total_product_cost,
-            "etsy_fees": total_etsy_fees,
-            "total_costs": _round_amount(total_product_cost + total_etsy_fees),
-        }
-        net_profit = _round_amount(total_revenue - costs["total_costs"])
+        # Daily breakdown
+        daily_breakdown: list[dict] = []
+        dates = _date_range(start_date, end_date)
+        for d in dates:
+            day_sales = [s for s in sales if s.date == d]
+            if day_sales:
+                daily_breakdown.append({
+                    "date": d,
+                    "sales": len(day_sales),
+                    "units": sum(s.quantity for s in day_sales),
+                    "gross": _round_amount(
+                        sum(s.gross_revenue for s in day_sales)
+                    ),
+                    "net": _round_amount(
+                        sum(s.net_profit for s in day_sales)
+                    ),
+                })
 
         return SalesReport(
             period=period,
-            niche=niche,
-            total_revenue=total_revenue,
-            total_orders=total_orders,
+            start_date=start_date,
+            end_date=end_date,
+            total_sales=total_sales,
             total_units=total_units,
-            avg_order_value=avg_order,
-            top_products=top_products,
-            top_niches=top_niches,
-            costs=costs,
+            gross_revenue=gross_revenue,
+            total_fees=total_fees,
+            total_cost=total_cost,
             net_profit=net_profit,
+            by_shop=by_shop,
+            by_product_type=by_product_type,
+            top_products=top_products,
+            daily_breakdown=daily_breakdown,
         )
 
-    def top_sellers(self, count: int = 20, period: str = "month") -> list[Product]:
-        """Return top-selling products by revenue for the given period."""
-        report = self.get_sales_report(period)
-        results: list[Product] = []
-        for tp in report.top_products[:count]:
-            product_data = self._products.get(tp["product_id"])
-            if product_data:
-                try:
-                    results.append(Product.from_dict(product_data))
-                except (ValueError, TypeError):
-                    pass
-        return results
-
-    def niche_performance(self, period: str = "month") -> dict[str, dict]:
-        """Compare performance across all niches for the given period."""
-        result: dict[str, dict] = {}
-        for niche_id in VALID_NICHES:
-            report = self.get_sales_report(period, niche=niche_id)
-            product_count = len(self.list_products(niche=niche_id, status="active"))
-            concept_count = len(self.list_concepts(niche=niche_id))
-            result[niche_id] = {
-                "name": NICHES[niche_id]["name"],
-                "revenue": report.total_revenue,
-                "orders": report.total_orders,
-                "units": report.total_units,
-                "avg_order_value": report.avg_order_value,
-                "net_profit": report.net_profit,
-                "active_products": product_count,
-                "total_concepts": concept_count,
-                "revenue_per_product": _round_amount(
-                    report.total_revenue / product_count if product_count > 0 else 0
-                ),
-            }
-        return result
-
-    def profit_analysis(self, period: str = "month") -> dict:
-        """Detailed profit analysis including all fee breakdowns.
-
-        Returns revenue, Printify costs, Etsy fees, and net profit
-        with margins and per-unit economics.
+    def best_sellers(
+        self,
+        shop_id: Optional[str] = None,
+        days: int = 30,
+        top_n: int = 20,
+    ) -> list[dict]:
         """
-        report = self.get_sales_report(period)
+        Get best-selling products by units over the last N days.
 
-        # Per-type breakdown
-        start, end = _period_bounds(period)
-        start_date = _parse_date(start)
-        end_date = _parse_date(end)
+        Returns:
+            List of dicts with product_id, title, shop_id, units, gross, net.
+        """
+        start = (_now_utc().date() - timedelta(days=days)).isoformat()
+        end = _today_iso()
+        sales = self._get_sales_range(start, end)
+        if shop_id:
+            sales = [s for s in sales if s.shop_id == shop_id]
 
-        type_breakdown: dict[str, dict] = {}
-        for sale in self._sales:
-            sale_date_str = sale.get("date", "")
-            if not sale_date_str:
-                continue
-            try:
-                sd = _parse_date(sale_date_str)
-            except ValueError:
-                continue
-            if sd < start_date or sd > end_date:
-                continue
-
-            pt = sale.get("product_type", "unknown")
-            if pt not in type_breakdown:
-                type_breakdown[pt] = {
-                    "revenue": 0.0, "cost": 0.0, "etsy_fees": 0.0,
-                    "units": 0, "orders": 0,
+        product_lookup = {p.product_id: p for p in self.products}
+        aggregated: dict[str, dict] = {}
+        for sale in sales:
+            pid = sale.product_id
+            if pid not in aggregated:
+                prod = product_lookup.get(pid)
+                aggregated[pid] = {
+                    "product_id": pid,
+                    "title": prod.title if prod else "Unknown",
+                    "shop_id": sale.shop_id,
+                    "product_type": prod.product_type if prod else "unknown",
+                    "units": 0,
+                    "gross": 0.0,
+                    "net": 0.0,
                 }
-            type_breakdown[pt]["revenue"] += sale.get("revenue", 0)
-            type_breakdown[pt]["cost"] += sale.get("cost", 0)
-            type_breakdown[pt]["etsy_fees"] += sale.get("etsy_fees", 0)
-            type_breakdown[pt]["units"] += sale.get("quantity", 0)
-            type_breakdown[pt]["orders"] += 1
-
-        # Calculate margins per type
-        for pt, data in type_breakdown.items():
-            data["revenue"] = _round_amount(data["revenue"])
-            data["cost"] = _round_amount(data["cost"])
-            data["etsy_fees"] = _round_amount(data["etsy_fees"])
-            data["net_profit"] = _round_amount(
-                data["revenue"] - data["cost"] - data["etsy_fees"]
+            aggregated[pid]["units"] += sale.quantity
+            aggregated[pid]["gross"] = _round_amount(
+                aggregated[pid]["gross"] + sale.gross_revenue
             )
-            data["margin_pct"] = _round_amount(
-                (data["net_profit"] / data["revenue"] * 100)
-                if data["revenue"] > 0 else 0
-            )
-            data["profit_per_unit"] = _round_amount(
-                data["net_profit"] / data["units"]
-                if data["units"] > 0 else 0
+            aggregated[pid]["net"] = _round_amount(
+                aggregated[pid]["net"] + sale.net_profit
             )
 
-        overall_margin = _round_amount(
-            (report.net_profit / report.total_revenue * 100)
-            if report.total_revenue > 0 else 0
+        sorted_results = sorted(
+            aggregated.values(), key=lambda x: x["units"], reverse=True
         )
+        return sorted_results[:top_n]
+
+    def revenue_by_shop(self, days: int = 30) -> dict[str, dict]:
+        """
+        Revenue breakdown by shop over the last N days.
+
+        Returns:
+            Dict keyed by shop_id with gross, fees, cost, net, units.
+        """
+        start = (_now_utc().date() - timedelta(days=days)).isoformat()
+        end = _today_iso()
+        sales = self._get_sales_range(start, end)
+
+        by_shop: dict[str, dict] = {}
+        for shop in self.shops:
+            by_shop[shop.shop_id] = {
+                "shop_name": shop.shop_name,
+                "niche": shop.niche,
+                "sales": 0, "units": 0,
+                "gross": 0.0, "fees": 0.0, "cost": 0.0, "net": 0.0,
+            }
+
+        for sale in sales:
+            sid = sale.shop_id
+            if sid not in by_shop:
+                by_shop[sid] = {
+                    "shop_name": sid, "niche": "",
+                    "sales": 0, "units": 0,
+                    "gross": 0.0, "fees": 0.0, "cost": 0.0, "net": 0.0,
+                }
+            by_shop[sid]["sales"] += 1
+            by_shop[sid]["units"] += sale.quantity
+            by_shop[sid]["gross"] = _round_amount(
+                by_shop[sid]["gross"] + sale.gross_revenue
+            )
+            by_shop[sid]["fees"] = _round_amount(
+                by_shop[sid]["fees"] + sale.etsy_fees
+            )
+            by_shop[sid]["cost"] = _round_amount(
+                by_shop[sid]["cost"] + sale.printify_cost
+            )
+            by_shop[sid]["net"] = _round_amount(
+                by_shop[sid]["net"] + sale.net_profit
+            )
+
+        return by_shop
+
+    # ==================================================================
+    # ANALYTICS
+    # ==================================================================
+
+    def product_analytics(
+        self,
+        shop_id: Optional[str] = None,
+        days: int = 30,
+    ) -> list[ProductAnalytics]:
+        """
+        Generate analytics for all products (or one shop).
+
+        Calculates conversion rate, favorites rate, and a composite
+        performance score (0-100).
+
+        Returns:
+            List of ProductAnalytics, sorted by performance_score descending.
+        """
+        start = (_now_utc().date() - timedelta(days=days)).isoformat()
+        end = _today_iso()
+        period_sales = self._get_sales_range(start, end)
+
+        sales_by_product: dict[str, dict] = {}
+        for sale in period_sales:
+            pid = sale.product_id
+            if pid not in sales_by_product:
+                sales_by_product[pid] = {
+                    "units": 0, "revenue": 0.0, "profit": 0.0,
+                }
+            sales_by_product[pid]["units"] += sale.quantity
+            sales_by_product[pid]["revenue"] = _round_amount(
+                sales_by_product[pid]["revenue"] + sale.gross_revenue
+            )
+            sales_by_product[pid]["profit"] = _round_amount(
+                sales_by_product[pid]["profit"] + sale.net_profit
+            )
+
+        products = self.list_products(
+            shop_id=shop_id, status="active", limit=MAX_PRODUCTS
+        )
+        analytics: list[ProductAnalytics] = []
+
+        max_views = max((p.views for p in products), default=1) or 1
+        max_sales = max((p.sales_count for p in products), default=1) or 1
+        max_favs = max((p.favorites for p in products), default=1) or 1
+
+        for product in products:
+            period_data = sales_by_product.get(product.product_id, {})
+            period_revenue = period_data.get("revenue", 0.0)
+            period_profit = period_data.get("profit", 0.0)
+
+            conv_rate = product.conversion_rate
+            fav_rate = product.favorites_rate
+
+            # Composite score: 40% conversion, 25% sales, 20% favorites, 15% views
+            score = (
+                (min(conv_rate / 10, 1.0) * 40)
+                + (min(product.sales_count / max_sales, 1.0) * 25)
+                + (min(product.favorites / max_favs, 1.0) * 20)
+                + (min(product.views / max_views, 1.0) * 15)
+            )
+            score = min(_round_amount(score), 100.0)
+
+            analytics.append(ProductAnalytics(
+                product_id=product.product_id,
+                title=product.title,
+                shop_id=product.shop_id,
+                views=product.views,
+                sales_count=product.sales_count,
+                favorites=product.favorites,
+                conversion_rate=conv_rate,
+                favorites_rate=fav_rate,
+                revenue=period_revenue,
+                profit=period_profit,
+                performance_score=score,
+            ))
+
+        analytics.sort(key=lambda a: a.performance_score, reverse=True)
+        return analytics
+
+    def trending_products(
+        self,
+        shop_id: Optional[str] = None,
+        top_n: int = 10,
+    ) -> list[dict]:
+        """
+        Identify trending products (recent sales velocity > historical average).
+
+        Compares last 7 days vs previous 7 days.
+
+        Returns:
+            List of dicts with product info and trend data.
+        """
+        today = _now_utc().date()
+        recent_start = (today - timedelta(days=7)).isoformat()
+        recent_end = today.isoformat()
+        prev_start = (today - timedelta(days=14)).isoformat()
+        prev_end = (today - timedelta(days=8)).isoformat()
+
+        recent_sales = self._get_sales_range(recent_start, recent_end)
+        prev_sales = self._get_sales_range(prev_start, prev_end)
+
+        if shop_id:
+            recent_sales = [s for s in recent_sales if s.shop_id == shop_id]
+            prev_sales = [s for s in prev_sales if s.shop_id == shop_id]
+
+        recent_by_prod: dict[str, int] = defaultdict(int)
+        for s in recent_sales:
+            recent_by_prod[s.product_id] += s.quantity
+
+        prev_by_prod: dict[str, int] = defaultdict(int)
+        for s in prev_sales:
+            prev_by_prod[s.product_id] += s.quantity
+
+        product_lookup = {p.product_id: p for p in self.products}
+        trends: list[dict] = []
+
+        all_pids = set(recent_by_prod.keys()) | set(prev_by_prod.keys())
+        for pid in all_pids:
+            recent_units = recent_by_prod.get(pid, 0)
+            prev_units = prev_by_prod.get(pid, 0)
+
+            if prev_units > 0:
+                growth_pct = _round_amount(
+                    ((recent_units - prev_units) / prev_units) * 100
+                )
+            elif recent_units > 0:
+                growth_pct = 100.0
+            else:
+                growth_pct = 0.0
+
+            prod = product_lookup.get(pid)
+            trends.append({
+                "product_id": pid,
+                "title": prod.title if prod else "Unknown",
+                "shop_id": prod.shop_id if prod else "",
+                "recent_units": recent_units,
+                "prev_units": prev_units,
+                "growth_pct": growth_pct,
+                "trending": growth_pct > 0 and recent_units > 0,
+            })
+
+        trends.sort(
+            key=lambda x: (x["growth_pct"], x["recent_units"]), reverse=True
+        )
+        return trends[:top_n]
+
+    def underperforming_products(
+        self,
+        shop_id: Optional[str] = None,
+        days: int = 30,
+        min_views: int = 50,
+        max_conversion: float = 1.0,
+    ) -> list[dict]:
+        """
+        Identify underperforming products (high views, low conversions).
+
+        Returns:
+            List of dicts with product info and improvement suggestions.
+        """
+        analytics = self.product_analytics(shop_id=shop_id, days=days)
+        underperformers: list[dict] = []
+
+        for a in analytics:
+            if a.views >= min_views and a.conversion_rate < max_conversion:
+                suggestions: list[str] = []
+                if a.conversion_rate < 0.5:
+                    suggestions.append(
+                        "Very low conversion — consider new title, photos, or pricing"
+                    )
+                if a.favorites_rate < 2.0:
+                    suggestions.append(
+                        "Low favorites — design may not resonate; test new mockups"
+                    )
+                if a.favorites_rate > 5.0 and a.conversion_rate < 1.0:
+                    suggestions.append(
+                        "High favorites but low sales — price may be too high"
+                    )
+
+                product = None
+                for p in self.products:
+                    if p.product_id == a.product_id:
+                        product = p
+                        break
+
+                if product and len(product.tags) < 10:
+                    suggestions.append(
+                        f"Only {len(product.tags)} tags — optimize to use all 13"
+                    )
+                if product and len(product.description) < 200:
+                    suggestions.append(
+                        "Description too short — expand for better SEO"
+                    )
+
+                underperformers.append({
+                    "product_id": a.product_id,
+                    "title": a.title,
+                    "shop_id": a.shop_id,
+                    "views": a.views,
+                    "sales": a.sales_count,
+                    "conversion_rate": a.conversion_rate,
+                    "favorites_rate": a.favorites_rate,
+                    "performance_score": a.performance_score,
+                    "suggestions": suggestions,
+                })
+
+        underperformers.sort(key=lambda x: x["views"], reverse=True)
+        return underperformers
+
+    # ==================================================================
+    # LISTING OPTIMIZATION
+    # ==================================================================
+
+    def suggest_price(
+        self,
+        product_type: str,
+        cost: float,
+        niche: str = "",
+        target_margin_pct: float = 40.0,
+    ) -> dict:
+        """
+        Suggest retail price based on cost, target margin, and competition.
+
+        Returns:
+            Dict with suggested_price, min_price (breakeven), and analysis.
+        """
+        COMPETITIVE_RANGES: dict[str, tuple[float, float]] = {
+            "t-shirt": (19.99, 34.99),
+            "mug": (14.99, 24.99),
+            "tote-bag": (16.99, 29.99),
+            "sticker": (3.99, 8.99),
+            "phone-case": (14.99, 29.99),
+            "tapestry": (24.99, 49.99),
+            "wall-art": (19.99, 44.99),
+            "journal": (14.99, 29.99),
+            "notebook": (12.99, 24.99),
+            "greeting-card": (4.99, 9.99),
+        }
+
+        comp_range = COMPETITIVE_RANGES.get(product_type, (14.99, 34.99))
+
+        # Breakeven: price - cost - fees(price) = 0
+        # price * (1 - 0.065 - 0.03) = cost + 0.20 + 0.25
+        # price = (cost + 0.45) / 0.905
+        fixed_fees = ETSY_LISTING_FEE + ETSY_PAYMENT_PROCESSING_FLAT
+        variable_rate = ETSY_TRANSACTION_FEE_PCT + ETSY_PAYMENT_PROCESSING_PCT
+        min_price = _round_amount((cost + fixed_fees) / (1 - variable_rate))
+
+        # Target price for desired margin
+        margin_fraction = target_margin_pct / 100.0
+        denominator = 1 - variable_rate - margin_fraction
+        if denominator <= 0:
+            target_price = comp_range[1]
+        else:
+            target_price = _round_amount((cost + fixed_fees) / denominator)
+
+        suggested = max(min(target_price, comp_range[1]), comp_range[0])
+        suggested = max(suggested, _round_amount(min_price + 1.00))
+
+        # Round to .99 pricing
+        suggested = float(int(suggested)) + 0.99
+        if suggested < min_price + 1.0:
+            suggested += 1.0
+
+        actual_fees = calculate_etsy_fees(suggested, cost)
 
         return {
-            "period": period,
-            "total_revenue": report.total_revenue,
-            "total_costs": report.costs,
-            "net_profit": report.net_profit,
-            "overall_margin_pct": overall_margin,
-            "total_orders": report.total_orders,
-            "total_units": report.total_units,
-            "avg_order_value": report.avg_order_value,
-            "profit_per_order": _round_amount(
-                report.net_profit / report.total_orders
-                if report.total_orders > 0 else 0
-            ),
-            "by_product_type": type_breakdown,
+            "suggested_price": suggested,
+            "min_price_breakeven": min_price,
+            "competitive_range": {
+                "low": comp_range[0], "high": comp_range[1],
+            },
+            "target_margin_pct": target_margin_pct,
+            "actual_margin_pct": actual_fees["margin_pct"],
+            "actual_net_profit": actual_fees["net_profit"],
+            "fee_breakdown": actual_fees,
+            "product_type": product_type,
+            "niche": niche,
         }
 
-    def bestseller_analysis(self) -> list[dict]:
-        """Identify patterns in top-selling products for replication.
-
-        Analyzes the top 50 products by cumulative sales and extracts
-        common niches, product types, price points, and themes.
+    def seasonal_recommendations(self) -> list[dict]:
         """
-        # Gather all products with sales
-        products_with_sales: list[dict] = []
-        for pid, pdata in self._products.items():
-            if pdata.get("sales_count", 0) > 0:
-                concept_data = self._concepts.get(pdata.get("design_concept_id", ""), {})
-                products_with_sales.append({
-                    "product_id": pid,
-                    "title": pdata.get("title", ""),
-                    "product_type": pdata.get("product_type", ""),
-                    "niche": concept_data.get("niche", "unknown"),
-                    "price": pdata.get("price", 0),
-                    "sales_count": pdata.get("sales_count", 0),
-                    "revenue": pdata.get("revenue", 0),
-                    "style_keywords": concept_data.get("style_keywords", []),
-                })
+        Generate seasonal recommendations based on current month.
 
-        # Sort by sales count descending
-        products_with_sales.sort(key=lambda x: x["sales_count"], reverse=True)
-        top_50 = products_with_sales[:50]
-
-        if not top_50:
-            return []
-
-        # Analyze patterns
-        niche_counts: dict[str, int] = {}
-        type_counts: dict[str, int] = {}
-        price_points: list[float] = []
-        keyword_counts: dict[str, int] = {}
-
-        for p in top_50:
-            niche = p["niche"]
-            niche_counts[niche] = niche_counts.get(niche, 0) + 1
-            pt = p["product_type"]
-            type_counts[pt] = type_counts.get(pt, 0) + 1
-            price_points.append(p["price"])
-            for kw in p.get("style_keywords", []):
-                keyword_counts[kw] = keyword_counts.get(kw, 0) + 1
-
-        avg_price = _round_amount(sum(price_points) / len(price_points)) if price_points else 0
-        median_price = _round_amount(
-            sorted(price_points)[len(price_points) // 2]
-        ) if price_points else 0
-
-        return [
-            {
-                "insight": "top_niches",
-                "data": dict(sorted(niche_counts.items(), key=lambda x: x[1], reverse=True)),
-                "recommendation": f"Focus on: {', '.join(sorted(niche_counts, key=niche_counts.get, reverse=True)[:3])}",
-            },
-            {
-                "insight": "top_product_types",
-                "data": dict(sorted(type_counts.items(), key=lambda x: x[1], reverse=True)),
-                "recommendation": f"Best sellers: {', '.join(sorted(type_counts, key=type_counts.get, reverse=True)[:3])}",
-            },
-            {
-                "insight": "pricing",
-                "data": {"average": avg_price, "median": median_price},
-                "recommendation": f"Sweet spot: ${median_price:.2f}",
-            },
-            {
-                "insight": "trending_keywords",
-                "data": dict(sorted(keyword_counts.items(), key=lambda x: x[1], reverse=True)[:10]),
-                "recommendation": "Use these keywords in new designs.",
-            },
-        ]
-
-    # ==================================================================
-    # SEO OPTIMIZATION (Batch Operations)
-    # ==================================================================
-
-    def audit_listings(self, niche: Optional[str] = None) -> list[dict]:
-        """Audit all cached Etsy listings for SEO issues.
-
-        Returns a list of listings with identified issues and suggestions.
+        Returns:
+            List of dicts with niche-specific recommendations, trending
+            themes, and suggested actions.
         """
-        results: list[dict] = []
-        for listing_id, listing_data in self._listings.items():
-            # Filter by niche if specified
-            if niche:
-                product_id = listing_data.get("product_id", "")
-                product_data = self._products.get(product_id, {})
-                concept_id = product_data.get("design_concept_id", "")
-                concept_data = self._concepts.get(concept_id, {})
-                if concept_data.get("niche") != niche:
-                    continue
-
-            listing = EtsyListing.from_dict(listing_data)
-            issues: list[str] = []
-
-            # Title length
-            if len(listing.title) < 80:
-                issues.append(f"Short title ({len(listing.title)}/140 chars)")
-            if len(listing.title) > ETSY_MAX_TITLE_LENGTH:
-                issues.append(f"Title too long ({len(listing.title)}/140 chars)")
-
-            # Tag count
-            if len(listing.tags) < ETSY_MAX_TAGS:
-                issues.append(f"Missing tags ({len(listing.tags)}/13)")
-
-            # Description length
-            if len(listing.description) < 200:
-                issues.append("Description too short")
-
-            # Conversion check
-            listing.recalculate_conversion()
-            if listing.views > 100 and listing.conversion_rate < 0.5:
-                issues.append(f"Very low conversion ({listing.conversion_rate:.1f}%)")
-
-            if issues:
-                results.append({
-                    "listing_id": listing_id,
-                    "title": listing.title,
-                    "issues": issues,
-                    "views": listing.views,
-                    "sales": listing.sales,
-                    "conversion_rate": listing.conversion_rate,
-                })
-
-        results.sort(key=lambda x: len(x["issues"]), reverse=True)
-        return results
-
-    def suggest_trending_keywords(self, niche: str) -> list[str]:
-        """Suggest trending keywords for a niche based on existing best sellers
-        and niche profile data.
-
-        Combines niche keywords, bestseller keywords, and seasonal themes.
-        """
-        if niche not in VALID_NICHES:
-            raise ValueError(f"Invalid niche: {niche!r}")
-
-        niche_profile = NICHES[niche]
-        keywords: list[str] = list(niche_profile["keywords"])
-
-        # Add theme-based keywords
-        for theme in niche_profile["themes"]:
-            keywords.append(theme)
-
-        # Add keywords from bestselling products in this niche
-        for pdata in self._products.values():
-            if pdata.get("sales_count", 0) > 0:
-                concept_data = self._concepts.get(pdata.get("design_concept_id", ""), {})
-                if concept_data.get("niche") == niche:
-                    for tag in pdata.get("tags", []):
-                        if tag not in keywords:
-                            keywords.append(tag)
-
-        # Seasonal boosts
         current_month = _now_utc().month
-        seasonal_keywords = {
-            10: ["halloween witch", "spooky", "october witch", "samhain"],
-            12: ["yule witch", "winter solstice", "holiday witch", "yule gift"],
-            2: ["imbolc", "valentine witch", "love spell"],
-            5: ["beltane", "spring witch", "may day"],
-        }
-        if current_month in seasonal_keywords:
-            keywords.extend(seasonal_keywords[current_month])
+        next_month = current_month + 1 if current_month < 12 else 1
 
-        # Deduplicate
-        seen: set[str] = set()
-        unique: list[str] = []
-        for kw in keywords:
-            kw_lower = kw.lower()
-            if kw_lower not in seen:
-                seen.add(kw_lower)
-                unique.append(kw)
+        current_season = SEASONAL_DEMAND.get(current_month, {})
+        next_season = SEASONAL_DEMAND.get(next_month, {})
 
-        return unique
+        recommendations: list[dict] = []
 
-    def optimize_all_titles(
-        self,
-        niche: Optional[str] = None,
-        dry_run: bool = True,
-    ) -> list[dict]:
-        """Regenerate SEO titles for all listings, optionally filtered by niche.
+        for niche_id, meta in NICHE_METADATA.items():
+            base_multiplier = current_season.get("multiplier", 1.0)
+            niche_boost = NICHE_SEASONAL_BOOST.get(
+                niche_id, {}
+            ).get(current_month, 0.0)
+            total_multiplier = _round_amount(base_multiplier + niche_boost)
 
-        If dry_run=True, returns proposed changes without applying them.
-        If dry_run=False, updates the local product records (does NOT
-        push to Etsy -- use update_etsy_listing for that).
-        """
-        results: list[dict] = []
-        target_products = self.list_products(niche=niche, status="active")
+            next_base = next_season.get("multiplier", 1.0)
+            next_boost = NICHE_SEASONAL_BOOST.get(
+                niche_id, {}
+            ).get(next_month, 0.0)
+            next_multiplier = _round_amount(next_base + next_boost)
 
-        for product in target_products:
-            concept_data = self._concepts.get(product.design_concept_id, {})
-            concept_niche = concept_data.get("niche", "cosmic_witch")
-            concept_title = concept_data.get("title", product.title.split("|")[0].strip())
+            if total_multiplier >= 1.5:
+                urgency = "HIGH — Peak demand period"
+            elif total_multiplier >= 1.2:
+                urgency = "MEDIUM — Above average demand"
+            elif total_multiplier >= 1.0:
+                urgency = "NORMAL — Standard demand"
+            else:
+                urgency = "LOW — Below average, focus on preparation"
 
-            new_title = self.generate_etsy_title(concept_niche, product.product_type, concept_title)
-            changed = new_title != product.title
+            actions: list[str] = []
+            if total_multiplier >= 1.3:
+                actions.append(
+                    "Increase ad spend and listing frequency"
+                )
+                actions.append(
+                    "Create seasonal-themed product variations"
+                )
+            if next_multiplier > total_multiplier:
+                actions.append(
+                    f"Prepare listings NOW for next month's higher demand "
+                    f"({next_multiplier}x)"
+                )
+            if total_multiplier < 1.0:
+                actions.append(
+                    "Focus on evergreen designs and SEO optimization"
+                )
+                actions.append(
+                    "Build inventory for upcoming peak periods"
+                )
 
-            entry = {
-                "product_id": product.product_id,
-                "old_title": product.title,
-                "new_title": new_title,
-                "changed": changed,
-            }
+            current_themes = current_season.get("themes", [])
+            niche_keywords = meta.get("keywords_seed", [])[:3]
+            niche_relevant_themes = [
+                t for t in current_themes
+                if any(kw in t.lower() for kw in niche_keywords)
+                or "witch" in t.lower()
+            ]
+            if not niche_relevant_themes:
+                niche_relevant_themes = current_themes[:3]
 
-            if not dry_run and changed:
-                product_data = self._products.get(product.product_id)
-                if product_data:
-                    product_data["title"] = new_title
-                    self._products[product.product_id] = product_data
+            recommendations.append({
+                "niche": niche_id,
+                "display_name": meta["display_name"],
+                "current_month": current_month,
+                "demand_multiplier": total_multiplier,
+                "next_month_multiplier": next_multiplier,
+                "urgency": urgency,
+                "themes": niche_relevant_themes,
+                "actions": actions,
+                "season_notes": current_season.get("notes", ""),
+            })
 
-            results.append(entry)
-
-        if not dry_run:
-            self._save_products()
-            logger.info("Updated %d product titles", sum(1 for r in results if r["changed"]))
-
-        return results
+        recommendations.sort(
+            key=lambda x: x["demand_multiplier"], reverse=True
+        )
+        return recommendations
 
     # ==================================================================
     # REPORTING / FORMATTING
     # ==================================================================
 
-    def format_sales_report(self, report: SalesReport, style: str = "text") -> str:
+    def format_report(self, report: SalesReport, style: str = "text") -> str:
         """Format a SalesReport for display.
 
-        Styles: text (WhatsApp/Telegram), markdown (dashboard), json.
+        Styles: text (messaging), markdown (dashboard), json (API).
         """
         if style == "json":
             return json.dumps(report.to_dict(), indent=2, default=str)
-
         if style == "markdown":
             return self._format_report_markdown(report)
-
         return self._format_report_text(report)
 
     def _format_report_text(self, report: SalesReport) -> str:
-        """Plain text sales report for messaging."""
+        """Plain text report for WhatsApp/Telegram."""
         lines: list[str] = []
         lines.append(f"ETSY POD SALES REPORT ({report.period.upper()})")
-        if report.niche:
-            lines.append(f"Niche: {NICHES.get(report.niche, {}).get('name', report.niche)}")
-        lines.append(f"{'=' * 40}")
-        lines.append(f"Revenue:     ${report.total_revenue:>10,.2f}")
-        lines.append(f"Orders:      {report.total_orders:>10}")
-        lines.append(f"Units sold:  {report.total_units:>10}")
-        lines.append(f"Avg order:   ${report.avg_order_value:>10,.2f}")
-        lines.append(f"Net profit:  ${report.net_profit:>10,.2f}")
+        lines.append(f"{report.start_date} to {report.end_date}")
+        lines.append("=" * 45)
+        lines.append(f"Total Sales:    {report.total_sales}")
+        lines.append(f"Total Units:    {report.total_units}")
+        lines.append(f"Gross Revenue:  ${report.gross_revenue:,.2f}")
+        lines.append(f"Etsy Fees:      ${report.total_fees:,.2f}")
+        lines.append(f"Printify Cost:  ${report.total_cost:,.2f}")
+        lines.append(f"Net Profit:     ${report.net_profit:,.2f}")
+
+        if report.gross_revenue > 0:
+            margin = _round_amount(
+                report.net_profit / report.gross_revenue * 100
+            )
+            lines.append(f"Profit Margin:  {margin:.1f}%")
         lines.append("")
 
-        if report.costs:
-            lines.append("COSTS:")
-            lines.append(f"  Product:   ${report.costs.get('product_cost', 0):>10,.2f}")
-            lines.append(f"  Etsy fees: ${report.costs.get('etsy_fees', 0):>10,.2f}")
-            lines.append(f"  Total:     ${report.costs.get('total_costs', 0):>10,.2f}")
+        if report.by_shop:
+            lines.append("BY SHOP:")
+            for sid, data in sorted(
+                report.by_shop.items(),
+                key=lambda x: x[1]["gross"],
+                reverse=True,
+            ):
+                lines.append(
+                    f"  {sid:<18} {data['units']:>4} units  "
+                    f"${data['gross']:>8,.2f} gross  "
+                    f"${data['net']:>8,.2f} net"
+                )
+            lines.append("")
+
+        if report.by_product_type:
+            lines.append("BY PRODUCT TYPE:")
+            for ptype, data in sorted(
+                report.by_product_type.items(),
+                key=lambda x: x[1]["gross"],
+                reverse=True,
+            ):
+                lines.append(
+                    f"  {ptype:<18} {data['units']:>4} units  "
+                    f"${data['gross']:>8,.2f}"
+                )
             lines.append("")
 
         if report.top_products:
-            lines.append("TOP PRODUCTS:")
-            for i, tp in enumerate(report.top_products[:5], 1):
-                title = tp.get("title", "Unknown")[:30]
-                lines.append(f"  {i}. {title:<30} ${tp['revenue']:>8,.2f} ({tp['units']} sold)")
-            lines.append("")
-
-        if report.top_niches:
-            lines.append("BY NICHE:")
-            for n in report.top_niches:
-                name = NICHES.get(n["niche"], {}).get("name", n["niche"])
-                lines.append(f"  {name:<20} ${n['revenue']:>8,.2f} ({n['orders']} orders)")
+            lines.append("TOP SELLERS:")
+            for i, tp in enumerate(report.top_products[:10], 1):
+                lines.append(
+                    f"  {i:>2}. {tp['title'][:35]:<35} "
+                    f"{tp['units']:>3} units  "
+                    f"${tp['gross']:>8,.2f}"
+                )
 
         return "\n".join(lines)
 
     def _format_report_markdown(self, report: SalesReport) -> str:
-        """Markdown sales report for dashboard."""
+        """Markdown report for dashboard."""
         lines: list[str] = []
         lines.append(f"# Etsy POD Sales Report: {report.period.title()}")
-        if report.niche:
-            lines.append(f"**Niche:** {NICHES.get(report.niche, {}).get('name', report.niche)}")
+        lines.append(
+            f"**Period:** {report.start_date} to {report.end_date}"
+        )
         lines.append("")
-        lines.append(f"| Metric | Value |")
-        lines.append(f"|--------|-------|")
-        lines.append(f"| Revenue | ${report.total_revenue:,.2f} |")
-        lines.append(f"| Orders | {report.total_orders} |")
-        lines.append(f"| Units Sold | {report.total_units} |")
-        lines.append(f"| Avg Order Value | ${report.avg_order_value:,.2f} |")
+
+        margin = (
+            _round_amount(report.net_profit / report.gross_revenue * 100)
+            if report.gross_revenue > 0
+            else 0
+        )
+
+        lines.append("## Summary")
+        lines.append("| Metric | Value |")
+        lines.append("|--------|-------|")
+        lines.append(f"| Total Sales | {report.total_sales} |")
+        lines.append(f"| Total Units | {report.total_units} |")
+        lines.append(f"| Gross Revenue | ${report.gross_revenue:,.2f} |")
+        lines.append(f"| Etsy Fees | ${report.total_fees:,.2f} |")
+        lines.append(f"| Printify Cost | ${report.total_cost:,.2f} |")
         lines.append(f"| Net Profit | ${report.net_profit:,.2f} |")
+        lines.append(f"| Profit Margin | {margin:.1f}% |")
         lines.append("")
+
+        if report.by_shop:
+            lines.append("## Revenue by Shop")
+            lines.append("| Shop | Units | Gross | Net |")
+            lines.append("|------|-------|-------|-----|")
+            for sid, data in sorted(
+                report.by_shop.items(),
+                key=lambda x: x[1]["gross"],
+                reverse=True,
+            ):
+                lines.append(
+                    f"| {sid} | {data['units']} | "
+                    f"${data['gross']:,.2f} | ${data['net']:,.2f} |"
+                )
+            lines.append("")
 
         if report.top_products:
             lines.append("## Top Products")
-            lines.append("| Rank | Product | Revenue | Units |")
-            lines.append("|------|---------|---------|-------|")
+            lines.append("| Rank | Product | Units | Gross |")
+            lines.append("|------|---------|-------|-------|")
             for i, tp in enumerate(report.top_products[:10], 1):
-                title = tp.get("title", "Unknown")[:40]
-                lines.append(f"| {i} | {title} | ${tp['revenue']:,.2f} | {tp['units']} |")
+                lines.append(
+                    f"| {i} | {tp['title'][:40]} | "
+                    f"{tp['units']} | ${tp['gross']:,.2f} |"
+                )
             lines.append("")
 
-        if report.top_niches:
-            lines.append("## By Niche")
-            lines.append("| Niche | Revenue | Orders |")
-            lines.append("|-------|---------|--------|")
-            for n in report.top_niches:
-                name = NICHES.get(n["niche"], {}).get("name", n["niche"])
-                lines.append(f"| {name} | ${n['revenue']:,.2f} | {n['orders']} |")
+        if report.daily_breakdown:
+            recent = report.daily_breakdown[-7:]
+            lines.append("## Recent Daily Sales")
+            lines.append("| Date | Sales | Gross | Net |")
+            lines.append("|------|-------|-------|-----|")
+            for day in recent:
+                lines.append(
+                    f"| {day['date']} | {day['sales']} | "
+                    f"${day['gross']:,.2f} | ${day['net']:,.2f} |"
+                )
 
         return "\n".join(lines)
 
-    def format_niche_comparison(self, period: str = "month") -> str:
-        """Format a side-by-side niche comparison table."""
-        perf = self.niche_performance(period)
-
+    def format_margins_table(self, margins: list[dict]) -> str:
+        """Format margin analysis as a text table."""
         lines: list[str] = []
-        lines.append(f"NICHE PERFORMANCE COMPARISON ({period.upper()})")
-        lines.append(f"{'=' * 70}")
+        lines.append("PROFIT MARGIN ANALYSIS")
+        lines.append("=" * 80)
         lines.append(
-            f"{'Niche':<18} {'Revenue':>10} {'Orders':>8} {'Profit':>10} "
-            f"{'Products':>9} {'Rev/Prod':>10}"
+            f"  {'Title':<30} {'Price':>7} {'Cost':>7} {'Fees':>7} "
+            f"{'Net':>7} {'Margin':>7}"
         )
-        lines.append("-" * 70)
+        lines.append(
+            f"  {'-'*30} {'-'*7} {'-'*7} {'-'*7} {'-'*7} {'-'*7}"
+        )
 
-        sorted_niches = sorted(perf.items(), key=lambda x: x[1]["revenue"], reverse=True)
-        for niche_id, data in sorted_niches:
+        for m in margins:
             lines.append(
-                f"{data['name']:<18} "
-                f"${data['revenue']:>9,.2f} "
-                f"{data['orders']:>8} "
-                f"${data['net_profit']:>9,.2f} "
-                f"{data['active_products']:>9} "
-                f"${data['revenue_per_product']:>9,.2f}"
+                f"  {m['title'][:30]:<30} "
+                f"${m['item_price']:>6.2f} "
+                f"${m['printify_cost']:>6.2f} "
+                f"${m['total_etsy_fees']:>6.2f} "
+                f"${m['net_profit']:>6.2f} "
+                f"{m['margin_pct']:>6.1f}%"
             )
 
-        # Totals
-        total_rev = sum(d["revenue"] for d in perf.values())
-        total_orders = sum(d["orders"] for d in perf.values())
-        total_profit = sum(d["net_profit"] for d in perf.values())
-        total_products = sum(d["active_products"] for d in perf.values())
-        lines.append("-" * 70)
+        if margins:
+            avg_margin = _round_amount(
+                sum(m["margin_pct"] for m in margins) / len(margins)
+            )
+            total_profit = _round_amount(
+                sum(m["net_profit"] for m in margins)
+            )
+            lines.append(
+                f"  {'-'*30} {'-'*7} {'-'*7} {'-'*7} {'-'*7} {'-'*7}"
+            )
+            lines.append(
+                f"  {'AVERAGES / TOTALS':<30} {'':>7} {'':>7} {'':>7} "
+                f"${total_profit:>6.2f} {avg_margin:>6.1f}%"
+            )
+
+        return "\n".join(lines)
+
+    def format_shop_summary(self) -> str:
+        """Format a summary of all shops for display."""
+        lines: list[str] = []
+        lines.append("ETSY POD SHOP REGISTRY")
+        lines.append("=" * 70)
         lines.append(
-            f"{'TOTAL':<18} "
-            f"${total_rev:>9,.2f} "
-            f"{total_orders:>8} "
-            f"${total_profit:>9,.2f} "
-            f"{total_products:>9}"
+            f"  {'Shop':<22} {'Niche':<16} {'Products':>9} "
+            f"{'Revenue':>10} {'Status':>8}"
+        )
+        lines.append(
+            f"  {'-'*22} {'-'*16} {'-'*9} {'-'*10} {'-'*8}"
+        )
+
+        self._refresh_shop_counts()
+
+        for shop in self.shops:
+            status = "Active" if shop.active else "Paused"
+            lines.append(
+                f"  {shop.shop_name[:22]:<22} "
+                f"{shop.niche[:16]:<16} "
+                f"{shop.product_count:>9} "
+                f"${shop.revenue:>9.2f} "
+                f"{status:>8}"
+            )
+
+        total_products = sum(s.product_count for s in self.shops)
+        total_revenue = _round_amount(
+            sum(s.revenue for s in self.shops)
+        )
+        lines.append(
+            f"  {'-'*22} {'-'*16} {'-'*9} {'-'*10} {'-'*8}"
+        )
+        lines.append(
+            f"  {'TOTAL':<22} {'':<16} "
+            f"{total_products:>9} "
+            f"${total_revenue:>9.2f}"
         )
 
         return "\n".join(lines)
@@ -2225,106 +2344,35 @@ class EtsyManager:
     # ASYNC INTERFACES
     # ==================================================================
 
-    async def acreate_concept(
-        self, niche: str, title: str, description: str, **kwargs: Any
-    ) -> DesignConcept:
-        """Async wrapper for create_concept."""
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None, lambda: self.create_concept(niche, title, description, **kwargs)
-        )
+    async def agenerate_tags(self, product: EtsyProduct) -> list[str]:
+        """Async interface for generate_tags."""
+        return await self.generate_tags(product)
 
-    async def acreate_product(
-        self, concept_id: str, product_type: str, custom_price: Optional[float] = None
-    ) -> Product:
-        """Async wrapper for create_product."""
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None, lambda: self.create_product(concept_id, product_type, custom_price)
-        )
+    async def aoptimize_title(self, product: EtsyProduct) -> str:
+        """Async interface for optimize_title."""
+        return await self.optimize_title(product)
 
-    async def abulk_create_products(
-        self, concept_id: str, product_types: list[str]
-    ) -> list[Product]:
-        """Async wrapper for bulk_create_products."""
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None, lambda: self.bulk_create_products(concept_id, product_types)
-        )
+    async def agenerate_description(self, product: EtsyProduct) -> str:
+        """Async interface for generate_description."""
+        return await self.generate_description(product)
 
-    async def arecord_sale(
-        self, product_id: str, quantity: int, revenue: float, **kwargs: Any
-    ) -> dict:
-        """Async wrapper for record_sale."""
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None, lambda: self.record_sale(product_id, quantity, revenue, **kwargs)
-        )
-
-    async def aget_sales_report(
-        self, period: str = "month", niche: Optional[str] = None
-    ) -> SalesReport:
-        """Async wrapper for get_sales_report."""
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None, lambda: self.get_sales_report(period, niche)
-        )
-
-    async def atop_sellers(self, count: int = 20, period: str = "month") -> list[Product]:
-        """Async wrapper for top_sellers."""
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None, lambda: self.top_sellers(count, period)
-        )
-
-    async def aniche_performance(self, period: str = "month") -> dict[str, dict]:
-        """Async wrapper for niche_performance."""
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None, lambda: self.niche_performance(period)
-        )
-
-    async def aprofit_analysis(self, period: str = "month") -> dict:
-        """Async wrapper for profit_analysis."""
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None, lambda: self.profit_analysis(period)
-        )
-
-    async def abestseller_analysis(self) -> list[dict]:
-        """Async wrapper for bestseller_analysis."""
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, self.bestseller_analysis)
-
-    async def aaudit_listings(self, niche: Optional[str] = None) -> list[dict]:
-        """Async wrapper for audit_listings."""
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None, lambda: self.audit_listings(niche)
-        )
-
-    async def aoptimize_all_titles(
-        self, niche: Optional[str] = None, dry_run: bool = True
-    ) -> list[dict]:
-        """Async wrapper for optimize_all_titles."""
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None, lambda: self.optimize_all_titles(niche, dry_run)
-        )
+    async def afull_seo_optimize(self, product_id: str) -> dict:
+        """Async interface for full_seo_optimize."""
+        return await self.full_seo_optimize(product_id)
 
 
 # ===================================================================
-# Module-Level Convenience API (Singleton)
+# Module-Level Singleton
 # ===================================================================
 
-_manager_instance: Optional[EtsyManager] = None
+_manager_instance: Optional[EtsyPODManager] = None
 
 
-def get_manager() -> EtsyManager:
-    """Return the singleton EtsyManager instance."""
+def get_manager() -> EtsyPODManager:
+    """Return the singleton EtsyPODManager instance."""
     global _manager_instance
     if _manager_instance is None:
-        _manager_instance = EtsyManager()
+        _manager_instance = EtsyPODManager()
     return _manager_instance
 
 
@@ -2335,78 +2383,127 @@ def get_manager() -> EtsyManager:
 
 def _cli_main() -> None:
     """CLI entry point: python -m src.etsy_manager <command> [options]."""
+
     parser = argparse.ArgumentParser(
         prog="etsy_manager",
-        description="OpenClaw Empire Etsy POD Manager -- CLI Interface",
+        description="Etsy POD Manager — OpenClaw Empire CLI",
     )
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
-    # --- concept ---
-    p_concept = subparsers.add_parser("concept", help="Create a new design concept")
-    p_concept.add_argument("--niche", required=True, choices=VALID_NICHES,
-                           help="Sub-niche for the design")
-    p_concept.add_argument("--title", required=True, help="Design concept title")
-    p_concept.add_argument("--description", default="", help="Design description")
-    p_concept.add_argument("--keywords", help="Comma-separated style keywords")
-    p_concept.add_argument("--products", help="Comma-separated target product types")
-
-    # --- product ---
-    p_product = subparsers.add_parser("product", help="Create products from a concept")
-    p_product.add_argument("--concept-id", required=True, help="Design concept ID")
-    p_product.add_argument("--types", required=True,
-                           help="Comma-separated product types (tshirt,mug,sticker,...)")
-
-    # --- design-prompt ---
-    p_prompt = subparsers.add_parser("design-prompt", help="Generate AI design prompt")
-    p_prompt.add_argument("--concept-id", required=True, help="Design concept ID")
-
-    # --- seo ---
-    p_seo = subparsers.add_parser("seo", help="Audit listing SEO")
-    p_seo.add_argument("--niche", choices=VALID_NICHES, help="Filter by niche")
-
-    # --- sales ---
-    p_sales = subparsers.add_parser("sales", help="Sales report")
-    p_sales.add_argument("--period", choices=["week", "month", "quarter", "year"],
-                         default="month", help="Report period (default: month)")
-    p_sales.add_argument("--niche", choices=VALID_NICHES, help="Filter by niche")
-    p_sales.add_argument("--format", choices=["text", "markdown", "json"],
-                         default="text", help="Output format")
-
-    # --- top ---
-    p_top = subparsers.add_parser("top", help="Top sellers")
-    p_top.add_argument("--count", type=int, default=20, help="Number of results (default: 20)")
-    p_top.add_argument("--period", choices=["week", "month", "quarter", "year"],
-                       default="month", help="Period (default: month)")
-
-    # --- profit ---
-    p_profit = subparsers.add_parser("profit", help="Profit analysis")
-    p_profit.add_argument("--period", choices=["week", "month", "quarter", "year"],
-                          default="month", help="Period (default: month)")
-
-    # --- niches ---
-    p_niches = subparsers.add_parser("niches", help="Niche performance comparison")
-    p_niches.add_argument("--period", choices=["week", "month", "quarter", "year"],
-                          default="month", help="Period (default: month)")
-
-    # --- concepts ---
-    p_list = subparsers.add_parser("concepts", help="List design concepts")
-    p_list.add_argument("--niche", choices=VALID_NICHES, help="Filter by niche")
-    p_list.add_argument("--status", choices=["concept", "generated", "approved", "listed"],
-                        help="Filter by status")
+    # --- shops ---
+    subparsers.add_parser("shops", help="List all Etsy shops")
 
     # --- products ---
     p_products = subparsers.add_parser("products", help="List products")
-    p_products.add_argument("--niche", choices=VALID_NICHES, help="Filter by niche")
-    p_products.add_argument("--type", choices=list(PRODUCT_TYPES.keys()), help="Filter by type")
-    p_products.add_argument("--status", choices=["draft", "active", "sold_out", "deactivated"],
-                            help="Filter by status")
+    p_products.add_argument("--shop", type=str, default=None, help="Shop ID filter")
+    p_products.add_argument("--status", type=str, default=None, help="Status filter")
+    p_products.add_argument("--type", type=str, default=None, help="Product type filter")
+    p_products.add_argument(
+        "--sort", type=str, default="sales_count",
+        choices=[
+            "created_at", "price", "sales_count", "views",
+            "favorites", "profit_margin",
+        ],
+        help="Sort field",
+    )
+    p_products.add_argument("--limit", type=int, default=25, help="Max results")
 
-    # --- keywords ---
-    p_kw = subparsers.add_parser("keywords", help="Suggest trending keywords for a niche")
-    p_kw.add_argument("--niche", required=True, choices=VALID_NICHES, help="Target niche")
+    # --- add ---
+    p_add = subparsers.add_parser("add", help="Add a new product")
+    p_add.add_argument("--shop", type=str, required=True, help="Shop ID")
+    p_add.add_argument("--title", type=str, required=True, help="Product title")
+    p_add.add_argument("--price", type=float, required=True, help="Retail price")
+    p_add.add_argument("--cost", type=float, required=True, help="Printify cost")
+    p_add.add_argument("--type", type=str, default="t-shirt", help="Product type")
+    p_add.add_argument("--tags", type=str, default="", help="Comma-separated tags")
+    p_add.add_argument("--status", type=str, default="draft", help="Initial status")
+
+    # --- sales ---
+    p_sales = subparsers.add_parser("sales", help="View sales data")
+    p_sales.add_argument(
+        "--period", choices=["day", "week", "month", "custom"],
+        default="month", help="Report period",
+    )
+    p_sales.add_argument("--shop", type=str, default=None, help="Shop ID filter")
+    p_sales.add_argument("--start", type=str, default=None, help="Start date (custom)")
+    p_sales.add_argument("--end", type=str, default=None, help="End date (custom)")
+    p_sales.add_argument(
+        "--format", choices=["text", "markdown", "json"],
+        default="text", help="Output format",
+    )
+
+    # --- report ---
+    p_report = subparsers.add_parser("report", help="Sales report")
+    p_report.add_argument("--shop", type=str, default=None, help="Shop ID filter")
+    p_report.add_argument(
+        "--period", choices=["week", "month"], default="month", help="Period",
+    )
+    p_report.add_argument(
+        "--format", choices=["text", "markdown", "json"],
+        default="text", help="Output format",
+    )
+
+    # --- tags ---
+    p_tags = subparsers.add_parser("tags", help="Generate SEO tags for a product")
+    p_tags.add_argument("--product-id", type=str, required=True, help="Product ID")
+    p_tags.add_argument("--apply", action="store_true", help="Apply tags to product")
+
+    # --- optimize ---
+    p_opt = subparsers.add_parser("optimize", help="Full SEO optimization")
+    p_opt.add_argument("--product-id", type=str, required=True, help="Product ID")
+
+    # --- margins ---
+    p_margins = subparsers.add_parser("margins", help="Profit margin analysis")
+    p_margins.add_argument("--shop", type=str, default=None, help="Shop ID filter")
+
+    # --- search ---
+    p_search = subparsers.add_parser("search", help="Search products")
+    p_search.add_argument("--query", type=str, required=True, help="Search query")
+    p_search.add_argument("--shop", type=str, default=None, help="Shop ID filter")
 
     # --- bestsellers ---
-    subparsers.add_parser("bestsellers", help="Bestseller pattern analysis")
+    p_best = subparsers.add_parser("bestsellers", help="Best-selling products")
+    p_best.add_argument("--shop", type=str, default=None, help="Shop ID filter")
+    p_best.add_argument("--days", type=int, default=30, help="Lookback days")
+    p_best.add_argument("--top", type=int, default=20, help="Number of results")
+
+    # --- analytics ---
+    p_analytics = subparsers.add_parser("analytics", help="Product analytics")
+    p_analytics.add_argument("--shop", type=str, default=None, help="Shop ID filter")
+    p_analytics.add_argument("--days", type=int, default=30, help="Lookback days")
+
+    # --- trending ---
+    p_trend = subparsers.add_parser("trending", help="Trending products")
+    p_trend.add_argument("--shop", type=str, default=None, help="Shop ID filter")
+    p_trend.add_argument("--top", type=int, default=10, help="Number of results")
+
+    # --- underperforming ---
+    p_under = subparsers.add_parser("underperforming", help="Underperforming products")
+    p_under.add_argument("--shop", type=str, default=None, help="Shop ID filter")
+    p_under.add_argument("--days", type=int, default=30, help="Lookback days")
+
+    # --- price ---
+    p_price = subparsers.add_parser("price", help="Suggest price for a product")
+    p_price.add_argument("--type", type=str, required=True, help="Product type")
+    p_price.add_argument("--cost", type=float, required=True, help="Printify cost")
+    p_price.add_argument("--niche", type=str, default="", help="Shop niche")
+    p_price.add_argument("--margin", type=float, default=40.0, help="Target margin pct")
+
+    # --- seasonal ---
+    subparsers.add_parser("seasonal", help="Seasonal recommendations")
+
+    # --- fees ---
+    p_fees = subparsers.add_parser("fees", help="Calculate Etsy fees")
+    p_fees.add_argument("--price", type=float, required=True, help="Item price")
+    p_fees.add_argument("--cost", type=float, required=True, help="Printify cost")
+    p_fees.add_argument("--ads", action="store_true", help="Include offsite ads fee")
+
+    # --- record-sale ---
+    p_rsale = subparsers.add_parser("record-sale", help="Record a sale")
+    p_rsale.add_argument("--product-id", type=str, required=True, help="Product ID")
+    p_rsale.add_argument("--quantity", type=int, default=1, help="Quantity sold")
+    p_rsale.add_argument("--date", type=str, default=None, help="Sale date YYYY-MM-DD")
+    p_rsale.add_argument("--order-id", type=str, default="", help="Etsy order ID")
 
     args = parser.parse_args()
 
@@ -2414,181 +2511,324 @@ def _cli_main() -> None:
         parser.print_help()
         sys.exit(1)
 
-    # Configure logging for CLI
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
         datefmt="%H:%M:%S",
     )
 
-    mgr = get_manager()
+    manager = get_manager()
 
-    if args.command == "concept":
-        keywords = [k.strip() for k in args.keywords.split(",")] if args.keywords else None
-        products = [p.strip() for p in args.products.split(",")] if args.products else None
-        concept = mgr.create_concept(
-            niche=args.niche,
-            title=args.title,
-            description=args.description,
-            style_keywords=keywords,
-            target_products=products,
-        )
-        print(f"Created concept: {concept.concept_id}")
-        print(f"  Niche:    {concept.niche}")
-        print(f"  Title:    {concept.title}")
-        print(f"  Keywords: {', '.join(concept.style_keywords)}")
-        print(f"  Targets:  {', '.join(concept.target_products)}")
-        print(f"  Status:   {concept.status}")
-        print(f"\nGenerate design prompt:")
-        print(f"  python -m src.etsy_manager design-prompt --concept-id {concept.concept_id}")
+    try:
+        _dispatch_command(args, manager)
+    except (KeyError, ValueError) as exc:
+        print(f"\nError: {exc}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as exc:
+        logger.exception("Unexpected error")
+        print(f"\nFatal: {exc}", file=sys.stderr)
+        sys.exit(2)
 
-    elif args.command == "product":
-        types = [t.strip() for t in args.types.split(",")]
-        products = mgr.bulk_create_products(args.concept_id, types)
-        print(f"Created {len(products)} products:")
-        for p in products:
-            print(f"\n  ID:     {p.product_id}")
-            print(f"  Type:   {p.product_type}")
-            print(f"  Title:  {p.title[:60]}...")
-            print(f"  Price:  ${p.price:.2f}")
-            print(f"  Cost:   ${p.cost:.2f}")
-            print(f"  Margin: {p.profit_margin:.1f}%")
-            print(f"  Tags:   {', '.join(p.tags[:5])}...")
 
-    elif args.command == "design-prompt":
-        concept = mgr.get_concept(args.concept_id)
-        if concept is None:
-            print(f"Concept not found: {args.concept_id}")
-            sys.exit(1)
-        prompt = mgr.generate_design_prompt(concept)
-        print("DESIGN PROMPT")
-        print(f"{'=' * 60}")
-        print(prompt)
+def _dispatch_command(args: argparse.Namespace, manager: EtsyPODManager) -> None:
+    """Dispatch CLI command to the appropriate handler."""
 
-    elif args.command == "seo":
-        issues = mgr.audit_listings(niche=args.niche)
-        if not issues:
-            print("No SEO issues found. All listings look good!")
-        else:
-            print(f"SEO AUDIT: {len(issues)} listings with issues")
-            print(f"{'=' * 60}")
-            for item in issues:
-                print(f"\n  Listing: {item['listing_id']}")
-                print(f"  Title:   {item['title'][:50]}")
-                print(f"  Views:   {item['views']}  Sales: {item['sales']}")
-                for issue in item["issues"]:
-                    print(f"    - {issue}")
-
-    elif args.command == "sales":
-        report = mgr.get_sales_report(period=args.period, niche=args.niche)
-        print(mgr.format_sales_report(report, style=args.format))
-
-    elif args.command == "top":
-        sellers = mgr.top_sellers(count=args.count, period=args.period)
-        print(f"TOP {args.count} SELLERS ({args.period.upper()})")
-        print(f"{'=' * 60}")
-        if not sellers:
-            print("  No sales recorded yet.")
-        else:
-            for i, p in enumerate(sellers, 1):
-                print(
-                    f"  {i:>3}. {p.title[:35]:<35} "
-                    f"${p.revenue:>8,.2f}  ({p.sales_count} sold)"
-                )
-
-    elif args.command == "profit":
-        analysis = mgr.profit_analysis(period=args.period)
-        print(f"PROFIT ANALYSIS ({args.period.upper()})")
-        print(f"{'=' * 55}")
-        print(f"  Revenue:      ${analysis['total_revenue']:>10,.2f}")
-        costs = analysis["total_costs"]
-        print(f"  Product cost: ${costs.get('product_cost', 0):>10,.2f}")
-        print(f"  Etsy fees:    ${costs.get('etsy_fees', 0):>10,.2f}")
-        print(f"  Net profit:   ${analysis['net_profit']:>10,.2f}")
-        print(f"  Margin:       {analysis['overall_margin_pct']:>10.1f}%")
-        print(f"  Orders:       {analysis['total_orders']:>10}")
-        print(f"  Profit/order: ${analysis['profit_per_order']:>10,.2f}")
-
-        if analysis["by_product_type"]:
-            print(f"\n  BY PRODUCT TYPE:")
-            print(f"  {'Type':<12} {'Revenue':>10} {'Profit':>10} {'Margin':>8} {'Units':>7}")
-            print(f"  {'-' * 50}")
-            for pt, data in sorted(
-                analysis["by_product_type"].items(),
-                key=lambda x: x[1]["revenue"],
-                reverse=True,
-            ):
-                print(
-                    f"  {pt:<12} "
-                    f"${data['revenue']:>9,.2f} "
-                    f"${data['net_profit']:>9,.2f} "
-                    f"{data['margin_pct']:>7.1f}% "
-                    f"{data['units']:>7}"
-                )
-
-    elif args.command == "niches":
-        print(mgr.format_niche_comparison(period=args.period))
-
-    elif args.command == "concepts":
-        concepts = mgr.list_concepts(niche=args.niche, status=args.status)
-        if not concepts:
-            print("No concepts found.")
-        else:
-            print(f"DESIGN CONCEPTS ({len(concepts)} total)")
-            print(f"{'=' * 70}")
-            for c in concepts:
-                niche_name = NICHES.get(c.niche, {}).get("name", c.niche)
-                print(
-                    f"  {c.concept_id[:12]}  [{c.status:<9}]  "
-                    f"{niche_name:<16}  {c.title[:30]}"
-                )
+    if args.command == "shops":
+        print(manager.format_shop_summary())
 
     elif args.command == "products":
-        products = mgr.list_products(
-            niche=args.niche,
-            product_type=getattr(args, "type", None),
+        products = manager.list_products(
+            shop_id=args.shop,
             status=args.status,
+            product_type=getattr(args, "type", None),
+            sort_by=args.sort,
+            limit=args.limit,
         )
         if not products:
             print("No products found.")
-        else:
-            print(f"PRODUCTS ({len(products)} total)")
-            print(f"{'=' * 75}")
-            print(f"  {'ID':<14} {'Type':<10} {'Status':<12} {'Price':>8} {'Sales':>7} {'Title'}")
-            print(f"  {'-' * 72}")
-            for p in products:
-                print(
-                    f"  {p.product_id[:12]}  {p.product_type:<10} "
-                    f"{p.status:<12} ${p.price:>7.2f} {p.sales_count:>7}  "
-                    f"{p.title[:30]}"
-                )
+            return
+        print(f"\nPRODUCTS ({len(products)} results)")
+        print("=" * 80)
+        print(
+            f"  {'Title':<35} {'Shop':<16} {'Price':>7} "
+            f"{'Sales':>6} {'Views':>6} {'Status':<12}"
+        )
+        print(
+            f"  {'-'*35} {'-'*16} {'-'*7} {'-'*6} {'-'*6} {'-'*12}"
+        )
+        for p in products:
+            print(
+                f"  {p.title[:35]:<35} {p.shop_id[:16]:<16} "
+                f"${p.price:>6.2f} {p.sales_count:>6} "
+                f"{p.views:>6} {p.status:<12}"
+            )
+        print(f"\n  ID of first result: {products[0].product_id}")
 
-    elif args.command == "keywords":
-        keywords = mgr.suggest_trending_keywords(args.niche)
-        niche_name = NICHES.get(args.niche, {}).get("name", args.niche)
-        print(f"TRENDING KEYWORDS: {niche_name}")
-        print(f"{'=' * 40}")
-        for i, kw in enumerate(keywords, 1):
-            print(f"  {i:>3}. {kw}")
+    elif args.command == "add":
+        tags = (
+            [t.strip() for t in args.tags.split(",") if t.strip()]
+            if args.tags else []
+        )
+        product = manager.add_product(
+            shop_id=args.shop,
+            title=args.title,
+            price=args.price,
+            cost=args.cost,
+            product_type=getattr(args, "type", "t-shirt"),
+            tags=tags,
+            status=args.status,
+        )
+        fees = calculate_etsy_fees(product.price, product.cost)
+        print(f"\nProduct added: {product.product_id}")
+        print(f"  Title:   {product.title}")
+        print(f"  Shop:    {product.shop_id}")
+        print(f"  Price:   ${product.price:.2f}")
+        print(f"  Cost:    ${product.cost:.2f}")
+        print(f"  Fees:    ${fees['total_etsy_fees']:.2f}")
+        print(f"  Profit:  ${fees['net_profit']:.2f} ({fees['margin_pct']:.1f}%)")
+        print(f"  Status:  {product.status}")
+
+    elif args.command == "sales":
+        if args.period == "day":
+            data = manager.daily_sales()
+            print(f"\nDAILY SALES — {data['date']}")
+            print("=" * 40)
+            print(f"  Sales:   {data['total_sales']}")
+            print(f"  Units:   {data['total_units']}")
+            print(f"  Gross:   ${data['gross_revenue']:,.2f}")
+            print(f"  Fees:    ${data['total_fees']:,.2f}")
+            print(f"  Cost:    ${data['total_cost']:,.2f}")
+            print(f"  Net:     ${data['net_profit']:,.2f}")
+            if data["by_shop"]:
+                print("\n  By shop:")
+                for sid, sd in data["by_shop"].items():
+                    print(
+                        f"    {sid:<18} {sd['units']:>3} units  "
+                        f"${sd['gross']:>8,.2f} gross"
+                    )
+        elif args.period == "custom" and args.start and args.end:
+            report = manager.custom_report(
+                args.start, args.end, shop_id=args.shop
+            )
+            print(manager.format_report(report, style=args.format))
+        elif args.period == "week":
+            report = manager.weekly_report(shop_id=args.shop)
+            print(manager.format_report(report, style=args.format))
+        else:
+            report = manager.monthly_report(shop_id=args.shop)
+            print(manager.format_report(report, style=args.format))
+
+    elif args.command == "report":
+        if args.period == "week":
+            report = manager.weekly_report(shop_id=args.shop)
+        else:
+            report = manager.monthly_report(shop_id=args.shop)
+        print(manager.format_report(report, style=args.format))
+
+    elif args.command == "tags":
+        product = manager.get_product(args.product_id)
+        print(f"Generating tags for: {product.title}")
+        tags = manager.generate_tags_sync(product)
+        print(f"\nGenerated {len(tags)} tags:")
+        for i, tag in enumerate(tags, 1):
+            print(f"  {i:>2}. {tag}")
+        if args.apply:
+            manager.update_product(args.product_id, tags=tags)
+            print("\nTags applied to product.")
+
+    elif args.command == "optimize":
+        print(
+            f"Running full SEO optimization for product "
+            f"{args.product_id}..."
+        )
+        result = manager.full_seo_optimize_sync(args.product_id)
+        print(f"\nOptimized Title: {result['title']}")
+        print(f"\nTags ({len(result['tags'])}):")
+        for i, tag in enumerate(result["tags"], 1):
+            print(f"  {i:>2}. {tag}")
+        print(f"\nDescription ({len(result['description'])} chars):")
+        print(f"  {result['description'][:200]}...")
+        print(f"\nOptimized at: {result['optimized_at']}")
+
+    elif args.command == "margins":
+        margins = manager.calculate_margins(shop_id=args.shop)
+        if not margins:
+            print("No active products found.")
+            return
+        print(manager.format_margins_table(margins))
+
+    elif args.command == "search":
+        results = manager.search_products(args.query, shop_id=args.shop)
+        if not results:
+            print(f"No products matching '{args.query}'")
+            return
+        print(f"\nSEARCH RESULTS for '{args.query}' ({len(results)} found)")
+        print("=" * 70)
+        for p in results[:25]:
+            print(
+                f"  [{p.shop_id}] {p.title[:40]:<40} "
+                f"${p.price:.2f}  {p.status}"
+            )
+            print(f"    ID: {p.product_id}")
 
     elif args.command == "bestsellers":
-        analysis = mgr.bestseller_analysis()
-        if not analysis:
-            print("No sales data available for analysis.")
-        else:
-            print("BESTSELLER PATTERN ANALYSIS")
-            print(f"{'=' * 50}")
-            for item in analysis:
-                print(f"\n  {item['insight'].upper().replace('_', ' ')}:")
-                if isinstance(item["data"], dict):
-                    for k, v in list(item["data"].items())[:8]:
-                        print(f"    {k}: {v}")
-                else:
-                    print(f"    {item['data']}")
-                print(f"  >> {item['recommendation']}")
+        results = manager.best_sellers(
+            shop_id=args.shop, days=args.days, top_n=args.top
+        )
+        if not results:
+            print("No sales data found.")
+            return
+        print(f"\nBEST SELLERS (last {args.days} days)")
+        print("=" * 70)
+        for i, bs in enumerate(results, 1):
+            print(
+                f"  {i:>2}. {bs['title'][:35]:<35} "
+                f"{bs['units']:>3} units  "
+                f"${bs['gross']:>8,.2f} gross  "
+                f"${bs['net']:>8,.2f} net"
+            )
+
+    elif args.command == "analytics":
+        analytics = manager.product_analytics(
+            shop_id=args.shop, days=args.days
+        )
+        if not analytics:
+            print("No products found for analytics.")
+            return
+        print(f"\nPRODUCT ANALYTICS (last {args.days} days)")
+        print("=" * 85)
+        print(
+            f"  {'Title':<30} {'Views':>6} {'Sales':>6} "
+            f"{'Conv%':>6} {'Favs%':>6} {'Score':>6}"
+        )
+        print(
+            f"  {'-'*30} {'-'*6} {'-'*6} {'-'*6} {'-'*6} {'-'*6}"
+        )
+        for a in analytics[:25]:
+            print(
+                f"  {a.title[:30]:<30} {a.views:>6} {a.sales_count:>6} "
+                f"{a.conversion_rate:>5.1f}% {a.favorites_rate:>5.1f}% "
+                f"{a.performance_score:>5.1f}"
+            )
+
+    elif args.command == "trending":
+        results = manager.trending_products(
+            shop_id=args.shop, top_n=args.top
+        )
+        if not results:
+            print("No trending data available.")
+            return
+        print("\nTRENDING PRODUCTS (7-day vs prior 7-day)")
+        print("=" * 70)
+        for t in results:
+            arrow = "+" if t["growth_pct"] >= 0 else ""
+            trend = "TRENDING" if t["trending"] else "DECLINING"
+            print(
+                f"  {t['title'][:35]:<35} "
+                f"{t['recent_units']:>3} vs {t['prev_units']:>3} units  "
+                f"{arrow}{t['growth_pct']:.0f}%  [{trend}]"
+            )
+
+    elif args.command == "underperforming":
+        results = manager.underperforming_products(
+            shop_id=args.shop, days=args.days
+        )
+        if not results:
+            print("No underperforming products found.")
+            return
+        print(f"\nUNDERPERFORMING PRODUCTS (last {args.days} days)")
+        print("=" * 70)
+        for u in results[:15]:
+            print(f"\n  {u['title'][:50]}")
+            print(
+                f"    Views: {u['views']}  Sales: {u['sales']}  "
+                f"Conv: {u['conversion_rate']:.1f}%  "
+                f"Favs: {u['favorites_rate']:.1f}%"
+            )
+            for s in u["suggestions"]:
+                print(f"    -> {s}")
+
+    elif args.command == "price":
+        result = manager.suggest_price(
+            product_type=getattr(args, "type"),
+            cost=args.cost,
+            niche=args.niche,
+            target_margin_pct=args.margin,
+        )
+        print("\nPRICE SUGGESTION")
+        print("=" * 40)
+        print(f"  Product type:    {result['product_type']}")
+        print(f"  Printify cost:   ${result['fee_breakdown']['printify_cost']:.2f}")
+        print(f"  Suggested price: ${result['suggested_price']:.2f}")
+        print(f"  Breakeven price: ${result['min_price_breakeven']:.2f}")
+        print(
+            f"  Competitive:     "
+            f"${result['competitive_range']['low']:.2f} - "
+            f"${result['competitive_range']['high']:.2f}"
+        )
+        print(f"  Actual margin:   {result['actual_margin_pct']:.1f}%")
+        print(f"  Net profit:      ${result['actual_net_profit']:.2f}")
+        print("\n  Fee breakdown:")
+        fb = result["fee_breakdown"]
+        print(f"    Listing fee:       ${fb['listing_fee']:.2f}")
+        print(f"    Transaction fee:   ${fb['transaction_fee']:.2f}")
+        print(f"    Payment proc:      ${fb['payment_processing']:.2f}")
+        print(f"    Total Etsy fees:   ${fb['total_etsy_fees']:.2f}")
+
+    elif args.command == "seasonal":
+        recs = manager.seasonal_recommendations()
+        current_month = _now_utc().strftime("%B %Y")
+        print(f"\nSEASONAL RECOMMENDATIONS — {current_month}")
+        print("=" * 70)
+        for rec in recs:
+            print(f"\n  {rec['display_name']} ({rec['niche']})")
+            print(
+                f"    Demand: {rec['demand_multiplier']}x  |  "
+                f"Next month: {rec['next_month_multiplier']}x"
+            )
+            print(f"    Urgency: {rec['urgency']}")
+            if rec["themes"]:
+                print(f"    Themes: {', '.join(rec['themes'][:4])}")
+            if rec["actions"]:
+                for action in rec["actions"]:
+                    print(f"    -> {action}")
+
+    elif args.command == "fees":
+        result = calculate_etsy_fees(
+            args.price, args.cost, include_offsite_ads=args.ads
+        )
+        print("\nETSY FEE CALCULATOR")
+        print("=" * 40)
+        print(f"  Item price:      ${result['item_price']:.2f}")
+        print(f"  Printify cost:   ${result['printify_cost']:.2f}")
+        print(f"  Listing fee:     ${result['listing_fee']:.2f}")
+        print(f"  Transaction fee: ${result['transaction_fee']:.2f}")
+        print(f"  Payment proc:    ${result['payment_processing']:.2f}")
+        if result["offsite_ads_fee"] > 0:
+            print(f"  Offsite ads:     ${result['offsite_ads_fee']:.2f}")
+        print(f"  Total Etsy fees: ${result['total_etsy_fees']:.2f}")
+        print(f"  Total cost:      ${result['total_cost']:.2f}")
+        print(f"  Net profit:      ${result['net_profit']:.2f}")
+        print(f"  Margin:          {result['margin_pct']:.1f}%")
+
+    elif args.command == "record-sale":
+        sale = manager.record_sale(
+            product_id=args.product_id,
+            quantity=args.quantity,
+            sale_date=args.date,
+            order_id=args.order_id,
+        )
+        print(f"\nSale recorded: {sale.sale_id}")
+        print(f"  Product:  {sale.product_id[:8]}...")
+        print(f"  Quantity: {sale.quantity}")
+        print(f"  Gross:    ${sale.gross_revenue:.2f}")
+        print(f"  Fees:     ${sale.etsy_fees:.2f}")
+        print(f"  Cost:     ${sale.printify_cost:.2f}")
+        print(f"  Net:      ${sale.net_profit:.2f}")
 
     else:
-        parser.print_help()
+        print(f"Unknown command: {args.command}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
