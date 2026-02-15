@@ -1,43 +1,42 @@
 """
-KDP Publisher — OpenClaw Empire Edition
-========================================
+KDP Publisher Pipeline — OpenClaw Empire Edition
+=================================================
 
-End-to-end Amazon KDP book creation pipeline for Nick Creighton's 16-site
-WordPress publishing empire.  Manages book projects from concept to
-upload-ready package: ideation, outline generation, chapter writing, editing,
-cover specification, manuscript formatting, and metadata preparation.
+End-to-end Amazon KDP book creation and management pipeline for
+Nick Creighton's 16-site WordPress publishing empire. Generates
+outlines, writes chapters, manages covers, tracks sales, and
+prepares upload packages across all niches.
 
 Pipeline stages:
-    1. IDEATION    -- Generate book ideas, analyse competition
-    2. OUTLINE     -- Structured chapter outline with front/back matter
-    3. WRITING     -- Chapter-by-chapter generation with brand voice
-    4. EDITING     -- Proofreading, consistency check, fact-check pass
-    5. COVER       -- Cover specification and image-gen prompt
-    6. FORMATTING  -- Compile manuscript, generate KDP description
-    7. REVIEW      -- Final metadata, upload checklist
-    8. READY       -- Package complete for KDP upload
+    IDEATION -> OUTLINE -> CHAPTERS -> EDIT -> COVER -> FORMAT -> REVIEW -> UPLOAD
+
+Niches tracked:
+    witchcraft, crystals, herbs, moon, tarot, spells, pagan,
+    witchy_decor, seasonal, smart_home, ai, mythology,
+    bullet_journals, family, wealth
+
+Data storage: data/kdp/
+    books.json          -- Master book registry
+    sales.json          -- Sales records
+    series.json         -- Series definitions
+    projects/<slug>/    -- Per-book manuscript files
 
 Usage:
     from src.kdp_publisher import get_publisher
 
     pub = get_publisher()
-    project = await pub.create_project("Crystal Healing 101", "witchcraft")
-    outline = await pub.generate_outline(project.project_id)
-    await pub.write_all_chapters(project.project_id)
-    await pub.edit_chapter(project.project_id, 1)
-    pub.compile_manuscript(project.project_id)
-    pub.prepare_metadata(project.project_id)
+    book = pub.add_book(title="Crystal Healing 101", niche="crystals")
+    outline = await pub.generate_outline(book.book_id, num_chapters=12)
 
 CLI:
-    python -m src.kdp_publisher new --title "Crystal Healing 101" --niche witchcraft
-    python -m src.kdp_publisher ideas --niche witchcraft --count 10
-    python -m src.kdp_publisher outline --project ID --chapters 12
-    python -m src.kdp_publisher write --project ID --chapter 3
-    python -m src.kdp_publisher write --project ID --all
-    python -m src.kdp_publisher edit --project ID --chapter 3
-    python -m src.kdp_publisher compile --project ID
+    python -m src.kdp_publisher list
+    python -m src.kdp_publisher add --title "Crystal Healing 101" --niche crystals
+    python -m src.kdp_publisher outline --book-id <id> --chapters 12
+    python -m src.kdp_publisher keywords --niche crystals --topic "crystal healing"
+    python -m src.kdp_publisher sales --record --book-id <id> --amount 4.99
+    python -m src.kdp_publisher report --period month
     python -m src.kdp_publisher status
-    python -m src.kdp_publisher pipeline --title "Moon Magic" --niche witchcraft --chapters 10
+    python -m src.kdp_publisher search --query "crystal"
 """
 
 from __future__ import annotations
@@ -46,14 +45,14 @@ import argparse
 import asyncio
 import json
 import logging
-import math
 import os
 import re
 import sys
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
+from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
 
@@ -64,216 +63,229 @@ logger = logging.getLogger("kdp_publisher")
 # ---------------------------------------------------------------------------
 
 BASE_DIR = Path(r"D:\Claude Code Projects\openclaw-empire")
-SITE_REGISTRY_PATH = BASE_DIR / "configs" / "site-registry.json"
 DATA_DIR = BASE_DIR / "data" / "kdp"
+BOOKS_FILE = DATA_DIR / "books.json"
+SALES_FILE = DATA_DIR / "sales.json"
+SERIES_FILE = DATA_DIR / "series.json"
 PROJECTS_DIR = DATA_DIR / "projects"
-IDEAS_FILE = DATA_DIR / "ideas.json"
 
 # Ensure directories exist on import
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Anthropic model identifiers per CLAUDE.md cost optimization rules
-MODEL_SONNET = "claude-sonnet-4-20250514"
-MODEL_HAIKU = "claude-haiku-4-5-20251001"
+MODEL_SONNET = "claude-sonnet-4-20250514"       # Content generation
+MODEL_HAIKU = "claude-haiku-4-5-20251001"        # Classification, keywords
 
-# Max tokens per task type (per CLAUDE.md rules)
-MAX_TOKENS_IDEATION = 2000
-MAX_TOKENS_OUTLINE = 2000
+# Token limits per task type
+MAX_TOKENS_OUTLINE = 3000
 MAX_TOKENS_CHAPTER = 4096
-MAX_TOKENS_EDITING = 4096
-MAX_TOKENS_METADATA = 500
+MAX_TOKENS_KEYWORDS = 500
 MAX_TOKENS_DESCRIPTION = 1000
-MAX_TOKENS_COVER = 500
-MAX_TOKENS_COMPETITION = 2000
-MAX_TOKENS_CONSISTENCY = 2000
-MAX_TOKENS_JOURNAL_PROMPTS = 2000
+MAX_TOKENS_COMPETITION = 500
+MAX_TOKENS_SERIES_SUGGEST = 500
+MAX_TOKENS_COVER_PROMPT = 300
 
-# Chapter writing targets
-CHAPTER_WORD_TARGET_MIN = 3000
-CHAPTER_WORD_TARGET_MAX = 4000
+# Cache threshold (characters) -- roughly 2048 tokens * 4 chars/token
+CACHE_CHAR_THRESHOLD = 8192
 
-# KDP limits
-KDP_DESCRIPTION_MAX_CHARS = 4000
-KDP_MAX_KEYWORDS = 7
+# Data bounds
+MAX_BOOKS = 500
+MAX_SALES_RECORDS = 10000
 
-# Cover dimensions for KDP
-COVER_WIDTH_PX = 2560
-COVER_HEIGHT_PX = 1600
+# KDP pricing bounds
+KDP_MIN_EBOOK_PRICE = 0.99
+KDP_MAX_EBOOK_PRICE = 9.99
+KDP_MIN_PAPERBACK_PRICE = 4.99
+KDP_MAX_PAPERBACK_PRICE = 99.99
+
+# Quality standards from SKILL.md
+MIN_NONFICTION_WORDS = 20000
+TARGET_NONFICTION_WORDS_LOW = 30000
+TARGET_NONFICTION_WORDS_HIGH = 50000
+MIN_JOURNAL_PAGES = 100
+WORDS_PER_CHAPTER_LOW = 2000
+WORDS_PER_CHAPTER_HIGH = 4000
+
+# Cover specs
+COVER_WIDTH_EBOOK = 2560
+COVER_HEIGHT_EBOOK = 1600
 COVER_DPI = 300
 
-# Spine width calculation: page_count * inches_per_page (cream paper)
-SPINE_INCHES_PER_PAGE_CREAM = 0.002252
 
-# Valid project statuses
-VALID_STATUSES = (
-    "ideation", "outlined", "writing", "editing",
-    "formatting", "review", "ready", "published",
+# ---------------------------------------------------------------------------
+# Valid Niches (mapped from the 16 empire sites)
+# ---------------------------------------------------------------------------
+
+VALID_NICHES = (
+    "witchcraft", "crystals", "herbs", "moon", "tarot", "spells",
+    "pagan", "witchy_decor", "seasonal", "smart_home", "ai",
+    "mythology", "bullet_journals", "family", "wealth",
 )
 
-# Valid chapter statuses
-VALID_CHAPTER_STATUSES = ("pending", "drafted", "edited", "final")
+NICHE_TO_SITE = {
+    "witchcraft": "witchcraft",
+    "crystals": "crystalwitchcraft",
+    "herbs": "herbalwitchery",
+    "moon": "moonphasewitch",
+    "tarot": "tarotbeginners",
+    "spells": "spellsrituals",
+    "pagan": "paganpathways",
+    "witchy_decor": "witchyhomedecor",
+    "seasonal": "seasonalwitchcraft",
+    "smart_home": "smarthome",
+    "ai": "aiaction",
+    "mythology": "mythical",
+    "bullet_journals": "bulletjournals",
+    "family": "family",
+    "wealth": "wealthai",
+}
 
-# Valid journal page types
-VALID_PAGE_TYPES = ("lined", "dot-grid", "blank", "prompted", "tracker")
-
-# All site IDs for validation
-ALL_SITE_IDS = [
-    "witchcraft", "smarthome", "aiaction", "aidiscovery", "wealthai",
-    "family", "mythical", "bulletjournals", "crystalwitchcraft",
-    "herbalwitchery", "moonphasewitch", "tarotbeginners", "spellsrituals",
-    "paganpathways", "witchyhomedecor", "seasonalwitchcraft",
-]
-
-
-# ---------------------------------------------------------------------------
-# Niche Templates — Built-in knowledge for each niche vertical
-# ---------------------------------------------------------------------------
-
-NICHE_TEMPLATES: dict[str, dict[str, Any]] = {
-    "witchcraft": {
-        "typical_chapters": (12, 15),
-        "target_words": (35000, 50000),
-        "price_ebook": 4.99,
-        "price_paperback": (12.99, 15.99),
-        "categories": [
-            "Religion & Spirituality > New Age",
-            "Body, Mind & Spirit",
-        ],
-        "series": "Witchcraft for Beginners",
-        "voice": "mystical-warmth",
-        "ideas": [
-            "Crystal Healing Guide",
-            "Moon Phase Magic Workbook",
-            "Kitchen Witch Recipe Journal",
-            "Herbal Grimoire",
-            "Sabbat Celebration Guide",
-            "Tarot Journal",
-        ],
-        "related_sites": [
-            "witchcraft", "crystalwitchcraft", "herbalwitchery",
-            "moonphasewitch", "tarotbeginners", "spellsrituals",
-            "paganpathways", "witchyhomedecor", "seasonalwitchcraft",
-        ],
-    },
-    "smarthome": {
-        "typical_chapters": (10, 14),
-        "target_words": (30000, 45000),
-        "price_ebook": 5.99,
-        "price_paperback": (14.99, 17.99),
-        "categories": [
-            "Computers & Technology > Hardware",
-            "Crafts, Hobbies & Home > Home Improvement",
-        ],
-        "series": "Smart Home Wizards",
-        "voice": "tech-authority",
-        "ideas": [
-            "Smart Home Setup Guide for Non-Techies",
-            "Home Security Automation Handbook",
-            "Voice Assistant Mastery",
-            "Smart Lighting Blueprint",
-            "Home Network Optimization Guide",
-            "Smart Kitchen Appliance Handbook",
-        ],
-        "related_sites": ["smarthome"],
-    },
-    "ai": {
-        "typical_chapters": (10, 14),
-        "target_words": (30000, 45000),
-        "price_ebook": 6.99,
-        "price_paperback": (15.99, 19.99),
-        "categories": [
-            "Computers & Technology > Artificial Intelligence",
-            "Business & Money > Entrepreneurship",
-        ],
-        "series": "AI Money Blueprint",
-        "voice": "forward-analyst",
-        "ideas": [
-            "AI Side Hustle Blueprint",
-            "Prompt Engineering Playbook",
-            "Automate Your Business with AI",
-            "AI Content Creation Masterclass",
-            "Build AI Agents for Profit",
-            "AI Tools Directory and Review Guide",
-        ],
-        "related_sites": ["aiaction", "aidiscovery", "wealthai"],
-    },
-    "family": {
-        "typical_chapters": (12, 16),
-        "target_words": (35000, 50000),
-        "price_ebook": 4.99,
-        "price_paperback": (13.99, 16.99),
-        "categories": [
-            "Parenting & Relationships > Parenting",
-            "Health, Fitness & Dieting > Mental Health",
-        ],
-        "series": "Family Flourish Guides",
-        "voice": "nurturing-guide",
-        "ideas": [
-            "Positive Discipline Without Punishment",
-            "Screen Time Survival Guide",
-            "Family Meal Planning Made Simple",
-            "Raising Confident Kids",
-            "Mindful Parenting Journal",
-            "Family Connection Activities Book",
-        ],
-        "related_sites": ["family"],
-    },
-    "mythology": {
-        "typical_chapters": (14, 18),
-        "target_words": (40000, 60000),
-        "price_ebook": 5.99,
-        "price_paperback": (14.99, 18.99),
-        "categories": [
-            "Literature & Fiction > Mythology & Folk Tales",
-            "History > Ancient Civilizations",
-        ],
-        "series": "Mythical Archives Collection",
-        "voice": "story-scholar",
-        "ideas": [
-            "Norse Mythology Retold",
-            "Greek Gods and Heroes Compendium",
-            "Celtic Myths and Legends",
-            "Egyptian Mythology for Modern Readers",
-            "Japanese Yokai Encyclopedia",
-            "World Creation Myths Compared",
-        ],
-        "related_sites": ["mythical"],
-    },
-    "bulletjournals": {
-        "typical_chapters": (8, 12),
-        "target_words": (15000, 25000),
-        "price_ebook": 3.99,
-        "price_paperback": (8.99, 12.99),
-        "categories": [
-            "Self-Help > Creativity",
-            "Crafts, Hobbies & Home > Crafts & Hobbies",
-        ],
-        "series": "Bullet Journal Essentials",
-        "voice": "creative-organizer",
-        "ideas": [
-            "Bullet Journal Starter Kit",
-            "Dot Grid Notebook (plain)",
-            "Habit Tracker Journal",
-            "Gratitude Journal with Prompts",
-            "Weekly Planner Undated",
-            "Creative Lettering Practice Book",
-        ],
-        "related_sites": ["bulletjournals"],
-    },
+NICHE_VOICE_HINTS = {
+    "witchcraft": "Mystical warmth, experienced witch who remembers being a beginner",
+    "crystals": "Crystal mystic, reverent and knowledgeable about stone energy",
+    "herbs": "Green witch, earthy and nurturing, deep plant knowledge",
+    "moon": "Lunar guide, poetic and cyclical, attuned to celestial rhythms",
+    "tarot": "Intuitive reader, encouraging and insightful",
+    "spells": "Ritual teacher, precise and respectful of tradition",
+    "pagan": "Spiritual mentor, inclusive and historically grounded",
+    "witchy_decor": "Design witch, aesthetic-forward with magical sensibility",
+    "seasonal": "Wheel of Year guide, celebratory and nature-connected",
+    "smart_home": "Tech authority, helpful neighbor who demystifies technology",
+    "ai": "Forward analyst, cuts through hype with practical data",
+    "mythology": "Story scholar, mythology professor who tells campfire stories",
+    "bullet_journals": "Creative organizer, start simple then make it yours",
+    "family": "Nurturing guide, research-backed and non-judgmental",
+    "wealth": "Opportunity spotter, shares real playbook for making money with AI",
 }
 
 
 # ---------------------------------------------------------------------------
-# Utility Functions
+# Enums
 # ---------------------------------------------------------------------------
 
+class BookStatus(Enum):
+    """Pipeline stages for a KDP book project."""
+    IDEATION = "ideation"
+    OUTLINE = "outline"
+    CHAPTERS = "chapters"
+    EDIT = "edit"
+    COVER = "cover"
+    FORMAT = "format"
+    REVIEW = "review"
+    UPLOAD = "upload"
+    PUBLISHED = "published"
+    PAUSED = "paused"
+
+    @classmethod
+    def from_string(cls, value: str) -> BookStatus:
+        normalized = value.strip().lower().replace("-", "_").replace(" ", "_")
+        for member in cls:
+            if member.value == normalized or member.name.lower() == normalized:
+                return member
+        raise ValueError(f"Unknown book status: {value!r}")
+
+    @property
+    def next_stage(self) -> Optional[BookStatus]:
+        """Return the next stage in the pipeline, or None if at the end."""
+        order = [
+            BookStatus.IDEATION, BookStatus.OUTLINE, BookStatus.CHAPTERS,
+            BookStatus.EDIT, BookStatus.COVER, BookStatus.FORMAT,
+            BookStatus.REVIEW, BookStatus.UPLOAD, BookStatus.PUBLISHED,
+        ]
+        try:
+            idx = order.index(self)
+            if idx < len(order) - 1:
+                return order[idx + 1]
+        except ValueError:
+            pass
+        return None
+
+
+class BookType(Enum):
+    """Types of KDP books."""
+    NONFICTION = "nonfiction"
+    JOURNAL = "journal"
+    WORKBOOK = "workbook"
+    COLORING_BOOK = "coloring_book"
+    PLANNER = "planner"
+    GUIDE = "guide"
+
+    @classmethod
+    def from_string(cls, value: str) -> BookType:
+        normalized = value.strip().lower().replace("-", "_").replace(" ", "_")
+        for member in cls:
+            if member.value == normalized or member.name.lower() == normalized:
+                return member
+        raise ValueError(f"Unknown book type: {value!r}")
+
+
+class RoyaltyOption(Enum):
+    """KDP royalty options."""
+    THIRTY_FIVE = "35%"
+    SEVENTY = "70%"
+
+    @classmethod
+    def from_string(cls, value: str) -> RoyaltyOption:
+        normalized = value.strip().replace(" ", "")
+        for member in cls:
+            if member.value == normalized or member.name.lower() == normalized.lower():
+                return member
+        raise ValueError(f"Unknown royalty option: {value!r}")
+
+
+class CoverStatus(Enum):
+    """Cover design pipeline status."""
+    NOT_STARTED = "not_started"
+    PROMPT_READY = "prompt_ready"
+    GENERATING = "generating"
+    REVIEW = "review"
+    APPROVED = "approved"
+
+    @classmethod
+    def from_string(cls, value: str) -> CoverStatus:
+        normalized = value.strip().lower().replace("-", "_").replace(" ", "_")
+        for member in cls:
+            if member.value == normalized or member.name.lower() == normalized:
+                return member
+        raise ValueError(f"Unknown cover status: {value!r}")
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 def _now_iso() -> str:
-    """Return the current UTC timestamp in ISO 8601 format."""
-    return datetime.now(timezone.utc).isoformat()
+    return _now_utc().isoformat()
+
+
+def _today_iso() -> str:
+    return _now_utc().strftime("%Y-%m-%d")
+
+
+def _parse_date(d: str) -> date:
+    return date.fromisoformat(d)
+
+
+def _round_amount(amount: float) -> float:
+    return round(float(amount), 2)
+
+
+def _slugify(text: str) -> str:
+    """Convert text to a URL/filesystem-friendly slug."""
+    slug = text.lower().strip()
+    slug = re.sub(r"[^\w\s-]", "", slug)
+    slug = re.sub(r"[\s_]+", "-", slug)
+    slug = re.sub(r"-+", "-", slug)
+    return slug.strip("-")
 
 
 def _load_json(path: Path, default: Any = None) -> Any:
-    """Load JSON from *path*, returning *default* when the file is missing or corrupt."""
+    """Load JSON from path, returning default when missing or corrupt."""
     if default is None:
         default = {}
     try:
@@ -284,94 +296,40 @@ def _load_json(path: Path, default: Any = None) -> Any:
 
 
 def _save_json(path: Path, data: Any) -> None:
-    """Write *data* as pretty-printed JSON to *path*."""
+    """Atomically write data as pretty-printed JSON to path."""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(data, fh, indent=2, default=str)
-    tmp.replace(path)
+        json.dump(data, fh, indent=2, default=str, ensure_ascii=False)
+    os.replace(str(tmp), str(path))
 
 
-def _count_words(text: str) -> int:
-    """Count words in a text string, stripping markdown formatting first."""
-    clean = re.sub(r"[#*_`~>\[\]()]", " ", text)
-    clean = re.sub(r"!\[.*?\]\(.*?\)", " ", clean)
+def _validate_niche(niche: str) -> None:
+    if niche not in VALID_NICHES:
+        raise ValueError(
+            f"Unknown niche '{niche}'. Valid: {', '.join(VALID_NICHES)}"
+        )
+
+
+def _word_count(text: str) -> int:
+    """Count words in a text string."""
+    clean = re.sub(r"[#*_`>|]", " ", text)
     return len(clean.split())
 
 
-def _slugify(text: str) -> str:
-    """Convert text to a URL-friendly slug."""
-    slug = text.lower().strip()
-    slug = re.sub(r"[^\w\s-]", "", slug)
-    slug = re.sub(r"[\s_]+", "-", slug)
-    slug = re.sub(r"-+", "-", slug)
-    return slug.strip("-")
+def _month_bounds() -> tuple[str, str]:
+    today = _now_utc().date()
+    first = today.replace(day=1)
+    if today.month == 12:
+        last = today.replace(year=today.year + 1, month=1, day=1) - timedelta(days=1)
+    else:
+        last = today.replace(month=today.month + 1, day=1) - timedelta(days=1)
+    return first.isoformat(), last.isoformat()
 
 
-def _load_site_registry() -> dict[str, dict]:
-    """Load the site registry and return a dict keyed by site ID."""
-    data = _load_json(SITE_REGISTRY_PATH, {"sites": []})
-    sites_list = data.get("sites", [])
-    return {site["id"]: site for site in sites_list}
-
-
-def _resolve_niche(niche: str) -> str:
-    """Normalise niche string to a key in NICHE_TEMPLATES."""
-    niche = niche.lower().strip()
-    # Direct match
-    if niche in NICHE_TEMPLATES:
-        return niche
-    # Site-ID to niche mapping
-    site_to_niche = {
-        "witchcraft": "witchcraft", "crystalwitchcraft": "witchcraft",
-        "herbalwitchery": "witchcraft", "moonphasewitch": "witchcraft",
-        "tarotbeginners": "witchcraft", "spellsrituals": "witchcraft",
-        "paganpathways": "witchcraft", "witchyhomedecor": "witchcraft",
-        "seasonalwitchcraft": "witchcraft",
-        "smarthome": "smarthome",
-        "aiaction": "ai", "aidiscovery": "ai", "wealthai": "ai",
-        "family": "family",
-        "mythical": "mythology",
-        "bulletjournals": "bulletjournals",
-    }
-    if niche in site_to_niche:
-        return site_to_niche[niche]
-    # Fuzzy match on partial substrings
-    for key in NICHE_TEMPLATES:
-        if key in niche or niche in key:
-            return key
-    return niche  # Return as-is; validation happens at call site
-
-
-def _get_project_dir(project_id: str) -> Path:
-    """Return the filesystem directory for a given project."""
-    return PROJECTS_DIR / project_id
-
-
-def _save_text_file(path: Path, content: str) -> None:
-    """Write text content to a file, creating parent directories."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as fh:
-        fh.write(content)
-
-
-def _read_text_file(path: Path) -> Optional[str]:
-    """Read a text file, returning None if it does not exist."""
-    try:
-        with open(path, "r", encoding="utf-8") as fh:
-            return fh.read()
-    except FileNotFoundError:
-        return None
-
-
-def _calculate_spine_width(page_count: int) -> float:
-    """Calculate spine width in inches from page count (cream paper)."""
-    return page_count * SPINE_INCHES_PER_PAGE_CREAM
-
-
-def _estimate_page_count(word_count: int, words_per_page: int = 250) -> int:
-    """Estimate page count from word count (standard ~250 words/page)."""
-    return max(1, math.ceil(word_count / words_per_page))
+def _year_bounds() -> tuple[str, str]:
+    today = _now_utc().date()
+    return f"{today.year}-01-01", f"{today.year}-12-31"
 
 
 # ---------------------------------------------------------------------------
@@ -379,176 +337,209 @@ def _estimate_page_count(word_count: int, words_per_page: int = 250) -> int:
 # ---------------------------------------------------------------------------
 
 @dataclass
-class BookMetadata:
-    """KDP upload metadata for a book project."""
-
+class KDPBook:
+    """A single KDP book project."""
+    book_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     title: str = ""
     subtitle: str = ""
-    description: str = ""  # 4000 chars max for KDP
-    categories: list[str] = field(default_factory=list)  # KDP browse categories
-    keywords: list[str] = field(default_factory=list)  # 7 max for KDP
-    language: str = "English"
+    author: str = "Nick Creighton"
+    description: str = ""
+    keywords: list[str] = field(default_factory=list)
+    categories: list[str] = field(default_factory=list)
+    niche: str = ""
+    book_type: str = "nonfiction"
+    series_id: Optional[str] = None
+    series_order: Optional[int] = None
+    asin: Optional[str] = None
+    isbn: Optional[str] = None
+    status: str = "ideation"
+    manuscript_path: Optional[str] = None
+    cover_path: Optional[str] = None
+    cover_status: str = "not_started"
+    cover_prompt: Optional[str] = None
     price_ebook: float = 4.99
     price_paperback: float = 12.99
-    page_count_estimate: int = 0
-    isbn: Optional[str] = None
-    asin: Optional[str] = None
-    series_name: Optional[str] = None
-    series_number: Optional[int] = None
-
-    def to_dict(self) -> dict:
-        return asdict(self)
-
-    @classmethod
-    def from_dict(cls, data: dict) -> BookMetadata:
-        known = {f.name for f in cls.__dataclass_fields__.values()}
-        filtered = {k: v for k, v in data.items() if k in known}
-        return cls(**filtered)
-
-
-@dataclass
-class Chapter:
-    """A single chapter in a book project."""
-
-    chapter_num: int = 0
-    title: str = ""
-    content: Optional[str] = None
+    page_count: int = 0
     word_count: int = 0
-    status: str = "pending"  # pending, drafted, edited, final
+    chapter_count: int = 0
+    chapters_completed: int = 0
+    royalty_option: str = "70%"
+    language: str = "English"
+    publish_date: Optional[str] = None
+    total_sales: int = 0
+    total_royalties: float = 0.0
     notes: str = ""
-
-    def to_dict(self) -> dict:
-        return asdict(self)
-
-    @classmethod
-    def from_dict(cls, data: dict) -> Chapter:
-        known = {f.name for f in cls.__dataclass_fields__.values()}
-        filtered = {k: v for k, v in data.items() if k in known}
-        return cls(**filtered)
-
-
-@dataclass
-class BookOutline:
-    """Structured outline for a book project."""
-
-    title: str = ""
-    subtitle: str = ""
-    chapter_titles: list[str] = field(default_factory=list)
-    chapter_summaries: list[str] = field(default_factory=list)
-    target_word_count: int = 40000
-    estimated_page_count: int = 160
-    front_matter: list[str] = field(default_factory=list)
-    back_matter: list[str] = field(default_factory=list)
-
-    def to_dict(self) -> dict:
-        return asdict(self)
-
-    @classmethod
-    def from_dict(cls, data: dict) -> BookOutline:
-        known = {f.name for f in cls.__dataclass_fields__.values()}
-        filtered = {k: v for k, v in data.items() if k in known}
-        return cls(**filtered)
-
-
-@dataclass
-class CoverSpec:
-    """Cover design specification for KDP upload."""
-
-    title: str = ""
-    subtitle: str = ""
-    author: str = "Nick Creighton"
-    style_description: str = ""
-    colors: list[str] = field(default_factory=list)
-    imagery: list[str] = field(default_factory=list)
-    dimensions: dict = field(default_factory=lambda: {
-        "width": COVER_WIDTH_PX,
-        "height": COVER_HEIGHT_PX,
-        "dpi": COVER_DPI,
-    })
-    spine_width: Optional[float] = None  # inches, based on page count
-
-    def to_dict(self) -> dict:
-        return asdict(self)
-
-    @classmethod
-    def from_dict(cls, data: dict) -> CoverSpec:
-        known = {f.name for f in cls.__dataclass_fields__.values()}
-        filtered = {k: v for k, v in data.items() if k in known}
-        return cls(**filtered)
-
-
-@dataclass
-class BookProject:
-    """A complete KDP book project tracking all stages of production."""
-
-    project_id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    title: str = ""
-    subtitle: str = ""
-    author: str = "Nick Creighton"
-    niche: str = ""
-    book_type: str = "nonfiction"  # nonfiction, journal, planner, tracker
-    series: Optional[str] = None
-    status: str = "ideation"
-    chapters: list[Chapter] = field(default_factory=list)
-    metadata: BookMetadata = field(default_factory=BookMetadata)
+    outline: Optional[list[dict]] = None
     created_at: str = field(default_factory=_now_iso)
     updated_at: str = field(default_factory=_now_iso)
-    word_count: int = 0
-    target_word_count: int = 40000
-    progress_pct: float = 0.0
+
+    def __post_init__(self) -> None:
+        self.price_ebook = _round_amount(self.price_ebook)
+        self.price_paperback = _round_amount(self.price_paperback)
+        self.total_royalties = _round_amount(self.total_royalties)
+
+    @property
+    def slug(self) -> str:
+        return _slugify(self.title) if self.title else self.book_id[:8]
+
+    @property
+    def project_dir(self) -> Path:
+        return PROJECTS_DIR / self.slug
+
+    @property
+    def pipeline_progress(self) -> float:
+        """Return pipeline completion as a percentage (0-100)."""
+        stages = [s.value for s in BookStatus if s != BookStatus.PAUSED]
+        try:
+            idx = stages.index(self.status)
+            return round((idx / (len(stages) - 1)) * 100, 1)
+        except ValueError:
+            return 0.0
+
+    @property
+    def is_complete(self) -> bool:
+        return self.status == BookStatus.PUBLISHED.value
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> KDPBook:
+        data = dict(data)
+        known = {f.name for f in cls.__dataclass_fields__.values()}
+        filtered = {k: v for k, v in data.items() if k in known}
+        return cls(**filtered)
+
+
+@dataclass
+class SaleRecord:
+    """A single sales transaction."""
+    sale_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    book_id: str = ""
+    sale_date: str = field(default_factory=_today_iso)
+    units: int = 1
+    royalty_amount: float = 0.0
+    sale_type: str = "ebook"            # ebook | paperback | kenp
+    marketplace: str = "amazon.com"
+    currency: str = "USD"
+    notes: str = ""
+    recorded_at: str = field(default_factory=_now_iso)
+
+    def __post_init__(self) -> None:
+        self.royalty_amount = _round_amount(self.royalty_amount)
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> SaleRecord:
+        data = dict(data)
+        known = {f.name for f in cls.__dataclass_fields__.values()}
+        filtered = {k: v for k, v in data.items() if k in known}
+        return cls(**filtered)
+
+
+@dataclass
+class BookSeries:
+    """A series of related KDP books."""
+    series_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = ""
+    niche: str = ""
+    description: str = ""
+    book_ids: list[str] = field(default_factory=list)
+    planned_count: int = 0
+    created_at: str = field(default_factory=_now_iso)
+    updated_at: str = field(default_factory=_now_iso)
+
+    @property
+    def current_count(self) -> int:
+        return len(self.book_ids)
+
+    @property
+    def is_complete(self) -> bool:
+        return self.planned_count > 0 and self.current_count >= self.planned_count
 
     def to_dict(self) -> dict:
         d = asdict(self)
+        d["current_count"] = self.current_count
         return d
 
     @classmethod
-    def from_dict(cls, data: dict) -> BookProject:
-        chapters_raw = data.pop("chapters", [])
-        metadata_raw = data.pop("metadata", {})
+    def from_dict(cls, data: dict) -> BookSeries:
+        data = dict(data)
         known = {f.name for f in cls.__dataclass_fields__.values()}
         filtered = {k: v for k, v in data.items() if k in known}
-        project = cls(**filtered)
-        project.chapters = [Chapter.from_dict(c) for c in chapters_raw]
-        if metadata_raw:
-            project.metadata = BookMetadata.from_dict(metadata_raw)
-        return project
-
-    def update_word_count(self) -> None:
-        """Recalculate total word count from all chapters."""
-        self.word_count = sum(ch.word_count for ch in self.chapters)
-        if self.target_word_count > 0:
-            self.progress_pct = round(
-                min(100.0, (self.word_count / self.target_word_count) * 100), 1
-            )
-        else:
-            self.progress_pct = 0.0
-
-    def get_chapter(self, chapter_num: int) -> Optional[Chapter]:
-        """Return the Chapter with the given number, or None."""
-        for ch in self.chapters:
-            if ch.chapter_num == chapter_num:
-                return ch
-        return None
+        return cls(**filtered)
 
 
-# ---------------------------------------------------------------------------
-# Anthropic Client (thin wrapper with prompt caching)
-# ---------------------------------------------------------------------------
+@dataclass
+class SalesReport:
+    """Aggregated sales report for a period."""
+    period: str = ""
+    start_date: str = ""
+    end_date: str = ""
+    total_units: int = 0
+    total_royalties: float = 0.0
+    by_book: dict[str, dict] = field(default_factory=dict)
+    by_type: dict[str, dict] = field(default_factory=dict)
+    by_niche: dict[str, dict] = field(default_factory=dict)
+    daily_breakdown: list[dict] = field(default_factory=list)
+    top_performers: list[dict] = field(default_factory=list)
+    projections: dict = field(default_factory=dict)
 
-class _AnthropicClient:
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass
+class PublishChecklist:
+    """Pre-publish validation checklist."""
+    book_id: str = ""
+    title_set: bool = False
+    subtitle_set: bool = False
+    description_set: bool = False
+    keywords_set: bool = False
+    categories_set: bool = False
+    manuscript_ready: bool = False
+    cover_approved: bool = False
+    price_set: bool = False
+    word_count_meets_minimum: bool = False
+    all_chapters_written: bool = False
+    passed: bool = False
+    issues: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+# ===================================================================
+# KDPPublisher -- Main Class
+# ===================================================================
+
+class KDPPublisher:
     """
-    Thin wrapper around the Anthropic Python SDK.
+    Central KDP book management engine for the empire.
 
-    Handles client initialization, prompt caching for large system prompts,
-    and model routing per CLAUDE.md cost optimization rules.
+    Handles book lifecycle, manuscript generation via Claude API,
+    cover design workflow, keyword research, sales tracking,
+    series management, and publishing preparation.
     """
 
+    # Approximate chars per token for cache threshold
+    CHARS_PER_TOKEN_ESTIMATE = 4.0
     CACHE_TOKEN_THRESHOLD = 2048
-    CHARS_PER_TOKEN_ESTIMATE = 4
 
     def __init__(self) -> None:
+        self._books: Optional[list[KDPBook]] = None
+        self._sales: Optional[list[SaleRecord]] = None
+        self._series: Optional[list[BookSeries]] = None
         self._client = None
         self._async_client = None
+        logger.info("KDPPublisher initialized -- data dir: %s", DATA_DIR)
+
+    # ------------------------------------------------------------------
+    # Anthropic client management
+    # ------------------------------------------------------------------
 
     def _ensure_client(self) -> None:
         """Lazily initialize the synchronous Anthropic client."""
@@ -557,13 +548,13 @@ class _AnthropicClient:
                 import anthropic
             except ImportError:
                 raise ImportError(
-                    "The 'anthropic' package is required. Install with: pip install anthropic"
+                    "The 'anthropic' package is required. "
+                    "Install with: pip install anthropic"
                 )
             api_key = os.environ.get("ANTHROPIC_API_KEY")
             if not api_key:
                 raise EnvironmentError(
-                    "ANTHROPIC_API_KEY environment variable is not set. "
-                    "Set it before running the KDP publisher."
+                    "ANTHROPIC_API_KEY environment variable is not set."
                 )
             self._client = anthropic.Anthropic(api_key=api_key)
 
@@ -574,18 +565,17 @@ class _AnthropicClient:
                 import anthropic
             except ImportError:
                 raise ImportError(
-                    "The 'anthropic' package is required. Install with: pip install anthropic"
+                    "The 'anthropic' package is required. "
+                    "Install with: pip install anthropic"
                 )
             api_key = os.environ.get("ANTHROPIC_API_KEY")
             if not api_key:
                 raise EnvironmentError(
-                    "ANTHROPIC_API_KEY environment variable is not set. "
-                    "Set it before running the KDP publisher."
+                    "ANTHROPIC_API_KEY environment variable is not set."
                 )
             self._async_client = anthropic.AsyncAnthropic(api_key=api_key)
 
     def _should_cache_system_prompt(self, system_prompt: str) -> bool:
-        """Check if system prompt is large enough to benefit from caching."""
         estimated_tokens = len(system_prompt) / self.CHARS_PER_TOKEN_ESTIMATE
         return estimated_tokens > self.CACHE_TOKEN_THRESHOLD
 
@@ -601,7 +591,7 @@ class _AnthropicClient:
             ]
         return system_prompt
 
-    async def generate(
+    async def _call_api(
         self,
         system_prompt: str,
         user_prompt: str,
@@ -614,8 +604,8 @@ class _AnthropicClient:
         system_param = self._build_system_param(system_prompt)
 
         logger.debug(
-            "API call: model=%s max_tokens=%d temperature=%.1f system_len=%d user_len=%d",
-            model, max_tokens, temperature, len(system_prompt), len(user_prompt),
+            "API call: model=%s max_tokens=%d temperature=%.1f",
+            model, max_tokens, temperature,
         )
 
         start_time = time.monotonic()
@@ -630,7 +620,7 @@ class _AnthropicClient:
             elapsed = time.monotonic() - start_time
             text = response.content[0].text if response.content else ""
             logger.debug(
-                "API response: %d chars in %.1fs (input_tokens=%s, output_tokens=%s)",
+                "API response: %d chars in %.1fs (in=%s, out=%s)",
                 len(text), elapsed,
                 getattr(response.usage, "input_tokens", "?"),
                 getattr(response.usage, "output_tokens", "?"),
@@ -641,7 +631,7 @@ class _AnthropicClient:
             logger.error("API call failed after %.1fs: %s", elapsed, exc)
             raise
 
-    def generate_sync(
+    def _call_api_sync(
         self,
         system_prompt: str,
         user_prompt: str,
@@ -649,14 +639,9 @@ class _AnthropicClient:
         max_tokens: int = MAX_TOKENS_CHAPTER,
         temperature: float = 0.7,
     ) -> str:
-        """Synchronous wrapper for generate."""
+        """Synchronous version of _call_api."""
         self._ensure_client()
         system_param = self._build_system_param(system_prompt)
-
-        logger.debug(
-            "API call (sync): model=%s max_tokens=%d system_len=%d user_len=%d",
-            model, max_tokens, len(system_prompt), len(user_prompt),
-        )
 
         start_time = time.monotonic()
         try:
@@ -678,527 +663,340 @@ class _AnthropicClient:
             logger.error("API call failed (sync) after %.1fs: %s", elapsed, exc)
             raise
 
-
-# ---------------------------------------------------------------------------
-# Voice / System Prompt Builders
-# ---------------------------------------------------------------------------
-
-_VOICE_DESCRIPTIONS: dict[str, str] = {
-    "witchcraft": (
-        "You are an experienced witch who remembers being a beginner. Your tone "
-        "is one of mystical warmth -- welcoming, encouraging, and deeply knowledgeable. "
-        "You weave personal anecdotes with practical instruction. Use sensory language: "
-        "moonlight, flickering candles, the scent of herbs. Never condescending, always "
-        "empowering. Write as if guiding a dear friend through their first spell."
-    ),
-    "smarthome": (
-        "You are the helpful tech-savvy neighbor everyone wishes they had. Your tone "
-        "is authoritative but approachable -- you explain complex smart home concepts "
-        "in plain English. Use analogies from everyday life. Include specific product "
-        "recommendations and step-by-step instructions. You love gadgets and it shows."
-    ),
-    "ai": (
-        "You are a forward-thinking analyst who cuts through AI hype with data and "
-        "real-world results. Your tone is confident and pragmatic -- you share actual "
-        "playbooks, not theory. Include specific tools, costs, and ROI numbers. "
-        "Write for people who want to make money with AI, not just read about it."
-    ),
-    "family": (
-        "You are a nurturing guide who offers research-backed, non-judgmental parenting "
-        "advice. Your tone is warm, empathetic, and practical. Acknowledge that every "
-        "family is different. Reference child development research without being academic. "
-        "Write as a supportive friend who happens to be a parenting expert."
-    ),
-    "mythology": (
-        "You are a story scholar -- part mythology professor, part campfire storyteller. "
-        "Your tone blends academic precision with narrative flair. Bring ancient stories "
-        "to vivid life while noting historical context, cultural significance, and "
-        "connections between mythologies. Make millennia-old tales feel urgent and alive."
-    ),
-    "bulletjournals": (
-        "You are a creative organizer who believes in starting simple and making it yours. "
-        "Your tone is encouraging and artistic -- you celebrate imperfection and personal "
-        "expression. Include practical tips alongside creative inspiration. Write for "
-        "both beginners and experienced journalers looking for fresh ideas."
-    ),
-}
-
-
-def _build_book_system_prompt(niche: str, title: str, book_type: str = "nonfiction") -> str:
-    """Build a system prompt for book content generation."""
-    resolved = _resolve_niche(niche)
-    voice = _VOICE_DESCRIPTIONS.get(resolved, _VOICE_DESCRIPTIONS["witchcraft"])
-    template = NICHE_TEMPLATES.get(resolved, NICHE_TEMPLATES["witchcraft"])
-
-    return (
-        f"You are a professional nonfiction book author writing for Amazon KDP.\n\n"
-        f"VOICE AND TONE:\n{voice}\n\n"
-        f"BOOK CONTEXT:\n"
-        f"- Title: {title}\n"
-        f"- Niche: {resolved}\n"
-        f"- Type: {book_type}\n"
-        f"- Series: {template.get('series', 'Standalone')}\n"
-        f"- Author: Nick Creighton\n\n"
-        f"WRITING STANDARDS:\n"
-        f"- Write in a conversational yet authoritative tone matching the voice above\n"
-        f"- Include practical, actionable advice readers can apply immediately\n"
-        f"- Use subheadings (## and ###) to break up content for readability\n"
-        f"- Include examples, anecdotes, and real-world applications\n"
-        f"- Target a general adult audience with beginner-to-intermediate knowledge\n"
-        f"- Avoid filler, repetition, and generic advice\n"
-        f"- Each chapter should feel complete and valuable on its own\n"
-        f"- Include smooth transitions between sections\n"
-        f"- End chapters with a brief summary or reflection prompt\n"
-        f"- Write in second person ('you') to create connection with the reader\n"
-        f"- Aim for a Flesch-Kincaid reading level of 8th-10th grade\n"
-    )
-
-
-def _build_editing_system_prompt() -> str:
-    """Build a system prompt for the editing pass."""
-    return (
-        "You are a professional book editor specializing in nonfiction for Amazon KDP.\n\n"
-        "YOUR EDITING PROCESS:\n"
-        "1. PROOFREAD: Fix all grammar, spelling, punctuation, and style errors\n"
-        "2. CLARITY: Improve sentence structure, remove ambiguity, tighten prose\n"
-        "3. CONSISTENCY: Ensure consistent terminology, tone, and formatting\n"
-        "4. FACT-CHECK: Flag any claims that seem inaccurate or unsupported\n"
-        "5. FLOW: Improve transitions between paragraphs and sections\n"
-        "6. ENGAGEMENT: Strengthen weak openings, sharpen conclusions\n\n"
-        "RULES:\n"
-        "- Preserve the author's voice and style -- enhance, do not replace\n"
-        "- Maintain all markdown formatting (headings, lists, emphasis)\n"
-        "- Do NOT add new sections or significantly expand content\n"
-        "- Return the FULL edited chapter text, not just corrections\n"
-        "- If the content is strong, make minimal changes\n"
-    )
-
-
-# ---------------------------------------------------------------------------
-# KDPPublisher — Main Class
-# ---------------------------------------------------------------------------
-
-class KDPPublisher:
-    """
-    End-to-end Amazon KDP book creation pipeline.
-
-    Manages book projects from concept to upload-ready package across all
-    niches in the OpenClaw Empire.
-
-    Usage:
-        pub = KDPPublisher()
-        project = await pub.create_project("Crystal Healing 101", "witchcraft")
-        outline = await pub.generate_outline(project.project_id)
-        await pub.write_all_chapters(project.project_id)
-        pub.compile_manuscript(project.project_id)
-    """
-
-    def __init__(self, data_dir: Optional[Path] = None) -> None:
-        self._data_dir = data_dir or DATA_DIR
-        self._projects_dir = self._data_dir / "projects"
-        self._ideas_file = self._data_dir / "ideas.json"
-        self._projects_dir.mkdir(parents=True, exist_ok=True)
-        self._client = _AnthropicClient()
-        self._project_cache: dict[str, BookProject] = {}
-        logger.info("KDPPublisher initialized (data_dir=%s)", self._data_dir)
-
     # ------------------------------------------------------------------
-    # Internal persistence helpers
+    # Persistence
     # ------------------------------------------------------------------
 
-    def _project_dir(self, project_id: str) -> Path:
-        """Return the directory for a specific project."""
-        return self._projects_dir / project_id
+    @property
+    def books(self) -> list[KDPBook]:
+        if self._books is None:
+            self._books = self._load_books()
+        return self._books
 
-    def _project_file(self, project_id: str) -> Path:
-        return self._project_dir(project_id) / "project.json"
+    @property
+    def sales(self) -> list[SaleRecord]:
+        if self._sales is None:
+            self._sales = self._load_sales()
+        return self._sales
 
-    def _outline_file(self, project_id: str) -> Path:
-        return self._project_dir(project_id) / "outline.json"
+    @property
+    def series(self) -> list[BookSeries]:
+        if self._series is None:
+            self._series = self._load_series()
+        return self._series
 
-    def _chapter_file(self, project_id: str, chapter_num: int) -> Path:
-        return self._project_dir(project_id) / "chapters" / f"{chapter_num:02d}.md"
+    def _load_books(self) -> list[KDPBook]:
+        raw = _load_json(BOOKS_FILE, [])
+        if isinstance(raw, list):
+            return [KDPBook.from_dict(b) for b in raw]
+        return []
 
-    def _manuscript_file(self, project_id: str) -> Path:
-        return self._project_dir(project_id) / "manuscript.md"
+    def _save_books(self) -> None:
+        if self._books is None:
+            return
+        data = [b.to_dict() for b in self._books]
+        _save_json(BOOKS_FILE, data)
 
-    def _metadata_file(self, project_id: str) -> Path:
-        return self._project_dir(project_id) / "metadata.json"
+    def _load_sales(self) -> list[SaleRecord]:
+        raw = _load_json(SALES_FILE, [])
+        if isinstance(raw, list):
+            return [SaleRecord.from_dict(s) for s in raw]
+        return []
 
-    def _cover_spec_file(self, project_id: str) -> Path:
-        return self._project_dir(project_id) / "cover_spec.json"
+    def _save_sales(self) -> None:
+        if self._sales is None:
+            return
+        # Enforce bound
+        if len(self._sales) > MAX_SALES_RECORDS:
+            self._sales = self._sales[-MAX_SALES_RECORDS:]
+        data = [s.to_dict() for s in self._sales]
+        _save_json(SALES_FILE, data)
 
-    def _save_project(self, project: BookProject) -> None:
-        """Persist a BookProject to disk and update cache."""
-        project.updated_at = _now_iso()
-        project.update_word_count()
-        _save_json(self._project_file(project.project_id), project.to_dict())
-        self._project_cache[project.project_id] = project
+    def _load_series(self) -> list[BookSeries]:
+        raw = _load_json(SERIES_FILE, [])
+        if isinstance(raw, list):
+            return [BookSeries.from_dict(s) for s in raw]
+        return []
 
-    def _load_project(self, project_id: str) -> Optional[BookProject]:
-        """Load a BookProject from disk, using cache when available."""
-        if project_id in self._project_cache:
-            return self._project_cache[project_id]
-        data = _load_json(self._project_file(project_id))
-        if not data:
-            return None
-        project = BookProject.from_dict(data)
-        self._project_cache[project_id] = project
-        return project
+    def _save_series(self) -> None:
+        if self._series is None:
+            return
+        data = [s.to_dict() for s in self._series]
+        _save_json(SERIES_FILE, data)
 
-    # ------------------------------------------------------------------
-    # Project Management
-    # ------------------------------------------------------------------
+    def reload(self) -> None:
+        """Force reload all data from disk."""
+        self._books = None
+        self._sales = None
+        self._series = None
 
-    async def create_project(
+    # ==================================================================
+    # BOOK MANAGEMENT
+    # ==================================================================
+
+    def add_book(
         self,
         title: str,
         niche: str,
         book_type: str = "nonfiction",
         **kwargs: Any,
-    ) -> BookProject:
+    ) -> KDPBook:
         """
-        Create a new KDP book project.
+        Add a new book project to the registry.
 
-        Parameters
-        ----------
-        title : str
-            The book title.
-        niche : str
-            The target niche (witchcraft, smarthome, ai, family, mythology, bulletjournals).
-        book_type : str
-            Type of book (nonfiction, journal, planner, tracker).
-        **kwargs
-            Additional fields to set on the BookProject (subtitle, series, etc.).
+        Args:
+            title: Book title.
+            niche: One of VALID_NICHES.
+            book_type: One of BookType values.
+            **kwargs: Additional KDPBook fields.
 
-        Returns
-        -------
-        BookProject
-            The newly created project.
+        Returns:
+            The created KDPBook.
         """
-        resolved_niche = _resolve_niche(niche)
-        template = NICHE_TEMPLATES.get(resolved_niche, NICHE_TEMPLATES["witchcraft"])
+        _validate_niche(niche)
+        BookType.from_string(book_type)  # validate
 
-        # Calculate target word count from niche template
-        word_range = template.get("target_words", (35000, 50000))
-        target_words = (word_range[0] + word_range[1]) // 2
+        if len(self.books) >= MAX_BOOKS:
+            raise ValueError(
+                f"Maximum book limit ({MAX_BOOKS}) reached. "
+                "Remove or archive books before adding more."
+            )
 
-        # Set default pricing
-        price_ebook = template.get("price_ebook", 4.99)
-        price_pb_range = template.get("price_paperback", (12.99, 15.99))
-        if isinstance(price_pb_range, tuple):
-            price_paperback = price_pb_range[0]
-        else:
-            price_paperback = price_pb_range
+        # Check for duplicate title in same niche
+        for existing in self.books:
+            if existing.title.lower() == title.lower() and existing.niche == niche:
+                raise ValueError(
+                    f"Book '{title}' already exists in niche '{niche}'. "
+                    f"Book ID: {existing.book_id}"
+                )
 
-        project = BookProject(
+        book = KDPBook(
             title=title,
-            subtitle=kwargs.get("subtitle", ""),
-            author=kwargs.get("author", "Nick Creighton"),
-            niche=resolved_niche,
+            niche=niche,
             book_type=book_type,
-            series=kwargs.get("series", template.get("series")),
-            status="ideation",
-            target_word_count=kwargs.get("target_word_count", target_words),
-            metadata=BookMetadata(
-                title=title,
-                subtitle=kwargs.get("subtitle", ""),
-                price_ebook=price_ebook,
-                price_paperback=price_paperback,
-                series_name=kwargs.get("series", template.get("series")),
-                categories=template.get("categories", []),
-                language="English",
-            ),
+            **kwargs,
         )
 
-        # Create project directory structure
-        pdir = self._project_dir(project.project_id)
-        (pdir / "chapters").mkdir(parents=True, exist_ok=True)
+        # Create project directory
+        book.project_dir.mkdir(parents=True, exist_ok=True)
 
-        self._save_project(project)
+        self.books.append(book)
+        self._save_books()
+
         logger.info(
-            "Created project '%s' [%s] niche=%s type=%s target_words=%d",
-            title, project.project_id[:8], resolved_niche, book_type, target_words,
+            "Added book '%s' [%s/%s] -- id: %s",
+            title, niche, book_type, book.book_id[:8],
         )
-        return project
+        return book
 
-    def get_project(self, project_id: str) -> BookProject:
+    def update_book(self, book_id: str, **kwargs: Any) -> KDPBook:
         """
-        Retrieve a project by ID.
+        Update fields on an existing book.
 
-        Raises
-        ------
-        ValueError
-            If the project does not exist.
+        Args:
+            book_id: UUID of the book.
+            **kwargs: Fields to update.
+
+        Returns:
+            The updated KDPBook.
         """
-        project = self._load_project(project_id)
-        if project is None:
-            raise ValueError(f"Project not found: {project_id}")
-        return project
+        book = self.get_book(book_id)
 
-    def list_projects(
-        self,
-        status: Optional[str] = None,
-        niche: Optional[str] = None,
-    ) -> list[BookProject]:
-        """
-        List all projects, optionally filtered by status and/or niche.
-
-        Parameters
-        ----------
-        status : str, optional
-            Filter to projects with this status.
-        niche : str, optional
-            Filter to projects with this niche.
-
-        Returns
-        -------
-        list[BookProject]
-            Matching projects sorted by updated_at descending.
-        """
-        projects = []
-        if not self._projects_dir.exists():
-            return projects
-
-        for pdir in self._projects_dir.iterdir():
-            if not pdir.is_dir():
-                continue
-            project_file = pdir / "project.json"
-            if not project_file.exists():
-                continue
-            data = _load_json(project_file)
-            if not data:
-                continue
-            project = BookProject.from_dict(data)
-            if status and project.status != status:
-                continue
-            if niche:
-                resolved = _resolve_niche(niche)
-                if project.niche != resolved:
-                    continue
-            projects.append(project)
-
-        projects.sort(key=lambda p: p.updated_at, reverse=True)
-        return projects
-
-    async def update_project(self, project_id: str, **kwargs: Any) -> BookProject:
-        """
-        Update fields on an existing project.
-
-        Parameters
-        ----------
-        project_id : str
-            The project to update.
-        **kwargs
-            Fields to update (title, subtitle, status, series, etc.).
-
-        Returns
-        -------
-        BookProject
-            The updated project.
-        """
-        project = self.get_project(project_id)
+        if "niche" in kwargs:
+            _validate_niche(kwargs["niche"])
+        if "book_type" in kwargs:
+            BookType.from_string(kwargs["book_type"])
+        if "status" in kwargs:
+            BookStatus.from_string(kwargs["status"])
 
         for key, value in kwargs.items():
-            if key == "status" and value not in VALID_STATUSES:
-                raise ValueError(
-                    f"Invalid status '{value}'. Must be one of: {VALID_STATUSES}"
-                )
-            if hasattr(project, key):
-                setattr(project, key, value)
-            else:
-                logger.warning("Unknown project field: %s", key)
+            if hasattr(book, key) and key not in ("book_id", "created_at"):
+                setattr(book, key, value)
+        book.updated_at = _now_iso()
 
-        self._save_project(project)
-        logger.info("Updated project %s: %s", project_id[:8], list(kwargs.keys()))
-        return project
+        self._save_books()
+        logger.info("Updated book %s: %s", book_id[:8], list(kwargs.keys()))
+        return book
 
-    def delete_project(self, project_id: str) -> bool:
+    def get_book(self, book_id: str) -> KDPBook:
         """
-        Delete a project and all its files from disk.
+        Get a single book by ID.
 
-        Returns True if the project was deleted, False if it was not found.
+        Raises:
+            KeyError: If not found.
         """
-        pdir = self._project_dir(project_id)
-        if not pdir.exists():
-            return False
+        for book in self.books:
+            if book.book_id == book_id:
+                return book
+        raise KeyError(f"Book not found: {book_id}")
 
-        # Remove all files recursively
-        import shutil
-        shutil.rmtree(pdir, ignore_errors=True)
+    def remove_book(self, book_id: str) -> bool:
+        """
+        Remove a book from the registry.
 
-        # Clear from cache
-        self._project_cache.pop(project_id, None)
-        logger.info("Deleted project %s", project_id[:8])
-        return True
+        Returns:
+            True if removed, False if not found.
+        """
+        original_len = len(self.books)
+        self._books = [b for b in self.books if b.book_id != book_id]
+        removed = len(self._books) < original_len
+        if removed:
+            self._save_books()
+            logger.info("Removed book %s", book_id[:8])
+        return removed
 
-    # ------------------------------------------------------------------
-    # Ideation Phase
-    # ------------------------------------------------------------------
-
-    async def generate_book_ideas(
+    def list_books(
         self,
-        niche: str,
-        count: int = 10,
-    ) -> list[dict]:
+        niche: Optional[str] = None,
+        status: Optional[str] = None,
+        book_type: Optional[str] = None,
+        series_id: Optional[str] = None,
+    ) -> list[KDPBook]:
         """
-        Generate book ideas for a given niche using Claude Sonnet.
+        List books with optional filters.
 
-        Returns a list of dicts with keys: title, subtitle, description, market_angle.
-        Ideas are also persisted to the ideas bank (ideas.json).
+        Args:
+            niche: Filter by niche.
+            status: Filter by pipeline status.
+            book_type: Filter by book type.
+            series_id: Filter by series.
+
+        Returns:
+            Filtered and sorted list of KDPBook.
         """
-        resolved = _resolve_niche(niche)
-        template = NICHE_TEMPLATES.get(resolved, NICHE_TEMPLATES["witchcraft"])
-        existing_ideas = template.get("ideas", [])
+        results = list(self.books)
 
-        system_prompt = (
-            "You are a bestselling nonfiction book strategist specializing in "
-            "Amazon KDP self-publishing. You understand market trends, reader "
-            "psychology, and what makes books sell on Amazon."
-        )
+        if niche:
+            _validate_niche(niche)
+            results = [b for b in results if b.niche == niche]
+        if status:
+            BookStatus.from_string(status)
+            results = [b for b in results if b.status == status]
+        if book_type:
+            BookType.from_string(book_type)
+            results = [b for b in results if b.book_type == book_type]
+        if series_id:
+            results = [b for b in results if b.series_id == series_id]
 
-        user_prompt = (
-            f"Generate {count} book ideas for the '{resolved}' niche on Amazon KDP.\n\n"
-            f"CONTEXT:\n"
-            f"- Author: Nick Creighton\n"
-            f"- Existing series: {template.get('series', 'None')}\n"
-            f"- Existing ideas (avoid duplicating): {', '.join(existing_ideas)}\n"
-            f"- Related websites in our portfolio: {', '.join(template.get('related_sites', []))}\n"
-            f"- Target audience: Beginners to intermediate readers\n\n"
-            f"For each idea, provide:\n"
-            f"1. Title (compelling, keyword-rich)\n"
-            f"2. Subtitle (clarifying, benefit-focused)\n"
-            f"3. One-paragraph description (what the reader will learn)\n"
-            f"4. Market angle (why this book would sell, what gap it fills)\n\n"
-            f"Return as a JSON array of objects with keys: "
-            f"title, subtitle, description, market_angle\n\n"
-            f"Return ONLY the JSON array, no other text."
-        )
+        return sorted(results, key=lambda b: b.created_at, reverse=True)
 
-        response = await self._client.generate(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            model=MODEL_SONNET,
-            max_tokens=MAX_TOKENS_IDEATION,
-            temperature=0.8,
-        )
-
-        ideas = self._parse_json_response(response, default=[])
-        if not isinstance(ideas, list):
-            ideas = [ideas] if isinstance(ideas, dict) else []
-
-        # Persist to ideas bank
-        bank = _load_json(self._ideas_file, {"ideas": {}})
-        if "ideas" not in bank:
-            bank["ideas"] = {}
-        if resolved not in bank["ideas"]:
-            bank["ideas"][resolved] = []
-        bank["ideas"][resolved].extend(ideas)
-        bank["updated_at"] = _now_iso()
-        _save_json(self._ideas_file, bank)
-
-        logger.info("Generated %d book ideas for niche '%s'", len(ideas), resolved)
-        return ideas
-
-    async def analyze_competition(
-        self,
-        niche: str,
-        title: str,
-    ) -> dict:
+    def search_books(self, query: str) -> list[KDPBook]:
         """
-        Analyse competition and market positioning for a book idea.
+        Search books by title, description, keywords, and niche.
 
-        Returns a dict with keys: market_gaps, positioning, price_suggestion,
-        keyword_opportunities, differentiation_tips.
+        Args:
+            query: Case-insensitive search term.
+
+        Returns:
+            Matching books sorted by relevance (title match first).
         """
-        resolved = _resolve_niche(niche)
-        template = NICHE_TEMPLATES.get(resolved, NICHE_TEMPLATES["witchcraft"])
+        q = query.lower()
+        title_matches: list[KDPBook] = []
+        other_matches: list[KDPBook] = []
 
-        system_prompt = (
-            "You are an Amazon KDP market analyst with deep knowledge of book "
-            "publishing trends, pricing strategy, and category competition. "
-            "Provide actionable insights, not generic advice."
+        for book in self.books:
+            if q in book.title.lower():
+                title_matches.append(book)
+            elif (
+                q in book.description.lower()
+                or q in book.niche.lower()
+                or any(q in kw.lower() for kw in book.keywords)
+                or q in book.subtitle.lower()
+            ):
+                other_matches.append(book)
+
+        return title_matches + other_matches
+
+    def advance_status(self, book_id: str) -> KDPBook:
+        """
+        Advance a book to the next pipeline stage.
+
+        Returns:
+            The updated KDPBook.
+
+        Raises:
+            ValueError: If the book is already at the final stage or paused.
+        """
+        book = self.get_book(book_id)
+        current = BookStatus.from_string(book.status)
+
+        if current == BookStatus.PAUSED:
+            raise ValueError(
+                f"Book '{book.title}' is paused. Resume it before advancing."
+            )
+
+        next_stage = current.next_stage
+        if next_stage is None:
+            raise ValueError(
+                f"Book '{book.title}' is already at the final stage "
+                f"({current.value})."
+            )
+
+        book.status = next_stage.value
+        book.updated_at = _now_iso()
+        self._save_books()
+
+        logger.info(
+            "Advanced '%s' from %s to %s",
+            book.title, current.value, next_stage.value,
         )
+        return book
 
-        user_prompt = (
-            f"Analyse the competitive landscape for this book idea:\n\n"
-            f"TITLE: {title}\n"
-            f"NICHE: {resolved}\n"
-            f"SERIES: {template.get('series', 'Standalone')}\n"
-            f"TYPICAL PRICING: ebook ${template.get('price_ebook', 4.99)}, "
-            f"paperback ${template.get('price_paperback', (12.99, 15.99))}\n\n"
-            f"Provide a JSON object with these keys:\n"
-            f"- market_gaps: list of 3-5 gaps this book could fill\n"
-            f"- positioning: how to position this book against competitors\n"
-            f"- price_suggestion: recommended ebook and paperback prices with reasoning\n"
-            f"- keyword_opportunities: list of 7-10 high-potential keywords\n"
-            f"- differentiation_tips: list of 3-5 ways to stand out\n\n"
-            f"Return ONLY the JSON object, no other text."
-        )
-
-        response = await self._client.generate(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            model=MODEL_SONNET,
-            max_tokens=MAX_TOKENS_COMPETITION,
-            temperature=0.6,
-        )
-
-        result = self._parse_json_response(response, default={})
-        logger.info("Competition analysis complete for '%s' in '%s'", title, resolved)
-        return result
-
-    # ------------------------------------------------------------------
-    # Outline Phase
-    # ------------------------------------------------------------------
+    # ==================================================================
+    # MANUSCRIPT GENERATION
+    # ==================================================================
 
     async def generate_outline(
         self,
-        project_id: str,
-        chapters: int = 12,
-    ) -> BookOutline:
+        book_id: str,
+        num_chapters: int = 10,
+    ) -> list[dict]:
         """
-        Generate a structured book outline with chapter titles and summaries.
+        Generate a chapter outline for a book using Claude Sonnet.
 
-        Updates the project status to 'outlined' and creates Chapter stubs.
+        Args:
+            book_id: Book UUID.
+            num_chapters: Number of chapters to generate.
+
+        Returns:
+            List of chapter dicts with number, title, and summary.
         """
-        project = self.get_project(project_id)
-        resolved = _resolve_niche(project.niche)
-        template = NICHE_TEMPLATES.get(resolved, NICHE_TEMPLATES["witchcraft"])
+        book = self.get_book(book_id)
+        voice_hint = NICHE_VOICE_HINTS.get(book.niche, "Professional and engaging")
 
-        system_prompt = _build_book_system_prompt(
-            project.niche, project.title, project.book_type
+        system_prompt = (
+            "You are an expert book outline architect specializing in "
+            f"the {book.niche} niche. You create compelling, well-structured "
+            "book outlines that are SEO-aware and reader-friendly.\n\n"
+            f"Voice guidance: {voice_hint}\n\n"
+            "Rules:\n"
+            "- Each chapter title should be clear and keyword-rich\n"
+            "- Include a 2-3 sentence summary for each chapter\n"
+            "- Structure should build knowledge progressively\n"
+            "- Include practical, actionable content in each chapter\n"
+            "- First chapter should be welcoming and foundational\n"
+            "- Last chapter should be a conclusion with next steps\n"
+            "- Target audience: beginners to intermediate\n\n"
+            "Respond with ONLY a JSON array. Each element must have:\n"
+            '  {"chapter_number": int, "title": str, "summary": str, '
+            '"estimated_words": int}\n'
+            "No markdown, no extra text."
         )
 
         user_prompt = (
-            f"Create a detailed outline for a {chapters}-chapter book.\n\n"
-            f"BOOK DETAILS:\n"
-            f"- Title: {project.title}\n"
-            f"- Subtitle: {project.subtitle or '(suggest one)'}\n"
-            f"- Niche: {resolved}\n"
-            f"- Target word count: {project.target_word_count:,} words\n"
-            f"- Target audience: Beginners to intermediate readers\n\n"
-            f"REQUIREMENTS:\n"
-            f"- Each chapter should have a compelling title\n"
-            f"- Each chapter should have a 2-3 sentence summary\n"
-            f"- Include logical progression from basics to advanced\n"
-            f"- Include practical exercises or applications in relevant chapters\n"
-            f"- Chapters should target {CHAPTER_WORD_TARGET_MIN}-{CHAPTER_WORD_TARGET_MAX} words each\n"
-            f"- Include front matter: Table of Contents, Dedication, Introduction\n"
-            f"- Include back matter: Resources, About the Author, Other Books in Series\n\n"
-            f"Return a JSON object with these keys:\n"
-            f"- title: the book title\n"
-            f"- subtitle: a compelling subtitle\n"
-            f"- chapter_titles: list of {chapters} chapter titles\n"
-            f"- chapter_summaries: list of {chapters} chapter summaries (matching order)\n"
-            f"- target_word_count: total target word count\n"
-            f"- estimated_page_count: estimated page count\n"
-            f"- front_matter: list of front matter sections\n"
-            f"- back_matter: list of back matter sections\n\n"
-            f"Return ONLY the JSON object, no other text."
+            f"Create a {num_chapters}-chapter outline for:\n\n"
+            f"Title: {book.title}\n"
+            f"Subtitle: {book.subtitle or 'TBD'}\n"
+            f"Type: {book.book_type}\n"
+            f"Niche: {book.niche}\n"
+            f"Target length: {TARGET_NONFICTION_WORDS_LOW:,}-"
+            f"{TARGET_NONFICTION_WORDS_HIGH:,} words\n"
         )
 
-        response = await self._client.generate(
+        if book.keywords:
+            user_prompt += f"Target keywords: {', '.join(book.keywords)}\n"
+
+        raw = await self._call_api(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             model=MODEL_SONNET,
@@ -1206,1233 +1004,1233 @@ class KDPPublisher:
             temperature=0.7,
         )
 
-        outline_data = self._parse_json_response(response, default={})
-        outline = BookOutline(
-            title=outline_data.get("title", project.title),
-            subtitle=outline_data.get("subtitle", project.subtitle),
-            chapter_titles=outline_data.get("chapter_titles", []),
-            chapter_summaries=outline_data.get("chapter_summaries", []),
-            target_word_count=outline_data.get("target_word_count", project.target_word_count),
-            estimated_page_count=outline_data.get("estimated_page_count", 160),
-            front_matter=outline_data.get("front_matter", [
-                "Table of Contents", "Dedication", "Introduction",
-            ]),
-            back_matter=outline_data.get("back_matter", [
-                "Resources", "About the Author", "Other Books in Series",
-            ]),
-        )
+        # Parse the JSON response
+        outline = self._parse_json_response(raw, default=[])
+        if not isinstance(outline, list) or not outline:
+            logger.warning("Outline parse returned non-list; building fallback")
+            outline = [
+                {
+                    "chapter_number": i + 1,
+                    "title": f"Chapter {i + 1}",
+                    "summary": "To be determined",
+                    "estimated_words": TARGET_NONFICTION_WORDS_LOW // num_chapters,
+                }
+                for i in range(num_chapters)
+            ]
 
-        # Update project with outline data
-        if outline.subtitle and not project.subtitle:
-            project.subtitle = outline.subtitle
-            project.metadata.subtitle = outline.subtitle
+        # Update book
+        book.outline = outline
+        book.chapter_count = len(outline)
+        if book.status == BookStatus.IDEATION.value:
+            book.status = BookStatus.OUTLINE.value
+        book.updated_at = _now_iso()
+        self._save_books()
 
-        # Create chapter stubs
-        project.chapters = []
-        for i, ch_title in enumerate(outline.chapter_titles, start=1):
-            project.chapters.append(Chapter(
-                chapter_num=i,
-                title=ch_title,
-                status="pending",
-            ))
+        # Save outline to project dir
+        outline_path = book.project_dir / "outline.json"
+        book.project_dir.mkdir(parents=True, exist_ok=True)
+        _save_json(outline_path, outline)
 
-        project.status = "outlined"
-        project.target_word_count = outline.target_word_count
+        # Also save a markdown version
+        md_lines = [f"# {book.title} -- Outline\n"]
+        for ch in outline:
+            md_lines.append(
+                f"## Chapter {ch.get('chapter_number', '?')}: "
+                f"{ch.get('title', 'Untitled')}\n"
+            )
+            md_lines.append(f"{ch.get('summary', '')}\n")
+            est = ch.get("estimated_words", 0)
+            if est:
+                md_lines.append(f"*Estimated: {est:,} words*\n")
+            md_lines.append("")
 
-        # Persist
-        _save_json(self._outline_file(project_id), outline.to_dict())
-        self._save_project(project)
+        outline_md = book.project_dir / "outline.md"
+        with open(outline_md, "w", encoding="utf-8") as fh:
+            fh.write("\n".join(md_lines))
 
         logger.info(
-            "Generated outline for '%s': %d chapters, target %d words",
-            project.title, len(outline.chapter_titles), outline.target_word_count,
+            "Generated %d-chapter outline for '%s'",
+            len(outline), book.title,
         )
         return outline
 
-    # ------------------------------------------------------------------
-    # Writing Phase
-    # ------------------------------------------------------------------
+    def generate_outline_sync(
+        self, book_id: str, num_chapters: int = 10,
+    ) -> list[dict]:
+        """Synchronous wrapper for generate_outline."""
+        return asyncio.run(self.generate_outline(book_id, num_chapters))
 
-    async def write_chapter(
+    async def generate_chapter(
         self,
-        project_id: str,
-        chapter_num: int,
-    ) -> Chapter:
+        book_id: str,
+        chapter_number: int,
+        target_words: int = 3000,
+    ) -> str:
         """
-        Write a single chapter using Claude Sonnet with brand voice matching.
+        Generate a single chapter for a book using Claude Sonnet.
 
-        Targets 3000-4000 words per chapter.  Includes transition context
-        from the previous chapter when available.
+        Args:
+            book_id: Book UUID.
+            chapter_number: Which chapter to write (1-indexed).
+            target_words: Target word count for the chapter.
+
+        Returns:
+            The chapter text as markdown.
         """
-        project = self.get_project(project_id)
-        chapter = project.get_chapter(chapter_num)
-        if chapter is None:
+        book = self.get_book(book_id)
+
+        if not book.outline:
             raise ValueError(
-                f"Chapter {chapter_num} not found in project {project_id[:8]}. "
-                f"Available chapters: {[c.chapter_num for c in project.chapters]}"
+                f"Book '{book.title}' has no outline. "
+                "Generate an outline first with generate_outline()."
             )
 
-        # Load outline for chapter summary context
-        outline_data = _load_json(self._outline_file(project_id))
-        outline = BookOutline.from_dict(outline_data) if outline_data else None
-
-        # Get previous chapter content for transitions
-        prev_content = None
-        if chapter_num > 1:
-            prev_ch = project.get_chapter(chapter_num - 1)
-            if prev_ch and prev_ch.content:
-                # Take last ~500 words for transition context
-                words = prev_ch.content.split()
-                prev_content = " ".join(words[-500:]) if len(words) > 500 else prev_ch.content
-
-        system_prompt = _build_book_system_prompt(
-            project.niche, project.title, project.book_type
-        )
-
-        # Build chapter context
-        chapter_summary = ""
-        if outline and chapter_num <= len(outline.chapter_summaries):
-            chapter_summary = outline.chapter_summaries[chapter_num - 1]
-
-        all_chapter_titles = ""
-        if outline:
-            all_chapter_titles = "\n".join(
-                f"  {i}. {t}" for i, t in enumerate(outline.chapter_titles, 1)
+        if chapter_number < 1 or chapter_number > len(book.outline):
+            raise ValueError(
+                f"Chapter {chapter_number} out of range. "
+                f"Book has {len(book.outline)} chapters."
             )
 
-        transition_context = ""
-        if prev_content:
-            transition_context = (
-                f"\nPREVIOUS CHAPTER ENDING (for smooth transition):\n"
-                f"---\n{prev_content[-2000:]}\n---\n"
+        chapter_info = book.outline[chapter_number - 1]
+        voice_hint = NICHE_VOICE_HINTS.get(book.niche, "Professional and engaging")
+
+        # Build context from surrounding chapters
+        prev_summary = ""
+        next_summary = ""
+        if chapter_number > 1:
+            prev_ch = book.outline[chapter_number - 2]
+            prev_summary = (
+                f"Previous chapter ({prev_ch.get('title', '')}): "
+                f"{prev_ch.get('summary', '')}"
             )
-
-        user_prompt = (
-            f"Write Chapter {chapter_num}: \"{chapter.title}\"\n\n"
-            f"BOOK: {project.title}\n"
-            f"CHAPTER SUMMARY: {chapter_summary}\n\n"
-            f"FULL BOOK STRUCTURE:\n{all_chapter_titles}\n"
-            f"{transition_context}\n"
-            f"REQUIREMENTS:\n"
-            f"- Write {CHAPTER_WORD_TARGET_MIN}-{CHAPTER_WORD_TARGET_MAX} words\n"
-            f"- Begin with an engaging opening that hooks the reader\n"
-            f"- Use ## for the chapter title and ### for subsections\n"
-            f"- Include 3-5 subsections with clear subheadings\n"
-            f"- Include practical examples, tips, or exercises where appropriate\n"
-            f"- End with a brief summary, reflection question, or teaser for the next chapter\n"
-            f"- Write in markdown format\n"
-            f"- Do NOT include 'Chapter X:' prefix in the heading (just the title)\n\n"
-            f"Write the complete chapter now."
-        )
-
-        response = await self._client.generate(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            model=MODEL_SONNET,
-            max_tokens=MAX_TOKENS_CHAPTER,
-            temperature=0.7,
-        )
-
-        # Update chapter
-        chapter.content = response.strip()
-        chapter.word_count = _count_words(chapter.content)
-        chapter.status = "drafted"
-
-        # Save chapter file
-        _save_text_file(self._chapter_file(project_id, chapter_num), chapter.content)
-
-        # Update project
-        if project.status == "outlined":
-            project.status = "writing"
-        self._save_project(project)
-
-        logger.info(
-            "Wrote chapter %d '%s' for '%s': %d words",
-            chapter_num, chapter.title, project.title, chapter.word_count,
-        )
-        return chapter
-
-    async def write_all_chapters(
-        self,
-        project_id: str,
-        start_from: int = 1,
-    ) -> list[Chapter]:
-        """
-        Write all chapters sequentially (each has context from previous).
-
-        Parameters
-        ----------
-        project_id : str
-            The project to write chapters for.
-        start_from : int
-            Chapter number to start from (default: 1).
-
-        Returns
-        -------
-        list[Chapter]
-            All written chapters.
-        """
-        project = self.get_project(project_id)
-        written = []
-
-        for chapter in project.chapters:
-            if chapter.chapter_num < start_from:
-                continue
-            if chapter.status in ("edited", "final"):
-                logger.info(
-                    "Skipping chapter %d (status: %s)", chapter.chapter_num, chapter.status
-                )
-                written.append(chapter)
-                continue
-
-            logger.info(
-                "Writing chapter %d/%d: '%s'",
-                chapter.chapter_num, len(project.chapters), chapter.title,
+        if chapter_number < len(book.outline):
+            next_ch = book.outline[chapter_number]
+            next_summary = (
+                f"Next chapter ({next_ch.get('title', '')}): "
+                f"{next_ch.get('summary', '')}"
             )
-            ch = await self.write_chapter(project_id, chapter.chapter_num)
-            written.append(ch)
-
-            # Reload project to get updated state
-            project = self.get_project(project_id)
-
-        # Update status
-        all_drafted = all(ch.status in ("drafted", "edited", "final") for ch in project.chapters)
-        if all_drafted and project.chapters:
-            project.status = "editing"
-            self._save_project(project)
-
-        logger.info(
-            "Wrote %d chapters for '%s' (total words: %d)",
-            len(written), project.title, project.word_count,
-        )
-        return written
-
-    async def write_front_matter(self, project_id: str) -> dict:
-        """
-        Generate front matter content: introduction, dedication, how-to-use.
-
-        Returns a dict with keys: introduction, dedication, how_to_use.
-        """
-        project = self.get_project(project_id)
-        outline_data = _load_json(self._outline_file(project_id))
-        outline = BookOutline.from_dict(outline_data) if outline_data else None
-
-        chapter_titles_str = ""
-        if outline:
-            chapter_titles_str = "\n".join(
-                f"  {i}. {t}" for i, t in enumerate(outline.chapter_titles, 1)
-            )
-
-        system_prompt = _build_book_system_prompt(
-            project.niche, project.title, project.book_type
-        )
-
-        user_prompt = (
-            f"Write the front matter for this book.\n\n"
-            f"BOOK: {project.title}\n"
-            f"SUBTITLE: {project.subtitle}\n"
-            f"NICHE: {project.niche}\n"
-            f"CHAPTERS:\n{chapter_titles_str}\n\n"
-            f"Write three sections as a JSON object with these keys:\n"
-            f"- introduction: A compelling 800-1200 word introduction that hooks the reader, "
-            f"explains what they will learn, and sets expectations (in markdown)\n"
-            f"- dedication: A brief, heartfelt dedication (2-3 sentences)\n"
-            f"- how_to_use: A short guide on how to get the most from this book "
-            f"(300-500 words, in markdown)\n\n"
-            f"Return ONLY the JSON object, no other text."
-        )
-
-        response = await self._client.generate(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            model=MODEL_SONNET,
-            max_tokens=MAX_TOKENS_CHAPTER,
-            temperature=0.7,
-        )
-
-        front_matter = self._parse_json_response(response, default={
-            "introduction": "",
-            "dedication": "",
-            "how_to_use": "",
-        })
-
-        # Save to project directory
-        fm_path = self._project_dir(project_id) / "front_matter.json"
-        _save_json(fm_path, front_matter)
-
-        logger.info("Generated front matter for '%s'", project.title)
-        return front_matter
-
-    async def write_back_matter(self, project_id: str) -> dict:
-        """
-        Generate back matter: about author, resources, other books, index topics.
-
-        Returns a dict with keys: about_author, resources, other_books, index.
-        """
-        project = self.get_project(project_id)
-        resolved = _resolve_niche(project.niche)
-        template = NICHE_TEMPLATES.get(resolved, NICHE_TEMPLATES["witchcraft"])
-
-        system_prompt = _build_book_system_prompt(
-            project.niche, project.title, project.book_type
-        )
-
-        user_prompt = (
-            f"Write the back matter for this book.\n\n"
-            f"BOOK: {project.title}\n"
-            f"AUTHOR: Nick Creighton\n"
-            f"NICHE: {resolved}\n"
-            f"SERIES: {template.get('series', 'Standalone')}\n"
-            f"OTHER BOOK IDEAS IN SERIES: {', '.join(template.get('ideas', []))}\n\n"
-            f"Write four sections as a JSON object with these keys:\n"
-            f"- about_author: 200-300 word author bio for Nick Creighton, a multi-niche "
-            f"publisher and content creator (in markdown)\n"
-            f"- resources: A curated list of 10-15 recommended resources relevant to "
-            f"the book's topic, organized by category (in markdown)\n"
-            f"- other_books: Promotional blurbs for 3-4 other books in the series "
-            f"(in markdown, with compelling descriptions)\n"
-            f"- index: A list of 30-50 key topics/terms that would appear in an index "
-            f"(as a JSON array of strings)\n\n"
-            f"Return ONLY the JSON object, no other text."
-        )
-
-        response = await self._client.generate(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            model=MODEL_SONNET,
-            max_tokens=MAX_TOKENS_CHAPTER,
-            temperature=0.7,
-        )
-
-        back_matter = self._parse_json_response(response, default={
-            "about_author": "",
-            "resources": "",
-            "other_books": "",
-            "index": [],
-        })
-
-        # Save to project directory
-        bm_path = self._project_dir(project_id) / "back_matter.json"
-        _save_json(bm_path, back_matter)
-
-        logger.info("Generated back matter for '%s'", project.title)
-        return back_matter
-
-    # ------------------------------------------------------------------
-    # Editing Phase
-    # ------------------------------------------------------------------
-
-    async def edit_chapter(
-        self,
-        project_id: str,
-        chapter_num: int,
-    ) -> Chapter:
-        """
-        Run an editing pass on a chapter: proofread, consistency, fact-check.
-
-        Uses Claude Sonnet for thorough editing.
-        """
-        project = self.get_project(project_id)
-        chapter = project.get_chapter(chapter_num)
-        if chapter is None:
-            raise ValueError(f"Chapter {chapter_num} not found in project {project_id[:8]}")
-        if not chapter.content:
-            raise ValueError(f"Chapter {chapter_num} has no content to edit")
-
-        system_prompt = _build_editing_system_prompt()
-
-        user_prompt = (
-            f"Edit this chapter from the book \"{project.title}\".\n\n"
-            f"CHAPTER {chapter_num}: {chapter.title}\n"
-            f"NICHE: {project.niche}\n"
-            f"CURRENT WORD COUNT: {chapter.word_count}\n\n"
-            f"CHAPTER CONTENT:\n"
-            f"---\n{chapter.content}\n---\n\n"
-            f"Apply your full editing process (proofread, clarity, consistency, "
-            f"fact-check, flow, engagement). Return the COMPLETE edited chapter "
-            f"in markdown format. Do not include any commentary -- just the edited text."
-        )
-
-        response = await self._client.generate(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            model=MODEL_SONNET,
-            max_tokens=MAX_TOKENS_EDITING,
-            temperature=0.3,
-        )
-
-        chapter.content = response.strip()
-        chapter.word_count = _count_words(chapter.content)
-        chapter.status = "edited"
-
-        # Save updated chapter file
-        _save_text_file(self._chapter_file(project_id, chapter_num), chapter.content)
-        self._save_project(project)
-
-        logger.info(
-            "Edited chapter %d '%s': %d words", chapter_num, chapter.title, chapter.word_count
-        )
-        return chapter
-
-    async def consistency_check(self, project_id: str) -> list[dict]:
-        """
-        Check all chapters for consistency issues across the entire book.
-
-        Returns a list of dicts with keys: chapter, issue, severity, suggestion.
-        """
-        project = self.get_project(project_id)
-
-        # Collect all chapter summaries (first 500 chars each) for the check
-        chapter_excerpts = []
-        for ch in project.chapters:
-            if ch.content:
-                excerpt = ch.content[:500]
-                chapter_excerpts.append(
-                    f"Chapter {ch.chapter_num} ({ch.title}): {excerpt}..."
-                )
-
-        if not chapter_excerpts:
-            logger.warning("No chapter content to check for project %s", project_id[:8])
-            return []
 
         system_prompt = (
-            "You are a professional book editor performing a consistency review. "
-            "Look for inconsistencies in terminology, tone, facts, character/concept "
-            "references, formatting, and logical flow across chapters."
+            f"You are an expert author writing a {book.book_type} book "
+            f"in the {book.niche} niche.\n\n"
+            f"Book: {book.title}\n"
+            f"Subtitle: {book.subtitle or 'TBD'}\n"
+            f"Voice guidance: {voice_hint}\n\n"
+            "Rules:\n"
+            "- Write in markdown format with clear H2 and H3 sections\n"
+            "- Be authoritative but accessible\n"
+            f"- Target approximately {target_words:,} words\n"
+            "- Include practical tips, examples, and actionable advice\n"
+            "- Use short paragraphs (3-4 sentences max)\n"
+            "- Include transition sentences to connect sections\n"
+            "- NO generic filler content\n"
+            "- NO overly AI-sounding phrases like 'Let us delve into'\n"
+            "- Write as if you are a knowledgeable friend sharing expertise\n"
+            "- If this is chapter 1, include a warm welcome\n"
+            "- If this is the final chapter, include a conclusion with "
+            "next steps"
         )
 
         user_prompt = (
-            f"Review these chapter excerpts from \"{project.title}\" for consistency:\n\n"
-            f"{''.join(chapter_excerpts)}\n\n"
-            f"Identify any consistency issues. Return a JSON array of objects with:\n"
-            f"- chapter: chapter number(s) affected\n"
-            f"- issue: description of the inconsistency\n"
-            f"- severity: 'low', 'medium', or 'high'\n"
-            f"- suggestion: how to fix it\n\n"
-            f"If no issues found, return an empty array [].\n"
-            f"Return ONLY the JSON array, no other text."
+            f"Write Chapter {chapter_number}: "
+            f"{chapter_info.get('title', '')}\n\n"
+            f"Chapter summary: {chapter_info.get('summary', '')}\n\n"
         )
+        if prev_summary:
+            user_prompt += f"Context -- {prev_summary}\n\n"
+        if next_summary:
+            user_prompt += f"Context -- {next_summary}\n\n"
+        if book.keywords:
+            user_prompt += (
+                "Naturally incorporate these keywords where relevant: "
+                f"{', '.join(book.keywords[:5])}\n\n"
+            )
+        user_prompt += f"Write approximately {target_words:,} words."
 
-        response = await self._client.generate(
+        text = await self._call_api(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             model=MODEL_SONNET,
-            max_tokens=MAX_TOKENS_CONSISTENCY,
-            temperature=0.3,
+            max_tokens=MAX_TOKENS_CHAPTER,
+            temperature=0.75,
         )
 
-        issues = self._parse_json_response(response, default=[])
-        if not isinstance(issues, list):
-            issues = []
+        # Save chapter to project directory
+        chapters_dir = book.project_dir / "chapters"
+        chapters_dir.mkdir(parents=True, exist_ok=True)
+
+        ch_slug = _slugify(
+            chapter_info.get("title", f"chapter-{chapter_number}")
+        )
+        ch_filename = f"{chapter_number:02d}-{ch_slug}.md"
+        ch_path = chapters_dir / ch_filename
+
+        with open(ch_path, "w", encoding="utf-8") as fh:
+            fh.write(text)
+
+        # Update book progress
+        book.chapters_completed = max(book.chapters_completed, chapter_number)
+        book.word_count += _word_count(text)
+        if book.status == BookStatus.OUTLINE.value:
+            book.status = BookStatus.CHAPTERS.value
+        book.updated_at = _now_iso()
+        self._save_books()
 
         logger.info(
-            "Consistency check for '%s': %d issues found", project.title, len(issues)
+            "Generated chapter %d/%d for '%s' (%d words)",
+            chapter_number, book.chapter_count, book.title, _word_count(text),
         )
-        return issues
+        return text
 
-    def get_project_stats(self, project_id: str) -> dict:
-        """
-        Get detailed statistics for a book project.
-
-        Returns a dict with word counts, reading level estimate, chapter breakdown,
-        and progress information.
-        """
-        project = self.get_project(project_id)
-
-        chapter_stats = []
-        total_words = 0
-        chapters_complete = 0
-        chapters_total = len(project.chapters)
-
-        for ch in project.chapters:
-            wc = ch.word_count
-            total_words += wc
-            if ch.status in ("drafted", "edited", "final"):
-                chapters_complete += 1
-            chapter_stats.append({
-                "chapter_num": ch.chapter_num,
-                "title": ch.title,
-                "word_count": wc,
-                "status": ch.status,
-            })
-
-        avg_words = total_words // max(chapters_complete, 1)
-        est_pages = _estimate_page_count(total_words)
-
-        # Estimate reading level (simple approximation)
-        avg_sentence_len = 18  # rough default
-        reading_level = "8th-10th grade (estimated)"
-
-        return {
-            "project_id": project.project_id,
-            "title": project.title,
-            "niche": project.niche,
-            "status": project.status,
-            "total_word_count": total_words,
-            "target_word_count": project.target_word_count,
-            "progress_pct": project.progress_pct,
-            "chapters_complete": chapters_complete,
-            "chapters_total": chapters_total,
-            "average_chapter_words": avg_words,
-            "estimated_page_count": est_pages,
-            "reading_level": reading_level,
-            "chapter_breakdown": chapter_stats,
-        }
-
-    # ------------------------------------------------------------------
-    # Cover Phase
-    # ------------------------------------------------------------------
-
-    async def generate_cover_spec(self, project_id: str) -> CoverSpec:
-        """
-        Generate a detailed cover specification based on niche and brand colors.
-
-        Calculates spine width from estimated page count.
-        """
-        project = self.get_project(project_id)
-        resolved = _resolve_niche(project.niche)
-
-        # Niche-specific color palettes
-        niche_colors = {
-            "witchcraft": ["#4A1C6F", "#9B59B6", "#1A1A2E", "#FFD700"],
-            "smarthome": ["#0066CC", "#00BFFF", "#1A1A2E", "#FFFFFF"],
-            "ai": ["#00F0FF", "#1A1A2E", "#00C853", "#FFFFFF"],
-            "family": ["#E8887C", "#FFB6C1", "#FFECD2", "#333333"],
-            "mythology": ["#8B4513", "#DAA520", "#2C1810", "#F5DEB3"],
-            "bulletjournals": ["#1A1A1A", "#FFFFFF", "#FFD700", "#4A4A4A"],
-        }
-
-        colors = niche_colors.get(resolved, niche_colors["witchcraft"])
-        est_pages = _estimate_page_count(project.word_count or project.target_word_count)
-        spine = _calculate_spine_width(est_pages)
-
-        spec = CoverSpec(
-            title=project.title,
-            subtitle=project.subtitle,
-            author=project.author,
-            colors=colors,
-            dimensions={
-                "width": COVER_WIDTH_PX,
-                "height": COVER_HEIGHT_PX,
-                "dpi": COVER_DPI,
-            },
-            spine_width=round(spine, 4),
+    def generate_chapter_sync(
+        self,
+        book_id: str,
+        chapter_number: int,
+        target_words: int = 3000,
+    ) -> str:
+        """Synchronous wrapper for generate_chapter."""
+        return asyncio.run(
+            self.generate_chapter(book_id, chapter_number, target_words)
         )
 
-        # Generate style description and imagery using Claude
-        system_prompt = (
-            "You are a professional book cover designer for Amazon KDP. "
-            "Create compelling cover designs that stand out in search results."
-        )
-
-        user_prompt = (
-            f"Design a cover concept for this book:\n\n"
-            f"TITLE: {project.title}\n"
-            f"SUBTITLE: {project.subtitle}\n"
-            f"NICHE: {resolved}\n"
-            f"COLOR PALETTE: {', '.join(colors)}\n"
-            f"AUDIENCE: Beginners to intermediate readers\n\n"
-            f"Return a JSON object with:\n"
-            f"- style_description: A detailed description of the cover design "
-            f"(composition, typography style, mood, layout)\n"
-            f"- imagery: A list of 3-5 key visual elements for the cover\n\n"
-            f"The design should be professional, eye-catching on Amazon thumbnails, "
-            f"and clearly communicate the book's topic.\n\n"
-            f"Return ONLY the JSON object, no other text."
-        )
-
-        response = await self._client.generate(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            model=MODEL_HAIKU,
-            max_tokens=MAX_TOKENS_COVER,
-            temperature=0.7,
-        )
-
-        cover_data = self._parse_json_response(response, default={})
-        spec.style_description = cover_data.get("style_description", "")
-        spec.imagery = cover_data.get("imagery", [])
-
-        # Save cover spec
-        _save_json(self._cover_spec_file(project_id), spec.to_dict())
-
-        logger.info(
-            "Generated cover spec for '%s' (spine: %.4f in, pages: %d)",
-            project.title, spine, est_pages,
-        )
-        return spec
-
-    def generate_cover_prompt(self, spec: CoverSpec) -> str:
+    async def compile_manuscript(self, book_id: str) -> str:
         """
-        Generate an image generation prompt for fal.ai / Midjourney from a CoverSpec.
+        Compile all written chapters into a single manuscript file.
 
-        Returns a detailed text prompt suitable for AI image generation.
+        Args:
+            book_id: Book UUID.
+
+        Returns:
+            Path to the compiled manuscript markdown file.
         """
-        color_desc = ", ".join(spec.colors) if spec.colors else "rich, dark tones"
-        imagery_desc = ", ".join(spec.imagery) if spec.imagery else "abstract design elements"
+        book = self.get_book(book_id)
+        chapters_dir = book.project_dir / "chapters"
 
-        prompt = (
-            f"Professional book cover design, Amazon KDP format, "
-            f"2560x1600 pixels, 300 DPI, print-ready.\n\n"
-            f"TITLE: \"{spec.title}\"\n"
-            f"SUBTITLE: \"{spec.subtitle}\"\n"
-            f"AUTHOR: \"{spec.author}\"\n\n"
-            f"STYLE: {spec.style_description}\n\n"
-            f"VISUAL ELEMENTS: {imagery_desc}\n\n"
-            f"COLOR PALETTE: {color_desc}\n\n"
-            f"REQUIREMENTS:\n"
-            f"- Clean, professional typography with excellent readability\n"
-            f"- Title must be clearly legible at Amazon thumbnail size\n"
-            f"- No bleed issues, safe margins on all edges\n"
-            f"- High contrast between text and background\n"
-            f"- Modern, polished design suitable for nonfiction\n"
-            f"- No AI artifacts, no watermarks\n"
-        )
+        if not chapters_dir.exists():
+            raise FileNotFoundError(
+                f"No chapters directory found for '{book.title}'. "
+                "Generate chapters first."
+            )
 
-        return prompt
+        # Collect chapter files in order
+        chapter_files = sorted(chapters_dir.glob("*.md"))
+        if not chapter_files:
+            raise FileNotFoundError(
+                f"No chapter files found for '{book.title}'."
+            )
 
-    # ------------------------------------------------------------------
-    # Formatting Phase
-    # ------------------------------------------------------------------
-
-    def compile_manuscript(self, project_id: str) -> str:
-        """
-        Compile the full manuscript from all chapters and front/back matter.
-
-        Returns the full manuscript as a markdown string and saves it to disk.
-        """
-        project = self.get_project(project_id)
-
+        # Build manuscript with front matter
         parts: list[str] = []
 
         # Title page
-        parts.append(f"# {project.title}\n")
-        if project.subtitle:
-            parts.append(f"### {project.subtitle}\n")
-        parts.append(f"**By {project.author}**\n")
-        if project.series:
-            parts.append(f"*{project.series}*\n")
-        parts.append("\n---\n\n")
+        parts.append(f"# {book.title}\n")
+        if book.subtitle:
+            parts.append(f"## {book.subtitle}\n")
+        parts.append(f"**By {book.author}**\n")
+        parts.append("---\n")
 
-        # Front matter
-        fm_path = self._project_dir(project_id) / "front_matter.json"
-        front_matter = _load_json(fm_path, {})
-        if front_matter:
-            if front_matter.get("dedication"):
-                parts.append("## Dedication\n\n")
-                parts.append(front_matter["dedication"])
-                parts.append("\n\n---\n\n")
-            if front_matter.get("how_to_use"):
-                parts.append("## How to Use This Book\n\n")
-                parts.append(front_matter["how_to_use"])
-                parts.append("\n\n---\n\n")
-            if front_matter.get("introduction"):
-                parts.append("## Introduction\n\n")
-                parts.append(front_matter["introduction"])
-                parts.append("\n\n---\n\n")
+        # Copyright page
+        year = _now_utc().year
+        parts.append(
+            f"Copyright {year} {book.author}. All rights reserved.\n"
+        )
+        parts.append(
+            "No part of this publication may be reproduced, distributed, "
+            "or transmitted in any form without prior written permission.\n"
+        )
+        parts.append("---\n")
+
+        # Table of Contents
+        parts.append("## Table of Contents\n")
+        for i, ch_file in enumerate(chapter_files, 1):
+            with open(ch_file, "r", encoding="utf-8") as fh:
+                first_line = fh.readline().strip()
+            ch_title = re.sub(r"^#+\s*", "", first_line) or ch_file.stem
+            parts.append(f"{i}. {ch_title}")
+        parts.append("\n---\n")
 
         # Chapters
-        for ch in sorted(project.chapters, key=lambda c: c.chapter_num):
-            content = ch.content
-            if not content:
-                # Try loading from file
-                content = _read_text_file(self._chapter_file(project_id, ch.chapter_num))
-            if content:
-                parts.append(f"\n\n---\n\n")
-                parts.append(content)
-            else:
-                parts.append(f"\n\n---\n\n## Chapter {ch.chapter_num}: {ch.title}\n\n")
-                parts.append("*[Chapter content pending]*\n")
+        total_words = 0
+        for ch_file in chapter_files:
+            with open(ch_file, "r", encoding="utf-8") as fh:
+                content = fh.read()
+            parts.append(content)
+            parts.append("\n---\n")
+            total_words += _word_count(content)
 
-        # Back matter
-        bm_path = self._project_dir(project_id) / "back_matter.json"
-        back_matter = _load_json(bm_path, {})
-        if back_matter:
-            parts.append("\n\n---\n\n")
-            if back_matter.get("resources"):
-                parts.append("## Resources\n\n")
-                parts.append(back_matter["resources"])
-                parts.append("\n\n")
-            if back_matter.get("about_author"):
-                parts.append("## About the Author\n\n")
-                parts.append(back_matter["about_author"])
-                parts.append("\n\n")
-            if back_matter.get("other_books"):
-                parts.append("## Other Books by Nick Creighton\n\n")
-                parts.append(back_matter["other_books"])
-                parts.append("\n\n")
+        # About the Author
+        parts.append("## About the Author\n")
+        niche_label = book.niche.replace("_", " ")
+        parts.append(
+            f"{book.author} is a writer and content creator passionate "
+            f"about making {niche_label} accessible to everyone. "
+            "Find more resources at the author's website.\n"
+        )
 
-        manuscript = "\n".join(parts)
+        # Combine
+        manuscript = "\n\n".join(parts)
+        manuscript_path = book.project_dir / "manuscript.md"
+        with open(manuscript_path, "w", encoding="utf-8") as fh:
+            fh.write(manuscript)
 
-        # Save manuscript
-        _save_text_file(self._manuscript_file(project_id), manuscript)
-
-        # Update project
-        project.status = "formatting"
-        project.word_count = _count_words(manuscript)
-        project.metadata.page_count_estimate = _estimate_page_count(project.word_count)
-        self._save_project(project)
+        # Update book
+        book.manuscript_path = str(manuscript_path)
+        book.word_count = total_words
+        book.page_count = max(1, total_words // 250)
+        book.updated_at = _now_iso()
+        self._save_books()
 
         logger.info(
-            "Compiled manuscript for '%s': %d words, ~%d pages",
-            project.title, project.word_count, project.metadata.page_count_estimate,
+            "Compiled manuscript for '%s': %d words, ~%d pages, %d chapters",
+            book.title, total_words, book.page_count, len(chapter_files),
         )
-        return manuscript
+        return str(manuscript_path)
 
-    async def generate_description(self, project_id: str) -> str:
+    def compile_manuscript_sync(self, book_id: str) -> str:
+        """Synchronous wrapper for compile_manuscript."""
+        return asyncio.run(self.compile_manuscript(book_id))
+
+    # ==================================================================
+    # COVER DESIGN
+    # ==================================================================
+
+    async def generate_cover_prompt(self, book_id: str) -> str:
         """
-        Generate a KDP book description (max 4000 characters) with HTML formatting.
+        Generate an AI image generation prompt for the book cover.
 
-        Uses Claude Haiku for this lightweight metadata task.
+        Uses Claude Haiku (simple creative task) to produce a prompt
+        suitable for fal.ai, Midjourney, or DALL-E.
+
+        Args:
+            book_id: Book UUID.
+
+        Returns:
+            The cover design prompt string.
         """
-        project = self.get_project(project_id)
-        outline_data = _load_json(self._outline_file(project_id))
-        outline = BookOutline.from_dict(outline_data) if outline_data else None
-
-        chapter_titles = ""
-        if outline:
-            chapter_titles = ", ".join(outline.chapter_titles[:6]) + "..."
+        book = self.get_book(book_id)
 
         system_prompt = (
-            "You are an Amazon KDP listing copywriter. Write compelling book "
-            "descriptions that convert browsers into buyers. Use HTML bold tags "
-            "and line breaks for formatting (Amazon supports basic HTML in descriptions)."
+            "You are an expert book cover designer. Generate a detailed "
+            "AI image generation prompt for a book cover. The prompt "
+            "should describe a visually striking, professional cover "
+            "image.\n\n"
+            "Rules:\n"
+            "- Describe the scene, colors, mood, and composition\n"
+            "- Do NOT include text in the image (text is overlaid "
+            "separately)\n"
+            "- Specify a style (photorealistic, illustrated, etc.)\n"
+            "- Cover dimensions: 2560x1600 pixels at 300 DPI\n"
+            "- Must look professional enough for Amazon KDP\n"
+            "- Avoid cliches and generic AI art looks\n"
+            "- Response should be the prompt ONLY, no extra commentary"
         )
 
         user_prompt = (
-            f"Write a KDP book description for:\n\n"
-            f"TITLE: {project.title}\n"
-            f"SUBTITLE: {project.subtitle}\n"
-            f"NICHE: {project.niche}\n"
-            f"CHAPTERS INCLUDE: {chapter_titles}\n"
-            f"WORD COUNT: ~{project.word_count:,}\n"
-            f"SERIES: {project.series or 'Standalone'}\n\n"
-            f"REQUIREMENTS:\n"
-            f"- Maximum {KDP_DESCRIPTION_MAX_CHARS} characters\n"
-            f"- Start with a compelling hook question or statement\n"
-            f"- List 5-7 key benefits/what readers will learn\n"
-            f"- Include a brief author credential statement\n"
-            f"- End with a clear call to action\n"
-            f"- Use <b>bold</b> for emphasis and <br> for line breaks\n"
-            f"- No markdown, only HTML formatting Amazon supports\n\n"
-            f"Return ONLY the description text (with HTML), no other text."
+            f"Book title: {book.title}\n"
+            f"Subtitle: {book.subtitle or 'N/A'}\n"
+            f"Niche: {book.niche}\n"
+            f"Type: {book.book_type}\n"
+            f"Description: {book.description or 'N/A'}\n"
         )
 
-        response = await self._client.generate(
+        prompt = await self._call_api(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             model=MODEL_HAIKU,
-            max_tokens=MAX_TOKENS_DESCRIPTION,
-            temperature=0.7,
-        )
-
-        description = response.strip()
-
-        # Enforce 4000 char limit
-        if len(description) > KDP_DESCRIPTION_MAX_CHARS:
-            description = description[:KDP_DESCRIPTION_MAX_CHARS - 3] + "..."
-
-        project.metadata.description = description
-        self._save_project(project)
-
-        logger.info(
-            "Generated description for '%s': %d chars", project.title, len(description)
-        )
-        return description
-
-    async def prepare_metadata(self, project_id: str) -> BookMetadata:
-        """
-        Prepare final upload metadata: keywords, categories, pricing.
-
-        Uses Claude Haiku for keyword selection and category mapping.
-        """
-        project = self.get_project(project_id)
-        resolved = _resolve_niche(project.niche)
-        template = NICHE_TEMPLATES.get(resolved, NICHE_TEMPLATES["witchcraft"])
-
-        system_prompt = (
-            "You are an Amazon KDP metadata specialist. Select the best keywords "
-            "and categories for maximum discoverability on Amazon."
-        )
-
-        user_prompt = (
-            f"Select optimal KDP metadata for this book:\n\n"
-            f"TITLE: {project.title}\n"
-            f"SUBTITLE: {project.subtitle}\n"
-            f"NICHE: {resolved}\n"
-            f"WORD COUNT: ~{project.word_count:,}\n"
-            f"SERIES: {project.series or 'Standalone'}\n\n"
-            f"Return a JSON object with:\n"
-            f"- keywords: exactly 7 high-search-volume keywords/phrases for KDP "
-            f"(each keyword can be up to 50 characters)\n"
-            f"- categories: exactly 2 KDP browse category paths "
-            f"(e.g., 'Religion & Spirituality > New Age > Crystals')\n\n"
-            f"Return ONLY the JSON object, no other text."
-        )
-
-        response = await self._client.generate(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            model=MODEL_HAIKU,
-            max_tokens=MAX_TOKENS_METADATA,
-            temperature=0.3,
-        )
-
-        meta_data = self._parse_json_response(response, default={})
-
-        # Update metadata
-        keywords = meta_data.get("keywords", [])
-        if isinstance(keywords, list):
-            project.metadata.keywords = keywords[:KDP_MAX_KEYWORDS]
-
-        categories = meta_data.get("categories", template.get("categories", []))
-        if isinstance(categories, list):
-            project.metadata.categories = categories[:2]
-
-        # Set pricing from template
-        project.metadata.price_ebook = template.get("price_ebook", 4.99)
-        pb_range = template.get("price_paperback", (12.99, 15.99))
-        if isinstance(pb_range, tuple):
-            # Higher price for longer books
-            if project.word_count > 40000:
-                project.metadata.price_paperback = pb_range[1]
-            else:
-                project.metadata.price_paperback = pb_range[0]
-        else:
-            project.metadata.price_paperback = pb_range
-
-        # Update page count and other fields
-        project.metadata.page_count_estimate = _estimate_page_count(project.word_count)
-        project.metadata.title = project.title
-        project.metadata.subtitle = project.subtitle
-        project.metadata.series_name = project.series
-
-        # Generate description if missing
-        if not project.metadata.description:
-            await self.generate_description(project_id)
-
-        project.status = "review"
-        self._save_project(project)
-
-        # Save standalone metadata file
-        _save_json(self._metadata_file(project_id), project.metadata.to_dict())
-
-        logger.info(
-            "Prepared metadata for '%s': %d keywords, %d categories",
-            project.title, len(project.metadata.keywords), len(project.metadata.categories),
-        )
-        return project.metadata
-
-    # ------------------------------------------------------------------
-    # Full Pipeline
-    # ------------------------------------------------------------------
-
-    async def run_pipeline(
-        self,
-        title: str,
-        niche: str,
-        chapters: int = 12,
-        auto: bool = True,
-    ) -> BookProject:
-        """
-        Run the complete book creation pipeline from idea to upload-ready.
-
-        Stages: create -> outline -> write all -> edit (if auto) -> format -> metadata.
-
-        Parameters
-        ----------
-        title : str
-            The book title.
-        niche : str
-            Target niche.
-        chapters : int
-            Number of chapters.
-        auto : bool
-            If True, run editing passes automatically.
-
-        Returns
-        -------
-        BookProject
-            The completed project.
-        """
-        logger.info("=" * 70)
-        logger.info("STARTING KDP PIPELINE: '%s' (%s, %d chapters)", title, niche, chapters)
-        logger.info("=" * 70)
-
-        # Stage 1: Create project
-        logger.info("[1/7] Creating project...")
-        project = await self.create_project(title, niche)
-        pid = project.project_id
-
-        # Stage 2: Generate outline
-        logger.info("[2/7] Generating outline...")
-        await self.generate_outline(pid, chapters=chapters)
-
-        # Stage 3: Write front matter
-        logger.info("[3/7] Writing front matter...")
-        await self.write_front_matter(pid)
-
-        # Stage 4: Write all chapters
-        logger.info("[4/7] Writing %d chapters...", chapters)
-        await self.write_all_chapters(pid)
-
-        # Stage 5: Edit (if auto)
-        if auto:
-            logger.info("[5/7] Editing chapters...")
-            project = self.get_project(pid)
-            for ch in project.chapters:
-                if ch.status == "drafted":
-                    await self.edit_chapter(pid, ch.chapter_num)
-        else:
-            logger.info("[5/7] Skipping editing (auto=False)")
-
-        # Stage 6: Write back matter and compile
-        logger.info("[6/7] Writing back matter and compiling manuscript...")
-        await self.write_back_matter(pid)
-        self.compile_manuscript(pid)
-
-        # Stage 7: Prepare metadata and cover
-        logger.info("[7/7] Preparing metadata and cover spec...")
-        await self.prepare_metadata(pid)
-        await self.generate_cover_spec(pid)
-
-        # Mark as ready
-        project = self.get_project(pid)
-        project.status = "ready"
-        self._save_project(project)
-
-        logger.info("=" * 70)
-        logger.info("PIPELINE COMPLETE: '%s'", project.title)
-        logger.info("  Project ID: %s", project.project_id)
-        logger.info("  Word count: %d", project.word_count)
-        logger.info("  Pages: ~%d", project.metadata.page_count_estimate)
-        logger.info("  Status: %s", project.status)
-        logger.info("  Directory: %s", self._project_dir(pid))
-        logger.info("=" * 70)
-
-        return project
-
-    # ------------------------------------------------------------------
-    # Export
-    # ------------------------------------------------------------------
-
-    def export_manuscript_md(
-        self,
-        project_id: str,
-        output_path: Optional[str] = None,
-    ) -> str:
-        """
-        Export the compiled manuscript as a markdown file.
-
-        Returns the output file path.
-        """
-        project = self.get_project(project_id)
-        ms_path = self._manuscript_file(project_id)
-
-        if not ms_path.exists():
-            # Compile on the fly
-            self.compile_manuscript(project_id)
-
-        content = _read_text_file(ms_path)
-        if content is None:
-            raise ValueError(f"No manuscript found for project {project_id[:8]}")
-
-        if output_path is None:
-            slug = _slugify(project.title)
-            output_path = str(self._project_dir(project_id) / f"{slug}-manuscript.md")
-
-        _save_text_file(Path(output_path), content)
-        logger.info("Exported manuscript to %s", output_path)
-        return output_path
-
-    def export_metadata_json(
-        self,
-        project_id: str,
-        output_path: Optional[str] = None,
-    ) -> str:
-        """
-        Export project metadata as a JSON file.
-
-        Returns the output file path.
-        """
-        project = self.get_project(project_id)
-
-        if output_path is None:
-            slug = _slugify(project.title)
-            output_path = str(self._project_dir(project_id) / f"{slug}-metadata.json")
-
-        _save_json(Path(output_path), project.metadata.to_dict())
-        logger.info("Exported metadata to %s", output_path)
-        return output_path
-
-    def get_upload_checklist(self, project_id: str) -> list[dict]:
-        """
-        Get a checklist of what is ready and what is missing for KDP upload.
-
-        Returns a list of dicts with keys: item, status ('ready'/'missing'/'warning'), detail.
-        """
-        project = self.get_project(project_id)
-        checks: list[dict] = []
-
-        # Manuscript
-        ms_exists = self._manuscript_file(project_id).exists()
-        checks.append({
-            "item": "Manuscript (markdown)",
-            "status": "ready" if ms_exists else "missing",
-            "detail": f"{project.word_count:,} words" if ms_exists else "Run compile first",
-        })
-
-        # All chapters written
-        all_written = all(ch.status != "pending" for ch in project.chapters)
-        pending = [ch.chapter_num for ch in project.chapters if ch.status == "pending"]
-        checks.append({
-            "item": "All chapters written",
-            "status": "ready" if all_written else "missing",
-            "detail": "Complete" if all_written else f"Pending: chapters {pending}",
-        })
-
-        # All chapters edited
-        all_edited = all(ch.status in ("edited", "final") for ch in project.chapters)
-        unedited = [ch.chapter_num for ch in project.chapters if ch.status == "drafted"]
-        checks.append({
-            "item": "All chapters edited",
-            "status": "ready" if all_edited else "warning",
-            "detail": "Complete" if all_edited else f"Unedited: chapters {unedited}",
-        })
-
-        # Word count target
-        pct = project.progress_pct
-        checks.append({
-            "item": "Word count target",
-            "status": "ready" if pct >= 90 else "warning" if pct >= 70 else "missing",
-            "detail": f"{project.word_count:,} / {project.target_word_count:,} ({pct:.0f}%)",
-        })
-
-        # Metadata
-        has_meta = bool(project.metadata.keywords and project.metadata.categories)
-        checks.append({
-            "item": "Metadata (keywords + categories)",
-            "status": "ready" if has_meta else "missing",
-            "detail": (
-                f"{len(project.metadata.keywords)} keywords, "
-                f"{len(project.metadata.categories)} categories"
-            ) if has_meta else "Run prepare_metadata first",
-        })
-
-        # Description
-        has_desc = bool(project.metadata.description)
-        checks.append({
-            "item": "Book description",
-            "status": "ready" if has_desc else "missing",
-            "detail": (
-                f"{len(project.metadata.description)} chars"
-            ) if has_desc else "Run generate_description first",
-        })
-
-        # Cover spec
-        cover_exists = self._cover_spec_file(project_id).exists()
-        checks.append({
-            "item": "Cover specification",
-            "status": "ready" if cover_exists else "missing",
-            "detail": "Spec generated" if cover_exists else "Run generate_cover_spec first",
-        })
-
-        # Front matter
-        fm_exists = (self._project_dir(project_id) / "front_matter.json").exists()
-        checks.append({
-            "item": "Front matter",
-            "status": "ready" if fm_exists else "warning",
-            "detail": "Generated" if fm_exists else "Run write_front_matter first",
-        })
-
-        # Back matter
-        bm_exists = (self._project_dir(project_id) / "back_matter.json").exists()
-        checks.append({
-            "item": "Back matter",
-            "status": "ready" if bm_exists else "warning",
-            "detail": "Generated" if bm_exists else "Run write_back_matter first",
-        })
-
-        return checks
-
-    # ------------------------------------------------------------------
-    # Low-Content Books (journals, planners, trackers)
-    # ------------------------------------------------------------------
-
-    async def create_journal_project(
-        self,
-        title: str,
-        niche: str,
-        pages: int = 100,
-        page_type: str = "lined",
-    ) -> BookProject:
-        """
-        Create a low-content book project (journal, planner, tracker).
-
-        Parameters
-        ----------
-        title : str
-            Book title.
-        niche : str
-            Target niche.
-        pages : int
-            Number of interior pages (default: 100).
-        page_type : str
-            Page format: lined, dot-grid, blank, prompted, tracker.
-
-        Returns
-        -------
-        BookProject
-            The newly created journal project.
-        """
-        if page_type not in VALID_PAGE_TYPES:
-            raise ValueError(
-                f"Invalid page_type '{page_type}'. Must be one of: {VALID_PAGE_TYPES}"
-            )
-
-        resolved = _resolve_niche(niche)
-        template = NICHE_TEMPLATES.get(resolved, NICHE_TEMPLATES["bulletjournals"])
-
-        # Journals have low word counts but specific page targets
-        target_words = pages * 10 if page_type == "prompted" else pages * 2
-
-        project = await self.create_project(
-            title=title,
-            niche=niche,
-            book_type=page_type,
-            target_word_count=target_words,
-            subtitle=f"A {page_type.replace('-', ' ').title()} {resolved.title()} Journal",
-        )
-
-        # Update metadata for low-content
-        project.metadata.page_count_estimate = pages
-        project.metadata.price_ebook = 2.99
-        project.metadata.price_paperback = template.get("price_paperback", (8.99, 12.99))
-        if isinstance(project.metadata.price_paperback, tuple):
-            project.metadata.price_paperback = project.metadata.price_paperback[0]
-
-        self._save_project(project)
-
-        logger.info(
-            "Created journal project '%s' [%s]: %d pages, type=%s",
-            title, project.project_id[:8], pages, page_type,
-        )
-        return project
-
-    async def generate_journal_prompts(
-        self,
-        niche: str,
-        count: int = 100,
-    ) -> list[str]:
-        """
-        Generate writing prompts for a prompted journal (one prompt per page).
-
-        Returns a list of prompt strings.
-        """
-        resolved = _resolve_niche(niche)
-
-        system_prompt = (
-            "You are a journaling and self-reflection expert. Create thoughtful, "
-            "engaging journal prompts that inspire meaningful reflection and personal growth."
-        )
-
-        user_prompt = (
-            f"Generate {count} unique journal prompts for the '{resolved}' niche.\n\n"
-            f"REQUIREMENTS:\n"
-            f"- Each prompt should be 1-2 sentences\n"
-            f"- Mix of reflective, creative, practical, and aspirational prompts\n"
-            f"- Progress from simpler to deeper topics over the sequence\n"
-            f"- Include prompts specific to the {resolved} theme\n"
-            f"- Each prompt should inspire at least a paragraph of writing\n"
-            f"- Avoid repetition or overly similar prompts\n\n"
-            f"Return a JSON array of {count} prompt strings.\n"
-            f"Return ONLY the JSON array, no other text."
-        )
-
-        response = await self._client.generate(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            model=MODEL_SONNET,
-            max_tokens=MAX_TOKENS_JOURNAL_PROMPTS,
+            max_tokens=MAX_TOKENS_COVER_PROMPT,
             temperature=0.8,
         )
 
-        prompts = self._parse_json_response(response, default=[])
-        if not isinstance(prompts, list):
-            prompts = []
+        prompt = prompt.strip()
 
-        logger.info("Generated %d journal prompts for '%s'", len(prompts), resolved)
-        return prompts
+        # Update book
+        book.cover_prompt = prompt
+        book.cover_status = CoverStatus.PROMPT_READY.value
+        book.updated_at = _now_iso()
+        self._save_books()
 
-    async def generate_tracker_layouts(
+        # Save prompt to project dir
+        prompt_path = book.project_dir / "cover-prompt.txt"
+        prompt_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(prompt_path, "w", encoding="utf-8") as fh:
+            fh.write(prompt)
+
+        logger.info("Generated cover prompt for '%s'", book.title)
+        return prompt
+
+    def generate_cover_prompt_sync(self, book_id: str) -> str:
+        """Synchronous wrapper for generate_cover_prompt."""
+        return asyncio.run(self.generate_cover_prompt(book_id))
+
+    def update_cover_status(
+        self,
+        book_id: str,
+        status: str,
+        cover_path: Optional[str] = None,
+    ) -> KDPBook:
+        """
+        Update the cover design status for a book.
+
+        Args:
+            book_id: Book UUID.
+            status: New cover status.
+            cover_path: Path to the cover image file.
+
+        Returns:
+            The updated KDPBook.
+        """
+        CoverStatus.from_string(status)
+        book = self.get_book(book_id)
+        book.cover_status = status
+        if cover_path:
+            book.cover_path = cover_path
+        book.updated_at = _now_iso()
+        self._save_books()
+        logger.info("Cover status for '%s': %s", book.title, status)
+        return book
+
+    # ==================================================================
+    # KEYWORD RESEARCH
+    # ==================================================================
+
+    async def research_keywords(
         self,
         niche: str,
-        tracker_type: str,
+        topic: str,
+        count: int = 7,
     ) -> list[dict]:
         """
-        Generate tracker page layouts for a tracker journal.
+        Research profitable KDP keywords using Claude Haiku.
 
-        Parameters
-        ----------
-        niche : str
-            Target niche (e.g., 'witchcraft' for moon phase tracker).
-        tracker_type : str
-            Type of tracker (moon_phase, crystal_collection, spell_record,
-            habit, reading_log, gratitude, etc.).
+        Args:
+            niche: The niche to research.
+            topic: Specific topic within the niche.
+            count: Number of keyword suggestions (max 7 for KDP).
 
-        Returns
-        -------
-        list[dict]
-            Page layout specs with keys: page_title, columns, rows, header, footer.
+        Returns:
+            List of keyword dicts with keyword, search_volume_estimate,
+            competition_level, and reasoning.
         """
-        resolved = _resolve_niche(niche)
+        _validate_niche(niche)
+        count = min(count, 7)  # KDP allows max 7 keywords
 
         system_prompt = (
-            "You are a journal and planner designer specializing in printable "
-            "tracker layouts for Amazon KDP low-content books."
+            "You are a KDP keyword research specialist. Analyze the "
+            "niche and topic to suggest the most profitable keywords "
+            "for an Amazon KDP book listing.\n\n"
+            "Rules:\n"
+            "- Keywords should be 2-4 words each\n"
+            "- Focus on buyer intent keywords\n"
+            "- Consider search volume and competition\n"
+            "- Include a mix of broad and long-tail keywords\n"
+            "- Respond with ONLY a JSON array of objects\n"
+            'Each object: {"keyword": str, '
+            '"search_volume_estimate": "high"|"medium"|"low", '
+            '"competition_level": "high"|"medium"|"low", '
+            '"reasoning": str}'
         )
 
         user_prompt = (
-            f"Design tracker page layouts for a {tracker_type} tracker in the "
-            f"'{resolved}' niche.\n\n"
-            f"Create 5-8 different page layout designs. For each, provide a JSON object:\n"
-            f"- page_title: title at the top of the page\n"
-            f"- columns: list of column headers\n"
-            f"- rows: number of rows per page\n"
-            f"- header: text/instructions at the top\n"
-            f"- footer: motivational quote or tip at the bottom\n\n"
-            f"Return a JSON array of layout objects.\n"
-            f"Return ONLY the JSON array, no other text."
+            f"Niche: {niche}\n"
+            f"Topic: {topic}\n"
+            f"Suggest {count} optimal KDP keywords."
         )
 
-        response = await self._client.generate(
+        raw = await self._call_api(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             model=MODEL_HAIKU,
-            max_tokens=MAX_TOKENS_METADATA,
+            max_tokens=MAX_TOKENS_KEYWORDS,
+            temperature=0.5,
+        )
+
+        keywords = self._parse_json_response(raw, default=[])
+        if not isinstance(keywords, list) or not keywords:
+            keywords = [
+                {
+                    "keyword": topic,
+                    "search_volume_estimate": "unknown",
+                    "competition_level": "unknown",
+                    "reasoning": "Fallback -- parse failed",
+                }
+            ]
+
+        logger.info(
+            "Researched %d keywords for %s/%s", len(keywords), niche, topic,
+        )
+        return keywords[:count]
+
+    def research_keywords_sync(
+        self, niche: str, topic: str, count: int = 7,
+    ) -> list[dict]:
+        """Synchronous wrapper for research_keywords."""
+        return asyncio.run(self.research_keywords(niche, topic, count))
+
+    async def analyze_competition(
+        self,
+        niche: str,
+        topic: str,
+    ) -> dict:
+        """
+        Analyze KDP competition for a topic using Claude Haiku.
+
+        Args:
+            niche: The niche to analyze.
+            topic: Specific topic.
+
+        Returns:
+            Competition analysis dict with opportunity_score,
+            saturation_level, recommended_angle, and price_suggestion.
+        """
+        _validate_niche(niche)
+
+        system_prompt = (
+            "You are a KDP market analyst. Analyze the competition "
+            "landscape for a book topic on Amazon KDP.\n\n"
+            "Respond with ONLY a JSON object containing:\n"
+            "- opportunity_score: 1-10 (10 = best opportunity)\n"
+            '- saturation_level: "low"|"medium"|"high"\n'
+            "- recommended_angle: str (unique angle to differentiate)\n"
+            "- price_suggestion_ebook: float\n"
+            "- price_suggestion_paperback: float\n"
+            "- estimated_monthly_sales_top10: int\n"
+            "- key_competitors: [str] (top 3 competing book types)\n"
+            "- reasoning: str"
+        )
+
+        user_prompt = f"Niche: {niche}\nTopic: {topic}"
+
+        raw = await self._call_api(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            model=MODEL_HAIKU,
+            max_tokens=MAX_TOKENS_COMPETITION,
+            temperature=0.3,
+        )
+
+        analysis = self._parse_json_response(raw, default={})
+        if not isinstance(analysis, dict) or "opportunity_score" not in analysis:
+            analysis = {
+                "opportunity_score": 5,
+                "saturation_level": "unknown",
+                "recommended_angle": "Unable to analyze -- try again",
+                "reasoning": "Parse failed",
+            }
+
+        logger.info(
+            "Competition analysis for %s/%s: score %s",
+            niche, topic, analysis.get("opportunity_score", "?"),
+        )
+        return analysis
+
+    def analyze_competition_sync(self, niche: str, topic: str) -> dict:
+        """Synchronous wrapper for analyze_competition."""
+        return asyncio.run(self.analyze_competition(niche, topic))
+
+    async def suggest_categories(
+        self,
+        niche: str,
+        topic: str,
+        title: str = "",
+    ) -> list[str]:
+        """
+        Suggest Amazon BISAC categories for a book using Claude Haiku.
+
+        Args:
+            niche: Book niche.
+            topic: Book topic.
+            title: Book title (optional, for better suggestions).
+
+        Returns:
+            List of category path strings.
+        """
+        _validate_niche(niche)
+
+        system_prompt = (
+            "You are a KDP category specialist. Suggest the best Amazon "
+            "BISAC categories for a book.\n\n"
+            "Rules:\n"
+            "- Suggest 2-3 categories\n"
+            "- Use full category paths (e.g., 'Religion & Spirituality > "
+            "New Age > Crystals')\n"
+            "- Pick categories where the book can rank, not just the most "
+            "popular\n"
+            "- Respond with ONLY a JSON array of category path strings"
+        )
+
+        user_prompt = f"Niche: {niche}\nTopic: {topic}\n"
+        if title:
+            user_prompt += f"Title: {title}\n"
+
+        raw = await self._call_api(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            model=MODEL_HAIKU,
+            max_tokens=200,
+            temperature=0.3,
+        )
+
+        categories = self._parse_json_response(raw, default=[])
+        if not isinstance(categories, list) or not categories:
+            niche_label = niche.replace("_", " ").title()
+            categories = [f"{niche_label} > General"]
+
+        logger.info(
+            "Suggested %d categories for %s/%s",
+            len(categories), niche, topic,
+        )
+        return categories
+
+    def suggest_categories_sync(
+        self, niche: str, topic: str, title: str = "",
+    ) -> list[str]:
+        """Synchronous wrapper for suggest_categories."""
+        return asyncio.run(self.suggest_categories(niche, topic, title))
+
+    # ==================================================================
+    # SALES TRACKING
+    # ==================================================================
+
+    def record_sale(
+        self,
+        book_id: str,
+        royalty_amount: float,
+        units: int = 1,
+        sale_type: str = "ebook",
+        sale_date: Optional[str] = None,
+        marketplace: str = "amazon.com",
+        notes: str = "",
+    ) -> SaleRecord:
+        """
+        Record a sales transaction.
+
+        Args:
+            book_id: Book UUID.
+            royalty_amount: Royalty earned in USD.
+            units: Number of units sold.
+            sale_type: "ebook", "paperback", or "kenp".
+            sale_date: Sale date (YYYY-MM-DD), defaults to today.
+            marketplace: Amazon marketplace domain.
+            notes: Optional notes.
+
+        Returns:
+            The created SaleRecord.
+        """
+        book = self.get_book(book_id)  # validate book exists
+
+        record = SaleRecord(
+            book_id=book_id,
+            sale_date=sale_date or _today_iso(),
+            units=units,
+            royalty_amount=royalty_amount,
+            sale_type=sale_type,
+            marketplace=marketplace,
+            notes=notes,
+        )
+
+        self.sales.append(record)
+
+        # Update book totals
+        book.total_sales += units
+        book.total_royalties = _round_amount(
+            book.total_royalties + royalty_amount
+        )
+        book.updated_at = _now_iso()
+
+        self._save_sales()
+        self._save_books()
+
+        logger.info(
+            "Recorded sale: %d unit(s) of '%s' -- $%.2f royalty",
+            units, book.title, royalty_amount,
+        )
+        return record
+
+    def daily_royalties(self, iso_date: Optional[str] = None) -> dict:
+        """
+        Get total royalties for a specific day.
+
+        Args:
+            iso_date: Date string (YYYY-MM-DD), defaults to today.
+
+        Returns:
+            Dict with date, total_royalties, total_units, and
+            by_book breakdown.
+        """
+        target = iso_date or _today_iso()
+        day_sales = [s for s in self.sales if s.sale_date == target]
+
+        total_royalties = _round_amount(
+            sum(s.royalty_amount for s in day_sales)
+        )
+        total_units = sum(s.units for s in day_sales)
+
+        by_book: dict[str, dict] = {}
+        for sale in day_sales:
+            if sale.book_id not in by_book:
+                by_book[sale.book_id] = {
+                    "units": 0, "royalties": 0.0, "title": "",
+                }
+            by_book[sale.book_id]["units"] += sale.units
+            by_book[sale.book_id]["royalties"] = _round_amount(
+                by_book[sale.book_id]["royalties"] + sale.royalty_amount
+            )
+            try:
+                book = self.get_book(sale.book_id)
+                by_book[sale.book_id]["title"] = book.title
+            except KeyError:
+                by_book[sale.book_id]["title"] = "(unknown)"
+
+        return {
+            "date": target,
+            "total_royalties": total_royalties,
+            "total_units": total_units,
+            "by_book": by_book,
+        }
+
+    def monthly_report(
+        self,
+        year: Optional[int] = None,
+        month: Optional[int] = None,
+    ) -> SalesReport:
+        """
+        Generate a monthly sales report.
+
+        Args:
+            year: Year (defaults to current).
+            month: Month 1-12 (defaults to current).
+
+        Returns:
+            SalesReport with full breakdown.
+        """
+        today = _now_utc().date()
+        y = year or today.year
+        m = month or today.month
+
+        start = date(y, m, 1)
+        if m == 12:
+            end = date(y + 1, 1, 1) - timedelta(days=1)
+        else:
+            end = date(y, m + 1, 1) - timedelta(days=1)
+
+        return self._build_sales_report(
+            period="month",
+            start_date=start.isoformat(),
+            end_date=end.isoformat(),
+        )
+
+    def _build_sales_report(
+        self,
+        period: str,
+        start_date: str,
+        end_date: str,
+    ) -> SalesReport:
+        """Build a SalesReport for the given date range."""
+        s = _parse_date(start_date)
+        e = _parse_date(end_date)
+
+        range_sales = [
+            sale for sale in self.sales
+            if s <= _parse_date(sale.sale_date) <= e
+        ]
+
+        total_units = sum(sale.units for sale in range_sales)
+        total_royalties = _round_amount(
+            sum(sale.royalty_amount for sale in range_sales)
+        )
+
+        # By book
+        by_book: dict[str, dict] = {}
+        for sale in range_sales:
+            bid = sale.book_id
+            if bid not in by_book:
+                try:
+                    title = self.get_book(bid).title
+                except KeyError:
+                    title = "(unknown)"
+                by_book[bid] = {
+                    "title": title, "units": 0, "royalties": 0.0,
+                }
+            by_book[bid]["units"] += sale.units
+            by_book[bid]["royalties"] = _round_amount(
+                by_book[bid]["royalties"] + sale.royalty_amount
+            )
+
+        # By type
+        by_type: dict[str, dict] = {}
+        for sale in range_sales:
+            st = sale.sale_type
+            if st not in by_type:
+                by_type[st] = {"units": 0, "royalties": 0.0}
+            by_type[st]["units"] += sale.units
+            by_type[st]["royalties"] = _round_amount(
+                by_type[st]["royalties"] + sale.royalty_amount
+            )
+
+        # By niche
+        by_niche: dict[str, dict] = {}
+        for sale in range_sales:
+            try:
+                niche = self.get_book(sale.book_id).niche
+            except KeyError:
+                niche = "unknown"
+            if niche not in by_niche:
+                by_niche[niche] = {"units": 0, "royalties": 0.0}
+            by_niche[niche]["units"] += sale.units
+            by_niche[niche]["royalties"] = _round_amount(
+                by_niche[niche]["royalties"] + sale.royalty_amount
+            )
+
+        # Daily breakdown
+        daily: dict[str, dict] = {}
+        for sale in range_sales:
+            d = sale.sale_date
+            if d not in daily:
+                daily[d] = {"date": d, "units": 0, "royalties": 0.0}
+            daily[d]["units"] += sale.units
+            daily[d]["royalties"] = _round_amount(
+                daily[d]["royalties"] + sale.royalty_amount
+            )
+        daily_breakdown = sorted(daily.values(), key=lambda x: x["date"])
+
+        # Top performers
+        top_performers = sorted(
+            [{"book_id": k, **v} for k, v in by_book.items()],
+            key=lambda x: x["royalties"],
+            reverse=True,
+        )[:10]
+
+        # Projections (linear from days elapsed)
+        projections: dict = {}
+        elapsed_days = max(1, (_now_utc().date() - s).days + 1)
+        remaining_days = max(0, (e - _now_utc().date()).days)
+
+        if elapsed_days > 0 and total_royalties > 0:
+            daily_avg = total_royalties / elapsed_days
+            projected_total = _round_amount(
+                total_royalties + (daily_avg * remaining_days)
+            )
+            projections = {
+                "projected_total": projected_total,
+                "daily_average": _round_amount(daily_avg),
+                "remaining_days": remaining_days,
+            }
+
+        return SalesReport(
+            period=period,
+            start_date=start_date,
+            end_date=end_date,
+            total_units=total_units,
+            total_royalties=total_royalties,
+            by_book=by_book,
+            by_type=by_type,
+            by_niche=by_niche,
+            daily_breakdown=daily_breakdown,
+            top_performers=top_performers,
+            projections=projections,
+        )
+
+    def royalty_projections(self, period: str = "month") -> dict:
+        """
+        Project royalties for the remainder of the period.
+
+        Args:
+            period: "month" or "year".
+
+        Returns:
+            Projection dict.
+        """
+        if period == "year":
+            start, end = _year_bounds()
+        else:
+            start, end = _month_bounds()
+
+        report = self._build_sales_report(period, start, end)
+        return report.projections
+
+    # ==================================================================
+    # PUBLISHING WORKFLOW
+    # ==================================================================
+
+    def prepare_for_publish(self, book_id: str) -> PublishChecklist:
+        """
+        Run a pre-publish validation checklist on a book.
+
+        Args:
+            book_id: Book UUID.
+
+        Returns:
+            PublishChecklist with pass/fail for each criterion.
+        """
+        book = self.get_book(book_id)
+        checklist = PublishChecklist(book_id=book_id)
+        issues: list[str] = []
+
+        # Title
+        checklist.title_set = bool(book.title and len(book.title) >= 3)
+        if not checklist.title_set:
+            issues.append(
+                "Title is missing or too short (min 3 characters)"
+            )
+
+        # Subtitle
+        checklist.subtitle_set = bool(book.subtitle)
+        if not checklist.subtitle_set:
+            issues.append(
+                "Subtitle is not set (recommended for discoverability)"
+            )
+
+        # Description
+        checklist.description_set = bool(
+            book.description and len(book.description) >= 50
+        )
+        if not checklist.description_set:
+            issues.append(
+                "Description is missing or too short (min 50 characters)"
+            )
+
+        # Keywords
+        checklist.keywords_set = len(book.keywords) >= 3
+        if not checklist.keywords_set:
+            issues.append(
+                f"Only {len(book.keywords)} keywords set "
+                "(need at least 3, max 7)"
+            )
+
+        # Categories
+        checklist.categories_set = len(book.categories) >= 1
+        if not checklist.categories_set:
+            issues.append("No categories set (need at least 1)")
+
+        # Manuscript
+        checklist.manuscript_ready = bool(
+            book.manuscript_path
+            and Path(book.manuscript_path).exists()
+        )
+        if not checklist.manuscript_ready:
+            issues.append(
+                "Manuscript file not found or not compiled"
+            )
+
+        # Cover
+        checklist.cover_approved = (
+            book.cover_status == CoverStatus.APPROVED.value
+        )
+        if not checklist.cover_approved:
+            issues.append(
+                f"Cover status is '{book.cover_status}' "
+                "(needs 'approved')"
+            )
+
+        # Price
+        checklist.price_set = (
+            KDP_MIN_EBOOK_PRICE
+            <= book.price_ebook
+            <= KDP_MAX_EBOOK_PRICE
+        )
+        if not checklist.price_set:
+            issues.append(
+                f"Ebook price ${book.price_ebook} outside KDP range "
+                f"(${KDP_MIN_EBOOK_PRICE}-${KDP_MAX_EBOOK_PRICE})"
+            )
+
+        # Word count
+        if book.book_type in ("nonfiction", "guide"):
+            checklist.word_count_meets_minimum = (
+                book.word_count >= MIN_NONFICTION_WORDS
+            )
+            if not checklist.word_count_meets_minimum:
+                issues.append(
+                    f"Word count {book.word_count:,} below minimum "
+                    f"{MIN_NONFICTION_WORDS:,} for {book.book_type}"
+                )
+        elif book.book_type in ("journal", "planner", "workbook"):
+            checklist.word_count_meets_minimum = (
+                book.page_count >= MIN_JOURNAL_PAGES
+            )
+            if not checklist.word_count_meets_minimum:
+                issues.append(
+                    f"Page count {book.page_count} below minimum "
+                    f"{MIN_JOURNAL_PAGES} for {book.book_type}"
+                )
+        else:
+            checklist.word_count_meets_minimum = True
+
+        # All chapters written
+        checklist.all_chapters_written = (
+            book.chapter_count > 0
+            and book.chapters_completed >= book.chapter_count
+        )
+        if not checklist.all_chapters_written:
+            issues.append(
+                f"Chapters: {book.chapters_completed}/"
+                f"{book.chapter_count} completed"
+            )
+
+        checklist.issues = issues
+        checklist.passed = len(issues) == 0
+
+        logger.info(
+            "Publish checklist for '%s': %s (%d issues)",
+            book.title,
+            "PASSED" if checklist.passed else "FAILED",
+            len(issues),
+        )
+        return checklist
+
+    def track_status(self, book_id: str, new_status: str) -> KDPBook:
+        """
+        Manually set the pipeline status of a book.
+
+        Args:
+            book_id: Book UUID.
+            new_status: Target status string.
+
+        Returns:
+            The updated KDPBook.
+        """
+        BookStatus.from_string(new_status)
+        book = self.get_book(book_id)
+        old_status = book.status
+        book.status = new_status
+        if new_status == BookStatus.PUBLISHED.value:
+            book.publish_date = book.publish_date or _today_iso()
+        book.updated_at = _now_iso()
+        self._save_books()
+
+        logger.info(
+            "Status change for '%s': %s -> %s",
+            book.title, old_status, new_status,
+        )
+        return book
+
+    # ==================================================================
+    # SERIES MANAGEMENT
+    # ==================================================================
+
+    def create_series(
+        self,
+        name: str,
+        niche: str,
+        description: str = "",
+        planned_count: int = 0,
+    ) -> BookSeries:
+        """
+        Create a new book series.
+
+        Args:
+            name: Series name.
+            niche: Series niche.
+            description: Series description.
+            planned_count: Number of planned books in the series.
+
+        Returns:
+            The created BookSeries.
+        """
+        _validate_niche(niche)
+
+        series = BookSeries(
+            name=name,
+            niche=niche,
+            description=description,
+            planned_count=planned_count,
+        )
+
+        self.series.append(series)
+        self._save_series()
+
+        logger.info(
+            "Created series '%s' [%s] -- id: %s",
+            name, niche, series.series_id[:8],
+        )
+        return series
+
+    def get_series(self, series_id: str) -> BookSeries:
+        """Get a series by ID. Raises KeyError if not found."""
+        for s in self.series:
+            if s.series_id == series_id:
+                return s
+        raise KeyError(f"Series not found: {series_id}")
+
+    def list_series(self, niche: Optional[str] = None) -> list[BookSeries]:
+        """List all series, optionally filtered by niche."""
+        results = list(self.series)
+        if niche:
+            _validate_niche(niche)
+            results = [s for s in results if s.niche == niche]
+        return results
+
+    def add_book_to_series(
+        self,
+        book_id: str,
+        series_id: str,
+        order: Optional[int] = None,
+    ) -> KDPBook:
+        """
+        Add a book to a series.
+
+        Args:
+            book_id: Book UUID.
+            series_id: Series UUID.
+            order: Position in series (auto-assigned if not provided).
+
+        Returns:
+            The updated KDPBook.
+        """
+        book = self.get_book(book_id)
+        series = self.get_series(series_id)
+
+        if book_id not in series.book_ids:
+            series.book_ids.append(book_id)
+        series.updated_at = _now_iso()
+
+        book.series_id = series_id
+        book.series_order = order or len(series.book_ids)
+        book.updated_at = _now_iso()
+
+        self._save_series()
+        self._save_books()
+
+        logger.info(
+            "Added '%s' to series '%s' (position %d)",
+            book.title, series.name, book.series_order,
+        )
+        return book
+
+    async def suggest_next_in_series(self, series_id: str) -> dict:
+        """
+        Suggest the next book in a series using Claude Haiku.
+
+        Args:
+            series_id: Series UUID.
+
+        Returns:
+            Dict with suggested title, subtitle, description,
+            and keywords.
+        """
+        series = self.get_series(series_id)
+
+        existing_titles = []
+        for bid in series.book_ids:
+            try:
+                book = self.get_book(bid)
+                existing_titles.append(book.title)
+            except KeyError:
+                continue
+
+        system_prompt = (
+            "You are a KDP series strategist. Suggest the next book "
+            "in a series based on existing titles and the series "
+            "theme.\n\n"
+            "Respond with ONLY a JSON object containing:\n"
+            "- title: str\n"
+            "- subtitle: str\n"
+            "- description: str (2-3 sentences)\n"
+            "- keywords: [str] (up to 7)\n"
+            "- reasoning: str"
+        )
+
+        titles_str = ", ".join(existing_titles) if existing_titles else "None yet"
+        planned_str = str(series.planned_count) if series.planned_count else "Open-ended"
+
+        user_prompt = (
+            f"Series: {series.name}\n"
+            f"Niche: {series.niche}\n"
+            f"Description: {series.description}\n"
+            f"Existing books: {titles_str}\n"
+            f"Planned total: {planned_str}\n"
+            f"Position: Book #{len(existing_titles) + 1}\n"
+        )
+
+        raw = await self._call_api(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            model=MODEL_HAIKU,
+            max_tokens=MAX_TOKENS_SERIES_SUGGEST,
             temperature=0.7,
         )
 
-        layouts = self._parse_json_response(response, default=[])
-        if not isinstance(layouts, list):
-            layouts = []
+        suggestion = self._parse_json_response(raw, default={})
+        if not isinstance(suggestion, dict) or "title" not in suggestion:
+            suggestion = {
+                "title": f"{series.name} Book {len(existing_titles) + 1}",
+                "subtitle": "",
+                "description": "Suggestion could not be generated.",
+                "keywords": [],
+                "reasoning": "Parse failed",
+            }
 
         logger.info(
-            "Generated %d tracker layouts for '%s' (%s)",
-            len(layouts), resolved, tracker_type,
+            "Suggested next book for series '%s': %s",
+            series.name, suggestion.get("title", "?"),
         )
-        return layouts
+        return suggestion
 
-    # ------------------------------------------------------------------
-    # JSON Response Parsing Helper
-    # ------------------------------------------------------------------
+    def suggest_next_in_series_sync(self, series_id: str) -> dict:
+        """Synchronous wrapper for suggest_next_in_series."""
+        return asyncio.run(self.suggest_next_in_series(series_id))
+
+    # ==================================================================
+    # NICHE MANAGEMENT
+    # ==================================================================
+
+    def books_by_niche(self) -> dict[str, list[KDPBook]]:
+        """Group all books by niche."""
+        result: dict[str, list[KDPBook]] = {n: [] for n in VALID_NICHES}
+        for book in self.books:
+            niche = book.niche if book.niche in VALID_NICHES else "witchcraft"
+            result[niche].append(book)
+        return result
+
+    def niche_summary(self) -> list[dict]:
+        """
+        Get summary statistics per niche.
+
+        Returns:
+            List of dicts with niche, book_count, published_count,
+            total_royalties, and avg_royalties_per_book.
+        """
+        by_niche = self.books_by_niche()
+        summaries: list[dict] = []
+
+        for niche, books in by_niche.items():
+            if not books:
+                continue
+            published = [
+                b for b in books
+                if b.status == BookStatus.PUBLISHED.value
+            ]
+            total_royalties = _round_amount(
+                sum(b.total_royalties for b in books)
+            )
+            avg = (
+                _round_amount(total_royalties / len(books))
+                if books else 0.0
+            )
+
+            summaries.append({
+                "niche": niche,
+                "book_count": len(books),
+                "published_count": len(published),
+                "in_progress_count": len(books) - len(published),
+                "total_royalties": total_royalties,
+                "avg_royalties_per_book": avg,
+            })
+
+        return sorted(
+            summaries, key=lambda x: x["total_royalties"], reverse=True,
+        )
+
+    # ==================================================================
+    # JSON RESPONSE PARSING
+    # ==================================================================
 
     @staticmethod
     def _parse_json_response(response: str, default: Any = None) -> Any:
         """
-        Parse a JSON response from Claude, handling common formatting issues.
+        Parse a JSON response from Claude, handling common issues.
 
-        Strips markdown code fences and leading/trailing text before parsing.
+        Strips markdown code fences and leading/trailing text.
         """
         if default is None:
             default = {}
@@ -2442,15 +2240,12 @@ class KDPPublisher:
         # Remove markdown code fences
         if text.startswith("```"):
             lines = text.split("\n")
-            # Remove first line (```json or ```)
             lines = lines[1:]
-            # Remove last line if it's ```
             if lines and lines[-1].strip() == "```":
                 lines = lines[:-1]
             text = "\n".join(lines).strip()
 
-        # Try to find JSON object or array in the text
-        # Look for the first { or [
+        # Find JSON start
         json_start = -1
         for i, ch in enumerate(text):
             if ch in ("{", "["):
@@ -2461,7 +2256,7 @@ class KDPPublisher:
             logger.warning("No JSON found in response: %s...", text[:200])
             return default
 
-        # Find matching end
+        # Find matching end bracket
         open_char = text[json_start]
         close_char = "}" if open_char == "{" else "]"
         depth = 0
@@ -2490,344 +2285,742 @@ class KDPPublisher:
                     json_end = i + 1
                     break
 
-        if json_end == -1:
-            # Try parsing the whole remainder
-            json_text = text[json_start:]
-        else:
-            json_text = text[json_start:json_end]
+        json_text = (
+            text[json_start:json_end]
+            if json_end != -1
+            else text[json_start:]
+        )
 
         try:
             return json.loads(json_text)
         except json.JSONDecodeError as exc:
-            logger.warning("Failed to parse JSON response: %s (text: %s...)", exc, json_text[:200])
+            logger.warning("JSON parse failed: %s", exc)
             return default
 
+    # ==================================================================
+    # REPORTING / FORMATTING
+    # ==================================================================
 
-# ---------------------------------------------------------------------------
-# Singleton Access
-# ---------------------------------------------------------------------------
+    def format_status_report(self) -> str:
+        """Format a comprehensive status report for all books."""
+        lines: list[str] = []
+
+        lines.append("KDP PUBLISHER STATUS")
+        lines.append(f"{'=' * 55}")
+        lines.append(f"Total books: {len(self.books)}")
+
+        # Count by status
+        status_counts: dict[str, int] = {}
+        for book in self.books:
+            status_counts[book.status] = (
+                status_counts.get(book.status, 0) + 1
+            )
+
+        if status_counts:
+            lines.append("\nPipeline:")
+            for status in BookStatus:
+                count = status_counts.get(status.value, 0)
+                if count > 0:
+                    lines.append(f"  {status.value:<12s} {count}")
+
+        # Recent activity
+        active = [
+            b for b in self.books
+            if b.status not in (
+                BookStatus.PUBLISHED.value, BookStatus.PAUSED.value,
+            )
+        ]
+        if active:
+            lines.append(f"\nActive projects ({len(active)}):")
+            for book in sorted(
+                active, key=lambda b: b.updated_at, reverse=True,
+            )[:10]:
+                progress = book.pipeline_progress
+                lines.append(
+                    f"  [{book.status:<10s}] "
+                    f"{book.title[:40]:<40s} "
+                    f"({progress:.0f}%)"
+                )
+
+        # Sales summary
+        total_royalties = _round_amount(
+            sum(b.total_royalties for b in self.books)
+        )
+        total_sales = sum(b.total_sales for b in self.books)
+        if total_sales > 0:
+            lines.append(
+                f"\nLifetime: {total_sales} units, "
+                f"${total_royalties:,.2f} royalties"
+            )
+
+        # Niche breakdown
+        niche_data = self.niche_summary()
+        if niche_data:
+            lines.append("\nBy niche:")
+            for nd in niche_data[:8]:
+                lines.append(
+                    f"  {nd['niche']:<16s} "
+                    f"{nd['book_count']} books "
+                    f"({nd['published_count']} pub) "
+                    f"${nd['total_royalties']:>8,.2f}"
+                )
+
+        return "\n".join(lines)
+
+    def format_sales_report(
+        self, report: SalesReport, style: str = "text",
+    ) -> str:
+        """
+        Format a SalesReport for display.
+
+        Args:
+            report: The report to format.
+            style: "text", "markdown", or "json".
+
+        Returns:
+            Formatted string.
+        """
+        if style == "json":
+            return json.dumps(report.to_dict(), indent=2, default=str)
+
+        if style == "markdown":
+            return self._format_sales_markdown(report)
+
+        return self._format_sales_text(report)
+
+    def _format_sales_text(self, report: SalesReport) -> str:
+        """Plain text sales report."""
+        lines: list[str] = []
+        lines.append(f"KDP SALES REPORT ({report.period.upper()})")
+        lines.append(f"{report.start_date} to {report.end_date}")
+        lines.append(f"{'=' * 45}")
+        lines.append(f"Total units:     {report.total_units}")
+        lines.append(f"Total royalties: ${report.total_royalties:,.2f}")
+        lines.append("")
+
+        if report.by_type:
+            lines.append("By type:")
+            for st, data in sorted(
+                report.by_type.items(),
+                key=lambda x: x[1]["royalties"],
+                reverse=True,
+            ):
+                lines.append(
+                    f"  {st:<12s} {data['units']:>5d} units  "
+                    f"${data['royalties']:>8,.2f}"
+                )
+            lines.append("")
+
+        if report.top_performers:
+            lines.append("Top performers:")
+            for i, tp in enumerate(report.top_performers[:5], 1):
+                lines.append(
+                    f"  {i}. {tp.get('title', '?')[:35]:<35s} "
+                    f"${tp['royalties']:>8,.2f}"
+                )
+            lines.append("")
+
+        if report.by_niche:
+            lines.append("By niche:")
+            for niche, data in sorted(
+                report.by_niche.items(),
+                key=lambda x: x[1]["royalties"],
+                reverse=True,
+            ):
+                lines.append(
+                    f"  {niche:<16s} ${data['royalties']:>8,.2f}"
+                )
+            lines.append("")
+
+        proj = report.projections
+        if proj:
+            lines.append("Projections:")
+            lines.append(
+                f"  Daily avg:       "
+                f"${proj.get('daily_average', 0):,.2f}"
+            )
+            lines.append(
+                f"  Projected total: "
+                f"${proj.get('projected_total', 0):,.2f}"
+            )
+            lines.append(
+                f"  Remaining days:  "
+                f"{proj.get('remaining_days', 0)}"
+            )
+
+        return "\n".join(lines)
+
+    def _format_sales_markdown(self, report: SalesReport) -> str:
+        """Markdown sales report."""
+        lines: list[str] = []
+        lines.append(f"# KDP Sales Report: {report.period.title()}")
+        lines.append(
+            f"**Period:** {report.start_date} to {report.end_date}"
+        )
+        lines.append("")
+        lines.append(
+            f"## Total: ${report.total_royalties:,.2f} "
+            f"({report.total_units} units)"
+        )
+        lines.append("")
+
+        if report.top_performers:
+            lines.append("## Top Performers")
+            lines.append("| Rank | Title | Units | Royalties |")
+            lines.append("|------|-------|-------|-----------|")
+            for i, tp in enumerate(report.top_performers[:10], 1):
+                lines.append(
+                    f"| {i} | {tp.get('title', '?')[:40]} | "
+                    f"{tp['units']} | ${tp['royalties']:,.2f} |"
+                )
+            lines.append("")
+
+        if report.by_niche:
+            lines.append("## By Niche")
+            lines.append("| Niche | Units | Royalties |")
+            lines.append("|-------|-------|-----------|")
+            for niche, data in sorted(
+                report.by_niche.items(),
+                key=lambda x: x[1]["royalties"],
+                reverse=True,
+            ):
+                lines.append(
+                    f"| {niche} | {data['units']} | "
+                    f"${data['royalties']:,.2f} |"
+                )
+
+        return "\n".join(lines)
+
+    # ==================================================================
+    # ASYNC WRAPPERS
+    # ==================================================================
+
+    async def alist_books(self, **kwargs: Any) -> list[KDPBook]:
+        """Async wrapper for list_books."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None, lambda: self.list_books(**kwargs),
+        )
+
+    async def aadd_book(
+        self, title: str, niche: str, **kwargs: Any,
+    ) -> KDPBook:
+        """Async wrapper for add_book."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None, lambda: self.add_book(title, niche, **kwargs),
+        )
+
+    async def arecord_sale(
+        self, book_id: str, royalty_amount: float, **kwargs: Any,
+    ) -> SaleRecord:
+        """Async wrapper for record_sale."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None,
+            lambda: self.record_sale(book_id, royalty_amount, **kwargs),
+        )
+
+    async def amonthly_report(self, **kwargs: Any) -> SalesReport:
+        """Async wrapper for monthly_report."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None, lambda: self.monthly_report(**kwargs),
+        )
+
+    async def aformat_status_report(self) -> str:
+        """Async wrapper for format_status_report."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.format_status_report)
+
+
+# ===================================================================
+# Module-Level Convenience API
+# ===================================================================
 
 _publisher_instance: Optional[KDPPublisher] = None
 
 
-def get_publisher(data_dir: Optional[Path] = None) -> KDPPublisher:
-    """
-    Return the singleton KDPPublisher instance.
-
-    Parameters
-    ----------
-    data_dir : Path, optional
-        Override the default data directory. If provided when an instance
-        already exists, a new instance is created.
-    """
+def get_publisher() -> KDPPublisher:
+    """Return the singleton KDPPublisher instance."""
     global _publisher_instance
-    if _publisher_instance is None or data_dir is not None:
-        _publisher_instance = KDPPublisher(data_dir=data_dir)
+    if _publisher_instance is None:
+        _publisher_instance = KDPPublisher()
     return _publisher_instance
 
 
-# ---------------------------------------------------------------------------
-# CLI — Command-Line Interface
-# ---------------------------------------------------------------------------
+# ===================================================================
+# CLI Entry Point
+# ===================================================================
 
-def _build_cli_parser() -> argparse.ArgumentParser:
-    """Build the argument parser for the KDP publisher CLI."""
+
+def _cli_main() -> None:
+    """CLI entry point: python -m src.kdp_publisher <command> [options]."""
+
     parser = argparse.ArgumentParser(
         prog="kdp_publisher",
-        description="Amazon KDP Book Creation Pipeline — OpenClaw Empire",
+        description="KDP Publisher Pipeline -- OpenClaw Empire CLI",
     )
-    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+    sub = parser.add_subparsers(dest="command", help="Available commands")
 
-    # -- new --
-    new_parser = subparsers.add_parser("new", help="Create a new book project")
-    new_parser.add_argument("--title", required=True, help="Book title")
-    new_parser.add_argument("--niche", required=True, help="Target niche")
-    new_parser.add_argument(
-        "--type", default="nonfiction", dest="book_type",
-        choices=["nonfiction", "journal", "planner", "tracker"],
+    # --- list ---
+    p_list = sub.add_parser("list", help="List all books")
+    p_list.add_argument("--niche", help="Filter by niche")
+    p_list.add_argument("--status", help="Filter by pipeline status")
+    p_list.add_argument(
+        "--type", dest="book_type", help="Filter by book type",
+    )
+
+    # --- add ---
+    p_add = sub.add_parser("add", help="Add a new book project")
+    p_add.add_argument("--title", required=True, help="Book title")
+    p_add.add_argument("--niche", required=True, help="Book niche")
+    p_add.add_argument(
+        "--type", dest="book_type", default="nonfiction",
         help="Book type (default: nonfiction)",
     )
-    new_parser.add_argument("--subtitle", default="", help="Book subtitle")
-    new_parser.add_argument("--series", default=None, help="Series name override")
-
-    # -- ideas --
-    ideas_parser = subparsers.add_parser("ideas", help="Generate book ideas for a niche")
-    ideas_parser.add_argument("--niche", required=True, help="Target niche")
-    ideas_parser.add_argument(
-        "--count", type=int, default=10, help="Number of ideas (default: 10)"
+    p_add.add_argument("--subtitle", default="", help="Book subtitle")
+    p_add.add_argument(
+        "--keywords", default="", help="Comma-separated keywords",
+    )
+    p_add.add_argument(
+        "--price-ebook", type=float, default=4.99,
+        help="Ebook price (default: 4.99)",
+    )
+    p_add.add_argument(
+        "--price-paperback", type=float, default=12.99,
+        help="Paperback price (default: 12.99)",
     )
 
-    # -- outline --
-    outline_parser = subparsers.add_parser("outline", help="Generate a book outline")
-    outline_parser.add_argument("--project", required=True, help="Project ID")
-    outline_parser.add_argument(
-        "--chapters", type=int, default=12, help="Number of chapters (default: 12)"
+    # --- outline ---
+    p_out = sub.add_parser("outline", help="Generate a book outline")
+    p_out.add_argument("--book-id", required=True, help="Book UUID")
+    p_out.add_argument(
+        "--chapters", type=int, default=10,
+        help="Number of chapters (default: 10)",
     )
 
-    # -- write --
-    write_parser = subparsers.add_parser("write", help="Write chapter(s)")
-    write_parser.add_argument("--project", required=True, help="Project ID")
-    write_parser.add_argument("--chapter", type=int, default=None, help="Chapter number")
-    write_parser.add_argument(
-        "--all", action="store_true", dest="write_all", help="Write all chapters"
+    # --- write ---
+    p_wr = sub.add_parser("write", help="Write a chapter")
+    p_wr.add_argument("--book-id", required=True, help="Book UUID")
+    p_wr.add_argument(
+        "--chapter", type=int, required=True, help="Chapter number",
     )
-    write_parser.add_argument(
-        "--start-from", type=int, default=1, help="Start from chapter N (with --all)"
-    )
-
-    # -- edit --
-    edit_parser = subparsers.add_parser("edit", help="Edit a chapter")
-    edit_parser.add_argument("--project", required=True, help="Project ID")
-    edit_parser.add_argument("--chapter", type=int, required=True, help="Chapter number")
-
-    # -- compile --
-    compile_parser = subparsers.add_parser("compile", help="Compile the manuscript")
-    compile_parser.add_argument("--project", required=True, help="Project ID")
-    compile_parser.add_argument("--output", default=None, help="Output file path")
-
-    # -- status --
-    status_parser = subparsers.add_parser("status", help="Show all projects")
-    status_parser.add_argument("--niche", default=None, help="Filter by niche")
-    status_parser.add_argument("--filter", default=None, dest="status_filter", help="Filter by status")
-
-    # -- pipeline --
-    pipeline_parser = subparsers.add_parser(
-        "pipeline", help="Run the full book creation pipeline"
-    )
-    pipeline_parser.add_argument("--title", required=True, help="Book title")
-    pipeline_parser.add_argument("--niche", required=True, help="Target niche")
-    pipeline_parser.add_argument(
-        "--chapters", type=int, default=12, help="Number of chapters (default: 12)"
-    )
-    pipeline_parser.add_argument(
-        "--no-edit", action="store_true", help="Skip editing passes"
+    p_wr.add_argument(
+        "--words", type=int, default=3000,
+        help="Target word count (default: 3000)",
     )
 
-    return parser
+    # --- compile ---
+    p_comp = sub.add_parser("compile", help="Compile manuscript")
+    p_comp.add_argument("--book-id", required=True, help="Book UUID")
 
-
-# ---------------------------------------------------------------------------
-# CLI Command Handlers
-# ---------------------------------------------------------------------------
-
-async def _run_new(args: argparse.Namespace) -> None:
-    """Execute the 'new' CLI command."""
-    pub = get_publisher()
-    kwargs: dict[str, Any] = {}
-    if args.subtitle:
-        kwargs["subtitle"] = args.subtitle
-    if args.series:
-        kwargs["series"] = args.series
-
-    project = await pub.create_project(
-        title=args.title,
-        niche=args.niche,
-        book_type=args.book_type,
-        **kwargs,
+    # --- keywords ---
+    p_kw = sub.add_parser("keywords", help="Research KDP keywords")
+    p_kw.add_argument("--niche", required=True, help="Niche to research")
+    p_kw.add_argument("--topic", required=True, help="Topic within niche")
+    p_kw.add_argument(
+        "--count", type=int, default=7,
+        help="Number of keywords (max 7)",
     )
 
-    print(f"\nProject created successfully!")
-    print(f"  ID:     {project.project_id}")
-    print(f"  Title:  {project.title}")
-    print(f"  Niche:  {project.niche}")
-    print(f"  Type:   {project.book_type}")
-    print(f"  Series: {project.series or 'Standalone'}")
-    print(f"  Target: {project.target_word_count:,} words")
-    print(f"  Dir:    {pub._project_dir(project.project_id)}")
+    # --- competition ---
+    p_cmp = sub.add_parser("competition", help="Analyze competition")
+    p_cmp.add_argument("--niche", required=True, help="Niche")
+    p_cmp.add_argument("--topic", required=True, help="Topic")
 
+    # --- categories ---
+    p_cat = sub.add_parser("categories", help="Suggest BISAC categories")
+    p_cat.add_argument("--niche", required=True, help="Niche")
+    p_cat.add_argument("--topic", required=True, help="Topic")
+    p_cat.add_argument("--title", default="", help="Book title (optional)")
 
-async def _run_ideas(args: argparse.Namespace) -> None:
-    """Execute the 'ideas' CLI command."""
-    pub = get_publisher()
-    ideas = await pub.generate_book_ideas(args.niche, count=args.count)
+    # --- cover ---
+    p_cov = sub.add_parser("cover", help="Generate cover prompt")
+    p_cov.add_argument("--book-id", required=True, help="Book UUID")
 
-    print(f"\nGenerated {len(ideas)} book ideas for '{args.niche}':\n")
-    for i, idea in enumerate(ideas, 1):
-        print(f"  {i}. {idea.get('title', 'Untitled')}")
-        if idea.get("subtitle"):
-            print(f"     {idea['subtitle']}")
-        if idea.get("description"):
-            desc = idea["description"][:120]
-            print(f"     {desc}...")
-        if idea.get("market_angle"):
-            angle = idea["market_angle"][:100]
-            print(f"     Market: {angle}...")
-        print()
+    # --- sales ---
+    p_sal = sub.add_parser("sales", help="Sales operations")
+    p_sal.add_argument(
+        "--record", action="store_true", help="Record a sale",
+    )
+    p_sal.add_argument("--book-id", help="Book UUID")
+    p_sal.add_argument("--amount", type=float, help="Royalty amount")
+    p_sal.add_argument(
+        "--units", type=int, default=1, help="Units sold",
+    )
+    p_sal.add_argument(
+        "--type", dest="sale_type", default="ebook",
+        help="Sale type (ebook/paperback/kenp)",
+    )
+    p_sal.add_argument("--date", help="Sale date YYYY-MM-DD")
+    p_sal.add_argument(
+        "--daily", action="store_true", help="Show daily summary",
+    )
 
+    # --- report ---
+    p_rep = sub.add_parser("report", help="Sales report")
+    p_rep.add_argument(
+        "--period", choices=["month", "year"], default="month",
+        help="Report period",
+    )
+    p_rep.add_argument(
+        "--format", choices=["text", "markdown", "json"],
+        default="text", help="Output format",
+    )
 
-async def _run_outline(args: argparse.Namespace) -> None:
-    """Execute the 'outline' CLI command."""
-    pub = get_publisher()
-    outline = await pub.generate_outline(args.project, chapters=args.chapters)
+    # --- status ---
+    sub.add_parser("status", help="Show pipeline status overview")
 
-    print(f"\nOutline for '{outline.title}':")
-    print(f"  Subtitle: {outline.subtitle}")
-    print(f"  Target:   {outline.target_word_count:,} words (~{outline.estimated_page_count} pages)")
-    print(f"\n  Front Matter: {', '.join(outline.front_matter)}")
-    print(f"\n  Chapters:")
-    for i, (title, summary) in enumerate(
-        zip(outline.chapter_titles, outline.chapter_summaries), 1
-    ):
-        print(f"    {i:2d}. {title}")
-        print(f"        {summary[:100]}...")
-    print(f"\n  Back Matter: {', '.join(outline.back_matter)}")
+    # --- search ---
+    p_sr = sub.add_parser("search", help="Search books")
+    p_sr.add_argument("--query", required=True, help="Search term")
 
+    # --- advance ---
+    p_adv = sub.add_parser("advance", help="Advance book to next stage")
+    p_adv.add_argument("--book-id", required=True, help="Book UUID")
 
-async def _run_write(args: argparse.Namespace) -> None:
-    """Execute the 'write' CLI command."""
-    pub = get_publisher()
+    # --- checklist ---
+    p_chk = sub.add_parser("checklist", help="Run publish checklist")
+    p_chk.add_argument("--book-id", required=True, help="Book UUID")
 
-    if args.write_all:
-        chapters = await pub.write_all_chapters(args.project, start_from=args.start_from)
-        print(f"\nWrote {len(chapters)} chapters:")
-        for ch in chapters:
-            print(f"  Chapter {ch.chapter_num}: '{ch.title}' ({ch.word_count:,} words)")
-    elif args.chapter is not None:
-        ch = await pub.write_chapter(args.project, args.chapter)
-        print(f"\nWrote Chapter {ch.chapter_num}: '{ch.title}'")
-        print(f"  Words:  {ch.word_count:,}")
-        print(f"  Status: {ch.status}")
-    else:
-        print("Error: specify --chapter N or --all")
+    # --- series ---
+    p_ser = sub.add_parser("series", help="Series management")
+    p_ser.add_argument(
+        "--list", action="store_true", help="List all series",
+    )
+    p_ser.add_argument(
+        "--create", action="store_true", help="Create a series",
+    )
+    p_ser.add_argument("--name", help="Series name")
+    p_ser.add_argument("--niche", help="Series niche")
+    p_ser.add_argument(
+        "--description", default="", help="Series description",
+    )
+    p_ser.add_argument(
+        "--planned", type=int, default=0, help="Planned book count",
+    )
+
+    # --- niche ---
+    sub.add_parser("niche", help="Niche summary")
+
+    args = parser.parse_args()
+
+    if not args.command:
+        parser.print_help()
         sys.exit(1)
 
-
-async def _run_edit(args: argparse.Namespace) -> None:
-    """Execute the 'edit' CLI command."""
-    pub = get_publisher()
-    ch = await pub.edit_chapter(args.project, args.chapter)
-    print(f"\nEdited Chapter {ch.chapter_num}: '{ch.title}'")
-    print(f"  Words:  {ch.word_count:,}")
-    print(f"  Status: {ch.status}")
-
-
-async def _run_compile(args: argparse.Namespace) -> None:
-    """Execute the 'compile' CLI command."""
-    pub = get_publisher()
-    manuscript = pub.compile_manuscript(args.project)
-    word_count = _count_words(manuscript)
-
-    if args.output:
-        output = pub.export_manuscript_md(args.project, args.output)
-    else:
-        output = pub.export_manuscript_md(args.project)
-
-    print(f"\nManuscript compiled:")
-    print(f"  Words:  {word_count:,}")
-    print(f"  Pages:  ~{_estimate_page_count(word_count)}")
-    print(f"  Saved:  {output}")
-
-    # Also show upload checklist
-    checklist = pub.get_upload_checklist(args.project)
-    print(f"\nUpload Checklist:")
-    for item in checklist:
-        icon = "[OK]" if item["status"] == "ready" else "[!!]" if item["status"] == "warning" else "[--]"
-        print(f"  {icon} {item['item']}: {item['detail']}")
-
-
-async def _run_status(args: argparse.Namespace) -> None:
-    """Execute the 'status' CLI command."""
-    pub = get_publisher()
-    projects = pub.list_projects(status=args.status_filter, niche=args.niche)
-
-    if not projects:
-        print("\nNo projects found.")
-        return
-
-    print(f"\n{'='*78}")
-    print(f"  KDP PROJECTS ({len(projects)} total)")
-    print(f"{'='*78}")
-
-    for p in projects:
-        status_icon = {
-            "ideation": "[IDEA]",
-            "outlined": "[OUTL]",
-            "writing": "[WRIT]",
-            "editing": "[EDIT]",
-            "formatting": "[FRMT]",
-            "review": "[REVW]",
-            "ready": "[DONE]",
-            "published": "[PUBL]",
-        }.get(p.status, "[????]")
-
-        chapters_done = sum(1 for ch in p.chapters if ch.status != "pending")
-        chapters_total = len(p.chapters)
-
-        print(f"\n  {status_icon} {p.title}")
-        print(f"          ID: {p.project_id[:12]}...")
-        print(f"       Niche: {p.niche}")
-        print(f"       Words: {p.word_count:,} / {p.target_word_count:,} ({p.progress_pct:.0f}%)")
-        print(f"    Chapters: {chapters_done}/{chapters_total}")
-        print(f"     Updated: {p.updated_at[:19]}")
-
-    print(f"\n{'='*78}")
-
-
-async def _run_pipeline(args: argparse.Namespace) -> None:
-    """Execute the 'pipeline' CLI command."""
-    pub = get_publisher()
-    project = await pub.run_pipeline(
-        title=args.title,
-        niche=args.niche,
-        chapters=args.chapters,
-        auto=not args.no_edit,
-    )
-
-    print(f"\n{'='*70}")
-    print(f"PIPELINE COMPLETE")
-    print(f"{'='*70}")
-    print(f"  Project ID: {project.project_id}")
-    print(f"  Title:      {project.title}")
-    print(f"  Subtitle:   {project.subtitle}")
-    print(f"  Niche:      {project.niche}")
-    print(f"  Words:      {project.word_count:,}")
-    print(f"  Pages:      ~{project.metadata.page_count_estimate}")
-    print(f"  Chapters:   {len(project.chapters)}")
-    print(f"  Status:     {project.status}")
-    print(f"  Directory:  {pub._project_dir(project.project_id)}")
-    print(f"{'='*70}")
-
-    # Show upload checklist
-    checklist = pub.get_upload_checklist(project.project_id)
-    print(f"\nUpload Checklist:")
-    for item in checklist:
-        icon = "[OK]" if item["status"] == "ready" else "[!!]" if item["status"] == "warning" else "[--]"
-        print(f"  {icon} {item['item']}: {item['detail']}")
-
-
-def main() -> None:
-    """CLI entry point for the KDP publisher."""
+    # Configure logging for CLI
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
+        datefmt="%H:%M:%S",
     )
 
-    parser = _build_cli_parser()
-    args = parser.parse_args()
+    publisher = get_publisher()
 
-    if args.command is None:
-        parser.print_help()
-        return
+    try:
+        _dispatch_cli(args, publisher)
+    except (KeyError, ValueError) as exc:
+        print(f"\nError: {exc}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as exc:
+        logger.exception("Unexpected error")
+        print(f"\nFatal: {exc}", file=sys.stderr)
+        sys.exit(2)
 
-    command_map = {
-        "new": _run_new,
-        "ideas": _run_ideas,
-        "outline": _run_outline,
-        "write": _run_write,
-        "edit": _run_edit,
-        "compile": _run_compile,
-        "status": _run_status,
-        "pipeline": _run_pipeline,
-    }
 
-    handler = command_map.get(args.command)
-    if handler is None:
-        parser.print_help()
-        return
+def _dispatch_cli(args: argparse.Namespace, pub: KDPPublisher) -> None:
+    """Dispatch CLI command to the appropriate handler."""
 
-    asyncio.run(handler(args))
+    if args.command == "list":
+        books = pub.list_books(
+            niche=args.niche,
+            status=args.status,
+            book_type=getattr(args, "book_type", None),
+        )
+        if not books:
+            print("No books found.")
+            return
+        print(f"\nKDP BOOKS ({len(books)})")
+        print(f"{'=' * 75}")
+        print(
+            f"  {'Status':<12s} {'Niche':<16s} "
+            f"{'Title':<35s} {'Progress':>8s}"
+        )
+        print(f"  {'-'*12} {'-'*16} {'-'*35} {'-'*8}")
+        for book in books:
+            print(
+                f"  {book.status:<12s} {book.niche:<16s} "
+                f"{book.title[:35]:<35s} "
+                f"{book.pipeline_progress:>6.0f}%"
+            )
+        print(f"\n  Total: {len(books)} books")
+
+    elif args.command == "add":
+        kwargs: dict[str, Any] = {
+            "book_type": args.book_type,
+            "subtitle": args.subtitle,
+            "price_ebook": args.price_ebook,
+            "price_paperback": args.price_paperback,
+        }
+        if args.keywords:
+            kwargs["keywords"] = [
+                k.strip() for k in args.keywords.split(",")
+            ]
+
+        book = pub.add_book(
+            title=args.title,
+            niche=args.niche,
+            **kwargs,
+        )
+        print(f"\nBook created:")
+        print(f"  ID:       {book.book_id}")
+        print(f"  Title:    {book.title}")
+        print(f"  Niche:    {book.niche}")
+        print(f"  Type:     {book.book_type}")
+        print(f"  Status:   {book.status}")
+        print(f"  Ebook:    ${book.price_ebook}")
+        print(f"  Project:  {book.project_dir}")
+
+    elif args.command == "outline":
+        print(f"Generating outline for {args.book_id[:8]}...")
+        outline = pub.generate_outline_sync(
+            args.book_id, args.chapters,
+        )
+        print(f"\nOutline ({len(outline)} chapters):")
+        for ch in outline:
+            print(
+                f"  Ch {ch.get('chapter_number', '?'):>2d}: "
+                f"{ch.get('title', 'Untitled')}"
+            )
+            summary = ch.get("summary", "")
+            if summary:
+                print(f"          {summary[:80]}")
+
+    elif args.command == "write":
+        print(
+            f"Writing chapter {args.chapter} for "
+            f"{args.book_id[:8]}..."
+        )
+        text = pub.generate_chapter_sync(
+            args.book_id, args.chapter, args.words,
+        )
+        wc = _word_count(text)
+        print(f"\nChapter written: {wc:,} words")
+        print(f"Preview:\n{text[:500]}...")
+
+    elif args.command == "compile":
+        print(f"Compiling manuscript for {args.book_id[:8]}...")
+        path = pub.compile_manuscript_sync(args.book_id)
+        book = pub.get_book(args.book_id)
+        print(f"\nManuscript compiled:")
+        print(f"  Path:       {path}")
+        print(f"  Words:      {book.word_count:,}")
+        print(f"  Pages:      ~{book.page_count}")
+
+    elif args.command == "keywords":
+        print(f"Researching keywords for {args.niche}/{args.topic}...")
+        keywords = pub.research_keywords_sync(
+            args.niche, args.topic, args.count,
+        )
+        print(f"\nKeywords ({len(keywords)}):")
+        for kw in keywords:
+            vol = kw.get("search_volume_estimate", "?")
+            comp = kw.get("competition_level", "?")
+            print(
+                f"  {kw['keyword']:<30s} vol={vol:<8s} comp={comp}"
+            )
+            reason = kw.get("reasoning", "")
+            if reason:
+                print(f"    {reason[:70]}")
+
+    elif args.command == "competition":
+        print(
+            f"Analyzing competition for {args.niche}/{args.topic}..."
+        )
+        analysis = pub.analyze_competition_sync(args.niche, args.topic)
+        print(f"\nCompetition Analysis:")
+        for key, val in analysis.items():
+            if isinstance(val, list):
+                print(f"  {key}: {', '.join(str(v) for v in val)}")
+            else:
+                print(f"  {key}: {val}")
+
+    elif args.command == "categories":
+        print(
+            f"Suggesting categories for {args.niche}/{args.topic}..."
+        )
+        cats = pub.suggest_categories_sync(
+            args.niche, args.topic, args.title,
+        )
+        print(f"\nSuggested categories ({len(cats)}):")
+        for i, cat in enumerate(cats, 1):
+            print(f"  {i}. {cat}")
+
+    elif args.command == "cover":
+        print(f"Generating cover prompt for {args.book_id[:8]}...")
+        prompt = pub.generate_cover_prompt_sync(args.book_id)
+        print(f"\nCover prompt:")
+        print(f"  {prompt}")
+
+    elif args.command == "sales":
+        if args.record:
+            if not args.book_id or args.amount is None:
+                print(
+                    "Error: --book-id and --amount required "
+                    "for --record",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            record = pub.record_sale(
+                book_id=args.book_id,
+                royalty_amount=args.amount,
+                units=args.units,
+                sale_type=args.sale_type,
+                sale_date=args.date,
+            )
+            print(
+                f"Sale recorded: {record.units} unit(s), "
+                f"${record.royalty_amount:.2f}"
+            )
+        elif args.daily:
+            data = pub.daily_royalties(args.date)
+            print(f"\nDaily Royalties -- {data['date']}")
+            print(f"{'=' * 40}")
+            print(
+                f"  Total: ${data['total_royalties']:,.2f} "
+                f"({data['total_units']} units)"
+            )
+            for bid, info in data["by_book"].items():
+                print(
+                    f"  {info['title'][:35]:<35s} "
+                    f"${info['royalties']:>8,.2f} "
+                    f"({info['units']}u)"
+                )
+        else:
+            data = pub.daily_royalties()
+            print(f"\nToday's Sales -- {data['date']}")
+            print(
+                f"  Total: ${data['total_royalties']:,.2f} "
+                f"({data['total_units']} units)"
+            )
+
+    elif args.command == "report":
+        if args.period == "year":
+            start, end = _year_bounds()
+        else:
+            start, end = _month_bounds()
+        report = pub._build_sales_report(args.period, start, end)
+        fmt = getattr(args, "format", "text")
+        print(pub.format_sales_report(report, style=fmt))
+
+    elif args.command == "status":
+        print(pub.format_status_report())
+
+    elif args.command == "search":
+        results = pub.search_books(args.query)
+        if not results:
+            print(f"No books found matching '{args.query}'.")
+            return
+        print(
+            f"\nSearch results for '{args.query}' ({len(results)}):"
+        )
+        for book in results:
+            print(
+                f"  [{book.status:<10s}] {book.title} "
+                f"({book.niche}) -- {book.book_id[:8]}"
+            )
+
+    elif args.command == "advance":
+        book = pub.advance_status(args.book_id)
+        print(f"Advanced '{book.title}' to: {book.status}")
+
+    elif args.command == "checklist":
+        checklist = pub.prepare_for_publish(args.book_id)
+        book = pub.get_book(args.book_id)
+        result = "PASSED" if checklist.passed else "FAILED"
+        print(f"\nPublish Checklist: {book.title}")
+        print(f"{'=' * 50}")
+        print(f"  Result: {result}")
+        checks = [
+            ("Title set", checklist.title_set),
+            ("Subtitle set", checklist.subtitle_set),
+            ("Description set", checklist.description_set),
+            ("Keywords set (3+)", checklist.keywords_set),
+            ("Categories set", checklist.categories_set),
+            ("Manuscript ready", checklist.manuscript_ready),
+            ("Cover approved", checklist.cover_approved),
+            ("Price valid", checklist.price_set),
+            ("Word count OK", checklist.word_count_meets_minimum),
+            ("All chapters done", checklist.all_chapters_written),
+        ]
+        for label, passed in checks:
+            marker = "[x]" if passed else "[ ]"
+            print(f"  {marker} {label}")
+        if checklist.issues:
+            print(f"\n  Issues ({len(checklist.issues)}):")
+            for issue in checklist.issues:
+                print(f"    - {issue}")
+
+    elif args.command == "series":
+        if getattr(args, "create", False):
+            if not args.name or not args.niche:
+                print(
+                    "Error: --name and --niche required for --create",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            series = pub.create_series(
+                name=args.name,
+                niche=args.niche,
+                description=args.description,
+                planned_count=args.planned,
+            )
+            print(
+                f"Series created: {series.name} "
+                f"({series.series_id[:8]})"
+            )
+        else:
+            all_series = pub.list_series(niche=args.niche)
+            if not all_series:
+                print("No series found.")
+                return
+            print(f"\nBook Series ({len(all_series)}):")
+            print(f"{'=' * 60}")
+            for s in all_series:
+                planned = s.planned_count if s.planned_count else "?"
+                print(
+                    f"  {s.name:<30s} [{s.niche:<12s}] "
+                    f"{s.current_count}/{planned} books"
+                )
+
+    elif args.command == "niche":
+        summaries = pub.niche_summary()
+        if not summaries:
+            print("No books in any niche yet.")
+            return
+        print(f"\nNiche Summary")
+        print(f"{'=' * 65}")
+        print(
+            f"  {'Niche':<16s} {'Books':>6s} {'Published':>10s} "
+            f"{'In Progress':>12s} {'Royalties':>10s}"
+        )
+        print(
+            f"  {'-'*16} {'-'*6} {'-'*10} {'-'*12} {'-'*10}"
+        )
+        for nd in summaries:
+            print(
+                f"  {nd['niche']:<16s} {nd['book_count']:>6d} "
+                f"{nd['published_count']:>10d} "
+                f"{nd['in_progress_count']:>12d} "
+                f"${nd['total_royalties']:>9,.2f}"
+            )
+
+    else:
+        print(f"Unknown command: {args.command}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    main()
+    _cli_main()
