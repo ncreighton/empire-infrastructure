@@ -2861,5 +2861,7 @@ def _print_persona_detail(persona: Persona) -> None:
     print()
 
 
+main = _cli_main  # Alias for CLI registry
+
 if __name__ == "__main__":
     _cli_main()
