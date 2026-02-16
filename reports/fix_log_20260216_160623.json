@@ -1,0 +1,227 @@
+{
+  "timestamp": "2026-02-16T16:07:11.827426",
+  "fixes_applied": [
+    {
+      "site": "clearainews",
+      "post_id": 1190,
+      "traffic_level": "LOW",
+      "completed": 4,
+      "failed": 0,
+      "skipped": 2,
+      "plan_id": "report_1190_20260216_210646",
+      "details": [
+        {
+          "action": "suggest_focus_keyword",
+          "status": "completed",
+          "result": "Focus keyword set: ai job market"
+        },
+        {
+          "action": "set_og_title",
+          "status": "completed",
+          "result": "OG title set: The Ultimate Guide to Ai Job Market Trends in 2025"
+        },
+        {
+          "action": "set_og_description",
+          "status": "completed",
+          "result": "OG description set (50 chars)"
+        },
+        {
+          "action": "set_twitter_card",
+          "status": "completed",
+          "result": "Twitter card set to summary_large_image"
+        }
+      ]
+    },
+    {
+      "site": "clearainews",
+      "post_id": 1090,
+      "traffic_level": "LOW",
+      "completed": 5,
+      "failed": 0,
+      "skipped": 2,
+      "plan_id": "report_1090_20260216_210650",
+      "details": [
+        {
+          "action": "set_featured_image_alt",
+          "status": "completed",
+          "result": "Alt text set to: DeepMind Research Shows New Path to Better AI Reasoning"
+        },
+        {
+          "action": "suggest_focus_keyword",
+          "status": "completed",
+          "result": "Focus keyword set: deepmind research shows"
+        },
+        {
+          "action": "set_og_title",
+          "status": "completed",
+          "result": "OG title set: DeepMind Research Shows New Path to Better AI Reasoning"
+        },
+        {
+          "action": "set_og_description",
+          "status": "completed",
+          "result": "OG description set (55 chars)"
+        },
+        {
+          "action": "set_twitter_card",
+          "status": "completed",
+          "result": "Twitter card set to summary_large_image"
+        }
+      ]
+    },
+    {
+      "site": "clearainews",
+      "post_id": 982,
+      "traffic_level": "LOW",
+      "completed": 5,
+      "failed": 0,
+      "skipped": 3,
+      "plan_id": "report_982_20260216_210653",
+      "details": [
+        {
+          "action": "set_featured_image_alt",
+          "status": "completed",
+          "result": "Alt text set to: OpenAI Unveils GPT-5: What We Know So Far About the Next-Gen Model"
+        },
+        {
+          "action": "suggest_focus_keyword",
+          "status": "completed",
+          "result": "Focus keyword set: openai unveils gpt-5:"
+        },
+        {
+          "action": "set_og_title",
+          "status": "completed",
+          "result": "OG title set: OpenAI Unveils GPT-5: What We Know So Far About the Next-Gen"
+        },
+        {
+          "action": "set_og_description",
+          "status": "completed",
+          "result": "OG description set (66 chars)"
+        },
+        {
+          "action": "set_twitter_card",
+          "status": "completed",
+          "result": "Twitter card set to summary_large_image"
+        }
+      ]
+    },
+    {
+      "site": "clearainews",
+      "post_id": 987,
+      "traffic_level": "LOW",
+      "completed": 5,
+      "failed": 0,
+      "skipped": 3,
+      "plan_id": "report_987_20260216_210657",
+      "details": [
+        {
+          "action": "set_featured_image_alt",
+          "status": "completed",
+          "result": "Alt text set to: DALL-E 3 vs Midjourney vs Stable Diffusion: Which AI Image Generator Wins?"
+        },
+        {
+          "action": "suggest_focus_keyword",
+          "status": "completed",
+          "result": "Focus keyword set: dall-e 3 vs"
+        },
+        {
+          "action": "set_og_title",
+          "status": "completed",
+          "result": "OG title set: DALL-E 3 vs Midjourney vs Stable Diffusion: Which AI Image G"
+        },
+        {
+          "action": "set_og_description",
+          "status": "completed",
+          "result": "OG description set (74 chars)"
+        },
+        {
+          "action": "set_twitter_card",
+          "status": "completed",
+          "result": "Twitter card set to summary_large_image"
+        }
+      ]
+    }
+  ],
+  "fixes_skipped": [
+    {
+      "post_id": 1190,
+      "fix": "add_content_images",
+      "reason": "not auto-fixable"
+    },
+    {
+      "post_id": 1190,
+      "fix": null,
+      "reason": "not auto-fixable"
+    },
+    {
+      "post_id": 1190,
+      "fix": null,
+      "reason": "not auto-fixable"
+    },
+    {
+      "post_id": 1190,
+      "fix": null,
+      "reason": "not auto-fixable"
+    },
+    {
+      "post_id": 1090,
+      "fix": "add_content_images",
+      "reason": "not auto-fixable"
+    },
+    {
+      "post_id": 1090,
+      "fix": null,
+      "reason": "not auto-fixable"
+    },
+    {
+      "post_id": 1090,
+      "fix": "expand_content",
+      "reason": "not auto-fixable"
+    },
+    {
+      "post_id": 1090,
+      "fix": null,
+      "reason": "not auto-fixable"
+    },
+    {
+      "post_id": 982,
+      "fix": "add_content_images",
+      "reason": "not auto-fixable"
+    },
+    {
+      "post_id": 982,
+      "fix": null,
+      "reason": "not auto-fixable"
+    },
+    {
+      "post_id": 982,
+      "fix": "expand_content",
+      "reason": "not auto-fixable"
+    },
+    {
+      "post_id": 982,
+      "fix": null,
+      "reason": "not auto-fixable"
+    },
+    {
+      "post_id": 987,
+      "fix": "add_content_images",
+      "reason": "not auto-fixable"
+    },
+    {
+      "post_id": 987,
+      "fix": null,
+      "reason": "not auto-fixable"
+    },
+    {
+      "post_id": 987,
+      "fix": "expand_content",
+      "reason": "not auto-fixable"
+    },
+    {
+      "post_id": 987,
+      "fix": null,
+      "reason": "not auto-fixable"
+    }
+  ],
+  "failures": []
+}

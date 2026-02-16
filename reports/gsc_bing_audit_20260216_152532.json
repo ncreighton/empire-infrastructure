@@ -1,0 +1,137 @@
+{
+  "generated_at": "20260216_152532",
+  "pipeline": "gsc_bing_visual_audit",
+  "search_performance": {
+    "smarthomewizards": {
+      "gsc_clicks": 21,
+      "gsc_impressions": 4959,
+      "bing_clicks": 981,
+      "bing_impressions": 19779,
+      "combined_clicks": 1002
+    },
+    "_totals": {
+      "gsc_clicks": 21,
+      "gsc_impressions": 4959,
+      "bing_clicks": 981,
+      "bing_impressions": 19779,
+      "combined_clicks": 1002
+    }
+  },
+  "bing_crawl_issues": {},
+  "site_breakdowns": {
+    "smarthomewizards": {
+      "pages_analyzed": 4,
+      "total_issues": 62,
+      "avg_visual_score": null,
+      "pages": [
+        {
+          "url": "https://smarthomewizards.com/best-zigbee-smart-home-gadgets/",
+          "post_id": 1131,
+          "traffic_level": "HIGH",
+          "combined_clicks": 382,
+          "audit_score": 0,
+          "audit_issues": 25,
+          "visual_score": null,
+          "visual_status": null,
+          "safe_fixes": 4,
+          "needs_review": 21
+        },
+        {
+          "url": "https://smarthomewizards.com/best-smart-home-devices-for-2026/",
+          "post_id": 3158,
+          "traffic_level": "HIGH",
+          "combined_clicks": 191,
+          "audit_score": 13,
+          "audit_issues": 16,
+          "visual_score": null,
+          "visual_status": null,
+          "safe_fixes": 5,
+          "needs_review": 11
+        },
+        {
+          "url": "https://smarthomewizards.com/best-streaming-devices-with-voice-control-roku-vs-fire-tv-vs-apple-tv/",
+          "post_id": 2887,
+          "traffic_level": "HIGH",
+          "combined_clicks": 143,
+          "audit_score": 49,
+          "audit_issues": 11,
+          "visual_score": null,
+          "visual_status": null,
+          "safe_fixes": 6,
+          "needs_review": 5
+        },
+        {
+          "url": "https://smarthomewizards.com/the-ultimate-guide-to-alexa-vs-google-home-comparison-in-2025/",
+          "post_id": 3351,
+          "traffic_level": "HIGH",
+          "combined_clicks": 143,
+          "audit_score": 54,
+          "audit_issues": 10,
+          "visual_score": null,
+          "visual_status": null,
+          "safe_fixes": 5,
+          "needs_review": 5
+        }
+      ]
+    }
+  },
+  "top_opportunities": [
+    {
+      "site": "smarthomewizards",
+      "url": "https://smarthomewizards.com/best-zigbee-smart-home-gadgets/",
+      "post_id": 1131,
+      "combined_clicks": 382,
+      "traffic_level": "HIGH",
+      "audit_issues": 25,
+      "visual_score": null,
+      "safe_fixes": 4,
+      "impact_score": 9932
+    },
+    {
+      "site": "smarthomewizards",
+      "url": "https://smarthomewizards.com/best-smart-home-devices-for-2026/",
+      "post_id": 3158,
+      "combined_clicks": 191,
+      "traffic_level": "HIGH",
+      "audit_issues": 16,
+      "visual_score": null,
+      "safe_fixes": 5,
+      "impact_score": 3247
+    },
+    {
+      "site": "smarthomewizards",
+      "url": "https://smarthomewizards.com/best-streaming-devices-with-voice-control-roku-vs-fire-tv-vs-apple-tv/",
+      "post_id": 2887,
+      "combined_clicks": 143,
+      "traffic_level": "HIGH",
+      "audit_issues": 11,
+      "visual_score": null,
+      "safe_fixes": 6,
+      "impact_score": 1716
+    },
+    {
+      "site": "smarthomewizards",
+      "url": "https://smarthomewizards.com/the-ultimate-guide-to-alexa-vs-google-home-comparison-in-2025/",
+      "post_id": 3351,
+      "combined_clicks": 143,
+      "traffic_level": "HIGH",
+      "audit_issues": 10,
+      "visual_score": null,
+      "safe_fixes": 5,
+      "impact_score": 1573
+    }
+  ],
+  "low_visual_scores": [],
+  "fix_summary": {
+    "auto_fixable": 20,
+    "needs_review": 42,
+    "by_category": {
+      "seo": 23,
+      "image": 9,
+      "links": 20,
+      "structure": 3,
+      "content": 6,
+      "schema": 1
+    }
+  }
+}

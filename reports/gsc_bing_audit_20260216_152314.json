@@ -1,0 +1,85 @@
+{
+  "generated_at": "20260216_152314",
+  "pipeline": "gsc_bing_visual_audit",
+  "search_performance": {
+    "smarthomewizards": {
+      "gsc_clicks": 21,
+      "gsc_impressions": 4959,
+      "bing_clicks": 981,
+      "bing_impressions": 19779,
+      "combined_clicks": 1002
+    },
+    "_totals": {
+      "gsc_clicks": 21,
+      "gsc_impressions": 4959,
+      "bing_clicks": 981,
+      "bing_impressions": 19779,
+      "combined_clicks": 1002
+    }
+  },
+  "bing_crawl_issues": {},
+  "site_breakdowns": {
+    "smarthomewizards": {
+      "pages_analyzed": 4,
+      "total_issues": 0,
+      "avg_visual_score": null,
+      "pages": [
+        {
+          "url": "https://smarthomewizards.com/best-zigbee-smart-home-gadgets/",
+          "post_id": 1131,
+          "traffic_level": "HIGH",
+          "combined_clicks": 382,
+          "audit_score": null,
+          "audit_issues": 0,
+          "visual_score": null,
+          "visual_status": null,
+          "safe_fixes": 0,
+          "needs_review": 0
+        },
+        {
+          "url": "https://smarthomewizards.com/best-smart-home-devices-for-2026/",
+          "post_id": 3158,
+          "traffic_level": "HIGH",
+          "combined_clicks": 191,
+          "audit_score": null,
+          "audit_issues": 0,
+          "visual_score": null,
+          "visual_status": null,
+          "safe_fixes": 0,
+          "needs_review": 0
+        },
+        {
+          "url": "https://smarthomewizards.com/best-streaming-devices-with-voice-control-roku-vs-fire-tv-vs-apple-tv/",
+          "post_id": 2887,
+          "traffic_level": "HIGH",
+          "combined_clicks": 143,
+          "audit_score": null,
+          "audit_issues": 0,
+          "visual_score": null,
+          "visual_status": null,
+          "safe_fixes": 0,
+          "needs_review": 0
+        },
+        {
+          "url": "https://smarthomewizards.com/the-ultimate-guide-to-alexa-vs-google-home-comparison-in-2025/",
+          "post_id": 3351,
+          "traffic_level": "HIGH",
+          "combined_clicks": 143,
+          "audit_score": null,
+          "audit_issues": 0,
+          "visual_score": null,
+          "visual_status": null,
+          "safe_fixes": 0,
+          "needs_review": 0
+        }
+      ]
+    }
+  },
+  "top_opportunities": [],
+  "low_visual_scores": [],
+  "fix_summary": {
+    "auto_fixable": 0,
+    "needs_review": 0,
+    "by_category": {}
+  }
+}

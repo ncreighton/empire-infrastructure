@@ -1,0 +1,200 @@
+{
+  "generated_at": "20260216_160623",
+  "pipeline": "gsc_bing_visual_audit",
+  "search_performance": {
+    "clearainews": {
+      "gsc_clicks": 0,
+      "gsc_impressions": 21,
+      "bing_clicks": 4,
+      "bing_impressions": 49,
+      "combined_clicks": 4
+    },
+    "_totals": {
+      "gsc_clicks": 0,
+      "gsc_impressions": 21,
+      "bing_clicks": 4,
+      "bing_impressions": 49,
+      "combined_clicks": 4
+    }
+  },
+  "bing_crawl_issues": {},
+  "site_breakdowns": {
+    "clearainews": {
+      "pages_analyzed": 5,
+      "total_issues": 45,
+      "avg_visual_score": 0.0,
+      "pages": [
+        {
+          "url": "https://clearainews.com/contact-2/",
+          "post_id": 890,
+          "traffic_level": "LOW",
+          "combined_clicks": 0,
+          "audit_score": null,
+          "audit_issues": 0,
+          "visual_score": 0,
+          "visual_status": "FAIL",
+          "safe_fixes": 0,
+          "needs_review": 0
+        },
+        {
+          "url": "https://clearainews.com/industry-analysis/the-ultimate-guide-to-ai-job-market-trends-in-2025/",
+          "post_id": 1190,
+          "traffic_level": "LOW",
+          "combined_clicks": 0,
+          "audit_score": 54,
+          "audit_issues": 10,
+          "visual_score": 0,
+          "visual_status": "FAIL",
+          "safe_fixes": 6,
+          "needs_review": 4
+        },
+        {
+          "url": "https://clearainews.com/research/deepmind-research-ai-reasoning-verification/",
+          "post_id": 1090,
+          "traffic_level": "LOW",
+          "combined_clicks": 0,
+          "audit_score": 44,
+          "audit_issues": 11,
+          "visual_score": 0,
+          "visual_status": "FAIL",
+          "safe_fixes": 7,
+          "needs_review": 4
+        },
+        {
+          "url": "https://clearainews.com/ro/uncategorized/openai-unveils-gpt-5-what-we-know-so-far-about-the-next-gen-model/",
+          "post_id": 982,
+          "traffic_level": "LOW",
+          "combined_clicks": 0,
+          "audit_score": 39,
+          "audit_issues": 12,
+          "visual_score": 0,
+          "visual_status": "FAIL",
+          "safe_fixes": 8,
+          "needs_review": 4
+        },
+        {
+          "url": "https://clearainews.com/uncategorized/dall-e-3-vs-midjourney-vs-stable-diffusion-which-ai-image-generator-wins/",
+          "post_id": 987,
+          "traffic_level": "LOW",
+          "combined_clicks": 0,
+          "audit_score": 39,
+          "audit_issues": 12,
+          "visual_score": 0,
+          "visual_status": "FAIL",
+          "safe_fixes": 8,
+          "needs_review": 4
+        }
+      ]
+    }
+  },
+  "top_opportunities": [
+    {
+      "site": "clearainews",
+      "url": "https://clearainews.com/contact-2/",
+      "post_id": 890,
+      "combined_clicks": 0,
+      "traffic_level": "LOW",
+      "audit_issues": 0,
+      "visual_score": 0,
+      "safe_fixes": 0,
+      "impact_score": 0
+    },
+    {
+      "site": "clearainews",
+      "url": "https://clearainews.com/industry-analysis/the-ultimate-guide-to-ai-job-market-trends-in-2025/",
+      "post_id": 1190,
+      "combined_clicks": 0,
+      "traffic_level": "LOW",
+      "audit_issues": 10,
+      "visual_score": 0,
+      "safe_fixes": 6,
+      "impact_score": 0
+    },
+    {
+      "site": "clearainews",
+      "url": "https://clearainews.com/research/deepmind-research-ai-reasoning-verification/",
+      "post_id": 1090,
+      "combined_clicks": 0,
+      "traffic_level": "LOW",
+      "audit_issues": 11,
+      "visual_score": 0,
+      "safe_fixes": 7,
+      "impact_score": 0
+    },
+    {
+      "site": "clearainews",
+      "url": "https://clearainews.com/ro/uncategorized/openai-unveils-gpt-5-what-we-know-so-far-about-the-next-gen-model/",
+      "post_id": 982,
+      "combined_clicks": 0,
+      "traffic_level": "LOW",
+      "audit_issues": 12,
+      "visual_score": 0,
+      "safe_fixes": 8,
+      "impact_score": 0
+    },
+    {
+      "site": "clearainews",
+      "url": "https://clearainews.com/uncategorized/dall-e-3-vs-midjourney-vs-stable-diffusion-which-ai-image-generator-wins/",
+      "post_id": 987,
+      "combined_clicks": 0,
+      "traffic_level": "LOW",
+      "audit_issues": 12,
+      "visual_score": 0,
+      "safe_fixes": 8,
+      "impact_score": 0
+    }
+  ],
+  "low_visual_scores": [
+    {
+      "site": "clearainews",
+      "url": "https://clearainews.com/contact-2/",
+      "post_id": 890,
+      "visual_score": 0,
+      "visual_status": "FAIL",
+      "issues": []
+    },
+    {
+      "site": "clearainews",
+      "url": "https://clearainews.com/industry-analysis/the-ultimate-guide-to-ai-job-market-trends-in-2025/",
+      "post_id": 1190,
+      "visual_score": 0,
+      "visual_status": "FAIL",
+      "issues": []
+    },
+    {
+      "site": "clearainews",
+      "url": "https://clearainews.com/research/deepmind-research-ai-reasoning-verification/",
+      "post_id": 1090,
+      "visual_score": 0,
+      "visual_status": "FAIL",
+      "issues": []
+    },
+    {
+      "site": "clearainews",
+      "url": "https://clearainews.com/ro/uncategorized/openai-unveils-gpt-5-what-we-know-so-far-about-the-next-gen-model/",
+      "post_id": 982,
+      "visual_score": 0,
+      "visual_status": "FAIL",
+      "issues": []
+    },
+    {
+      "site": "clearainews",
+      "url": "https://clearainews.com/uncategorized/dall-e-3-vs-midjourney-vs-stable-diffusion-which-ai-image-generator-wins/",
+      "post_id": 987,
+      "visual_score": 0,
+      "visual_status": "FAIL",
+      "issues": []
+    }
+  ],
+  "fix_summary": {
+    "auto_fixable": 29,
+    "needs_review": 16,
+    "by_category": {
+      "seo": 23,
+      "links": 8,
+      "image": 7,
+      "content": 4,
+      "structure": 3
+    }
+  }
+}
