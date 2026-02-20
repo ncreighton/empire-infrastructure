@@ -1,0 +1,149 @@
+# Lesson 14 - How to Use Custom Outlines
+
+hey and welcome to your beginner lesson
+on getting started with custom outlines
+inside of Zim Rider this is just a
+beginner lesson because we can do such a
+deeper dive on this I'm going to do that
+later in a more advanced lesson but
+there is so much power with this feature
+and this is something that as far as I
+know is not available in any other AI
+writer on the planet this is extreme
+power just for Zoom writer users let me
+show you because I think showing you is
+better than trying to explain it you can
+find the custom outline feature in the
+bulk writer and then also the penny
+arcade so I'll click on the bulk writer
+you'll see this option over here called
+custom
+outline and you can save your different
+custom outlines and there's some uh
+directions up here but definitely click
+this directions link it'll bring you to
+this page there's this is such a
+technical feature but it's easy to
+figure out I'm just saying technical in
+that you need to read directions before
+you start using custom outlines read the
+directions because there's a time and a
+place for it and there's so much power
+in it so let me explain what a custom
+outline is so a custom outline is
+something that you would want to apply
+when you have a lot of blog posts that
+you want to follow the same outline
+format so we have these three articles
+in here hearty winter warmth classic
+beef stew recipe summer Delight
+refreshing watermelon and feta salad
+dectin dessert triple chocolate lava
+cake made easy so three different recipe
+posts but we want them all to follow a
+common format a common outline format so
+that would be a situation where we' use
+a custom outline so here's an example of
+the the three articles we wrote Deon
+dessert this is the triple chocolate
+great AI image by the way now look down
+here the first H2 is origin of lava cake
+the first H2 for this stew recipe is
+stew Origins the first H2 is origins of
+watermelon salad so I'm telling the AI
+that I want some kind of an origins or a
+history to be the first H2 so you can
+see right in here our custom outline
+history is our first H2 but but we want
+to use this variable this custom
+variable which is
+explained let's see right here to modify
+this H2 into something more relevant to
+the article being written if that makes
+sense now we could just leave this out
+if we want to we could just leave this
+out and then every article will have the
+first H2 be history we want to leave
+that in we're also telling the AI that
+for every first stage two we want a
+YouTube video so we have a YouTube video
+Here YouTube video Here YouTube video
+here the next H2 we want in these is
+something to deal with the common
+ingredients for this recipe but again
+we're going to optimize the title so
+it's not going to be exactly the phrase
+common ingredients so essential lava
+cake
+components Essentials to
+components essential salad components
+and we want a table for each of these so
+we have a table here here have a table
+here we have a table here then we want
+the actual recipe but again we're going
+to optimize the title here the actual
+recipe is step-by-step baking
+instructions step-by-step cooking
+instructions stepbystep assembly and
+it's cool that it knows that we're
+assembling a salad we're cooking the
+stew and we're baking the cake we also
+want an AI image an image for each of
+these so here's our image here then we
+want some expert tips but we want the
+expert tips to transition into three h3s
+there's another variable we're using
+here we go up here this is a variable
+Auto H3 and then the number is replaced
+with the number of h3s you want we want
+three h3s so if we look in here let's go
+back and put the table of contents it's
+easier to see expert tips so it's
+exactly what we put because we're not
+optimizing the title and we want three
+h3s under there 1 2 3 let's go over here
+to this table of contents we have expert
+tips one two 3 three
+h3s go back up here expert tips one two
+3 three h3s and then finally we want
+some final thoughts down here final
+thoughts for each of these final
+thoughts that is the power of a custom
+outline let me show you one more that's
+for recipes let me go top five so this
+is top five a little bit more in depth
+let's see top five over here top five
+places in Tokyo for technology
+enthusiasts
+we have the first place and then we have
+an overview and then two a main
+attraction with an optimized title and a
+tips optimized title so man attraction
+tips so this is top five places in Tokyo
+top five places in Rome top five places
+in New York see how that works you can
+even do Amazon reviews now we wouldn't
+do Amazon reviews in the bulk writer you
+would come over to the penny arcade you
+put in a bunch of Amazon product pages
+you go to custom outline and this would
+we'd have an overview section with an
+optimized title call to action you can
+learn about the call to
+action here with your affiliate tag put
+your affiliate tag in there features
+with another call to action pros and
+cons these are h3s a Pros with a list a
+Cons with a list performance optimize
+the title final Thoughts with our
+closing call to action and this doesn't
+have to be Amazon you can do any product
+page you want to so this feature is
+extremely powerful very underused
+underutilized feature but very powerful
+if you have any questions drop a comment
+down below hit me up on the Facebook
+group if you like this video please give
+it a thumbs up please subscribe other
+than that I will see you in the next
+video

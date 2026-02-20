@@ -1,0 +1,194 @@
+# Lesson 16 - Find a Bazillion Niches Using ZimmWriter
+
+hey and welcome to your getting started
+guide for the bulk nich generator inside
+of Zim riter this is a very powerful
+feature I built it for myself because I
+was having trouble coming up with
+different niches and when I first turned
+it on when I first Ed it I was blown
+away by it and the people I've shown it
+to have been blown away by it too I
+think you're going to be blown away by
+it also you can generate tens hundreds
+even thousands of different Niche ideas
+with just the click of a button it's
+really that powerful let me show you how
+it works so inside of the AI Vault we'll
+click on Bulk N generator and there's a
+directions link up here you can click it
+and read the directions but the long and
+short of it is you can put in up to 200
+different Niche ideas and they can be
+one to five words each and you don't
+have to put in 200 you can just put in
+one if you want to but for each Niche
+idea that you put in you'll get five
+Niche ideas out and the niche ideas can
+be very broad or they can be a little
+bit narrow so let's do some stuff around
+dogs let's investigate the dog Niche so
+we'll just put dogs now you can actually
+repeat this like right now we have dogs
+in there one time that will give us five
+different Niche ideas we can put in dogs
+three times that will give us five 10 15
+so 15 different Niche ideas around the
+concept of dogs we can go narrow also we
+can go dog care we can type in uh
+vacationing with your dog dog grooming
+and let's just leave it at that we'll
+give this a name and we'll say dog Niche
+ideas you choose the model you want the
+you know the brain on gp4 is a little
+bit bigger it get a little bit more
+expensive but we're just going to use
+3.5 turbo and we'll click create niches
+this actually goes really quick so we'll
+just watch it
+work okay so it's already done and it
+outputs a CSV file so we can close this
+and you can see the CSV file over
+here and we will make this a little bit
+bigger and I will zoom in a little bit
+so you guys can see okay so we have
+153 different Niche ideas
+so we put dogs in three times so we got
+15 results for that so as you can see
+this cost us half of a penny this entire
+sheet cost just half of a penny
+incredibly inexpensive so let's look at
+the different Niche ideas so website one
+loyalty trails.com now some of these
+domains might be available some of them
+might not it it just depends you'll have
+to do a search for it but I'll show you
+how how to bulk do that in just a second
+so loyalty Trails a Blog celebrating the
+loyalty and devotion of dogs towards
+their owners highlighting the
+heartwarming stories and inspiring
+content that's cool so these are some
+category ideas heartwarming stories
+devotion pet bonding here's the second
+website companionship k9.com explore the
+joy and comfort that dogs bring as
+companions featuring tips on
+strengthening the bond between humans
+and their furry friends we got bonding
+tips joyful moments human canine
+relationships uh down here we have
+positive support Hub a resource for
+understanding how dogs offer emotional
+support sharing insights on calming and
+stress that's cool emotional wellbeing
+stress relief supportive relationships
+okay and you're you usually get five
+categories but sometimes with GPT 3.5
+it's a little bit lazy so you might end
+up getting three down here we seem to
+get five so let's go down a little bit
+K9 challenges Chronicles loyalty pause
+we got dog Bree training tips
+heartwarming stories what else do we
+have all these different Niche ideas dog
+care so positive Pals a Blog celebrating
+the joys and challenges of dog care
+emphasizing the positive impact on
+mental and physical well-being it's cool
+vacationing with your dog pause and
+explore a Blog dedicated to helping dog
+owners make the most of their vacations
+by exploring pet friendly destinations
+and activities so here's the categories
+pet friendly destinations Outdoor
+Adventures travel tips now watch this
+this is so cool I built this so you can
+now go over here to the A vault and
+click on topical Authority generator and
+we can take this for instance now some
+of these the topical Authority generator
+is limited to a broad concept of 20w or
+less so sometimes the description might
+need to be narrowed down by you a little
+bit it might be over 20 words so we can
+just say helping dog
+owners I think that's probably under 20
+and then we can say
+five and watch this we can put this at
+let's just say
+10 and let's say one just make this go
+quick believe five and one okay so what
+we can do is we can
+generate but then we can come over here
+you watch what I'm
+doing see if I can copy this and uh make
+this nice and easy so I copied the
+categories okay and I'm going
+to you watch
+this I'll take these categories now and
+I'm going to put them I'm going to
+overwrite what the topical Authority
+generator just generated so now we're
+actually going to generate this
+blog around this particular Niche so now
+we'll click proceed and we'll let that
+run for this this particular Niche right
+here let's bold this so we can come back
+to it if we need to now the last thing I
+want to do is I want to show you how you
+can check all these domains really quick
+so we can go over here to let's do
+filter data
+filter and I want to filter I just want
+to see the
+website so we can take all of these
+website URLs now copy them and you
+actually got to go over here and make a
+new sheet the topical Authority
+generator done so we'll copy this and
+we'll go to beast mode on name
+cheep now put in all these
+domains and I don't want to show the
+premiums I want to hide the unavailable
+and while that's working let's go over
+here and look at the what tag generated
+there we go okay so pet friendly
+destinations best dog friendly hike
+hiking trails near me so top dog
+friendly hiking trails in your area
+Ultimate Guide to pet friendly Beach
+vacations top pet friendly City
+attractions for dogs Why adventure
+loving dogs thrive in pet friendly
+destinations top five tips for stress
+relief dog vacations why choose these
+top pet friendly hotels for large dogs
+awesome and with tag you can generate
+thousands of of blog post ideas with
+just a click of a button it's very
+simple to do let's go back to name cheep
+and these are all of the domains all
+right from our list here that are a
+ailable loyalty Trails companionship
+Kines positive
+support uh fit phto lifestyle bark to
+Basics blog wolf Wellness blog fastic
+groom guide grooming guide wag and trim
+these are phenomenal domains these are
+all brandable domains now obviously
+you'd have to check do your copyright
+search do your trademark search to make
+sure that none of the stuff is actually
+out there but other than that amazing it
+is incredibly powerful this new Niche
+generator if you have any question or
+comments drop them in the the
+description down below join the Facebook
+group if you have any more questions or
+need more help with this there's a link
+in the description to get a copy of Zim
+writer other than that I hope you get a
+lot of good use out of this tool and I
+will talk to you
+later

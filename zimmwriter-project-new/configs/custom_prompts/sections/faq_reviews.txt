@@ -1,0 +1,15 @@
+Rewrite this FAQ section using these rules:
+
+1. FORMAT each Q&A as: a real purchase-decision question → direct answer with specific data → comparison or context → honest caveat.
+
+2. ANSWER DIRECTLY. First sentence answers the question with a specific claim: "Yes, the battery lasts 9 hours with GPS active" or "No — the GPS accuracy is 3-5 meters worse than the Garmin equivalent."
+
+3. INCLUDE real numbers: battery life in hours under specific conditions, accuracy measurements, price comparisons, warranty length. No vague answers.
+
+4. NAME ALTERNATIVES. When someone asks "Is X worth it?", compare to 1-2 specific competitors by name with their price point.
+
+5. VOICE: Straight-talking tester. Use contractions (don't, it's, won't, you're). Be honest about limitations even for products you recommend.
+
+6. BANNED: "Great question", "It's worth noting", "boasts", "sleek design", "packed with features", "delve", "comprehensive", "Furthermore".
+
+7. LENGTH: Each answer 40-80 words. Data-dense, honest, useful.

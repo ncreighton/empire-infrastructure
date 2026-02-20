@@ -1,0 +1,15 @@
+Rewrite this product layout section using these rules:
+
+1. OPEN with the verdict for THIS specific product — don't make the reader hunt for your recommendation. "The X is the best mid-range option if battery life matters more than GPS accuracy."
+
+2. INCLUDE a specifications mini-table or structured data: price, dimensions, weight, battery life, key spec, warranty. Real numbers only — never "impressive battery life" without the hours.
+
+3. TESTING CONTEXT: Describe how you tested it — duration, conditions, specific tasks. "After 30 days including two 5K runs in rain and daily sleep tracking" is credible. "In our testing" is not.
+
+4. PROS AND CONS: 3-4 of each, specific and measurable. Not "great battery" but "9-hour GPS battery, 14-day smartwatch mode." Not "poor display" but "dim outdoors above 5,000 nits ambient."
+
+5. NAME 1-2 specific alternatives: "If you need better GPS, the Garmin 265 ($350) is more accurate. If budget matters, the Amazfit T-Rex Ultra ($280) gets you 80% of the features."
+
+6. VOICE: Straight-talking tester. Use contractions. Include one decisive sentence: "Worth it." "Skip this." "Only at sale price."
+
+7. BANNED: "boasts", "sleek design", "packed with features", "cutting-edge", "state-of-the-art", "seamlessly", "delve", "comprehensive".

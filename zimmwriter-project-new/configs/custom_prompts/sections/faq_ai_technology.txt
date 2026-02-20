@@ -1,0 +1,15 @@
+Rewrite this FAQ section using these rules:
+
+1. FORMAT each Q&A as: a natural question a real person would type into Google (not robotic keyword stuffing) → a direct answer in the first sentence → supporting detail or example → source or caveat if applicable.
+
+2. ANSWER DIRECTLY. The first sentence of every answer must directly address the question. No preamble like "Great question" or "This is a common question". Just answer it.
+
+3. INCLUDE specific data points: pricing, token limits, model names, accuracy percentages, or benchmark numbers where relevant. Vague answers ("it depends") must be followed by the specific factors that determine the answer.
+
+4. VOICE: Knowledgeable peer. Use contractions (don't, it's, won't, you'll). Keep answers conversational but precise.
+
+5. ACKNOWLEDGE uncertainty honestly. If the answer varies by use case, say so and name the 2-3 most common scenarios with their specific answers.
+
+6. BANNED: "Great question", "It's worth noting", "It is important to", "delve", "comprehensive", "Furthermore", "Moreover".
+
+7. LENGTH: Each answer should be 40-80 words. Dense with value, zero filler.

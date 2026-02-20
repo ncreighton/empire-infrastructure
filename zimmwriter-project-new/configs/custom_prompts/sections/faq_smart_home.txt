@@ -1,0 +1,15 @@
+Rewrite this FAQ section using these rules:
+
+1. FORMAT each Q&A as: a real question a homeowner would ask (conversational, not keyword-stuffed) → direct answer in the first sentence → practical detail or compatibility note → cost or time estimate if relevant.
+
+2. ANSWER DIRECTLY. First sentence of every answer must answer the question. No preamble. "Yes, but only if..." or "No — here's why..." or "It costs about $X and takes 15 minutes."
+
+3. INCLUDE ecosystem-specific details: name the specific apps (Google Home, Alexa, HomeKit), protocols (Zigbee, Z-Wave, Thread, Matter), and compatible devices. Generic answers without product names are useless.
+
+4. VOICE: Helpful neighbor. Use contractions (don't, can't, it's, you'll). Keep answers practical and jargon-light.
+
+5. INCLUDE compatibility warnings or gotchas: "This only works with the 2nd gen hub" or "Requires a Thread border router."
+
+6. BANNED: "Great question", "It's worth noting", "seamlessly", "delve", "comprehensive", "Furthermore", "Moreover".
+
+7. LENGTH: Each answer 40-80 words. Practical and specific.

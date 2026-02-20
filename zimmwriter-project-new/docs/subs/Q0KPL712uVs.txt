@@ -1,0 +1,164 @@
+# Lesson 13 - How to Use SERP Scraping
+
+in this lesson I'm going to share with
+you how easy it is to use Ser scraping
+inside of Zim writer to bring in much
+more accurate facts about the article
+that you're writing about and then also
+SEO keywords and build a better outline
+it's very easy to do inside of Zim
+writer the first thing I want you to do
+is to click on the secret training
+button which will bring up this page and
+then as you scroll down you'll find a
+Ser scraping link so click that bring up
+the page and definitely go through this
+and read this at your leisure it's very
+important there's a lot of very
+important knowledge and Nuggets in here
+to really get the most out of this
+feature now this feature does surp
+scraping does require scrape out but
+once you set it all up it's very
+powerful it's available in the bulk
+writer in the SEO writer right now so
+we'll click the bulk writer and all you
+have to do you'll put your title in like
+how to rank higher on Google you'll
+click on the Sur scraping button and you
+click enable and that's literally all
+you have to do to use Ser scraping
+inside of Zim writer but what exactly
+happens behind the scenes when you go
+and you write your article with Ser
+scraping enabled so this is high level
+right now this is what happens Zim
+writer will perform the following steps
+when you're Ser scraping so Zoom writer
+first Contact scrap Al and ask scrap Al
+to perform a Google search of the
+article title and scrap Al will go out
+to Google so how to rank higher on
+Google and it will scrape the top
+results so how to rank higher on Google
+how to rank higher on Google it scrapes
+all this data and brings it in then what
+happens is it will store the results in
+the cached database up to 1,00 SHP
+scrapes and then Zer writer will
+determine which web pages rank for that
+term and are relevant to that term so as
+an example how to rank higher on Google
+yeah the first 10 results are all going
+to relate they're all relevant to how to
+rank higher on Google but if you have a
+much more Niche subject like how to
+train a snail I spell it wrong SN a i l
+to write a unicycle you're not going to
+get any results how to write a unicycle
+learn how to write a un cycle watch till
+the end to see me breaking my speed
+record how to ride amount on a unicycle
+so none of these results deal with how
+to teach a snail to write a unicycle so
+in that case your Ser scrape will likely
+fail so serp scraping is very useful for
+situations where you have a broader
+query not something super Niche that no
+one has probably talked about so Zim
+writer determines the first five that
+are relevant for the term and then once
+it finds those pages it will scrape
+those pages and then it will summarize
+those pages and then uses the
+subheadings from those five pages to
+create your outline and then it uses the
+summaries from those five pages to build
+discussion points for each of the
+subheadings in the article and then
+finally it uses SEO keywords determine
+from those articles to insert into your
+particular article so a lot of stuff
+happens behind the scenes that at least
+in the bulk writer you don't need to do
+much about it just automatically happens
+now in the SEO writer you can see a lot
+more of this uh up front so we'll put
+our title in how to rank higher on
+Google we'd click Ser scraping we'd
+enable it and scrape the Ser now so
+scraping the Ser now in the SEO writer
+will allow you to pre-s scrape it and
+edit the information and make sure you
+have the best information possible
+before you write the article you don't
+have to do that we can just enable it
+and then go down here and start writing
+with or without scraping it doesn't
+matter it will scrape this SHP because
+we've enabled it up here you can do that
+too it's totally up to you but we're
+going to pre-sc scrape it now I've
+already scraped this I've already had
+Zoom writer go out and scrape this
+particular query so it's going to pull
+it from the cache database it's going to
+be instantaneous watch this see it's
+already done so there's the global
+background based on the Ser
+scrape and then here are the H2S and h3s
+from the
+competition so we can use option three
+to create our H2S using the AI plus the
+competition H2S and h3s plus the global
+background to get a really comprehensive
+outline so let's say we want 10 H2S for
+instance and we'll press option three
+and just wait a moment and there you go
+so this is all based on the global
+background the competition and then also
+the AI now what's really cool is if we
+let's enable color outline so we can
+differentiate these enable subheading
+background if you were to go and just
+write the article right now come down
+here and just say start the Su writer
+with scraping or without scraping
+because we've already scraped everything
+it would go ahead and write the article
+and then for each one of these H2S it
+would pull in some discussion points
+from this the graped Ser but you can
+pull that stuff in beforehand and then
+manually edit that if you really want to
+this little SS button if we press it it
+will create those discussion points
+right now for us so understanding
+Google's ranking metric prioritizes
+relevant and useful pages for search
+queries domains achieve ranking through
+Google's algorithm process which
+considers quality relevance and utility
+so here's our different discussion
+points now we can take some of these out
+we can add to it it's up to you what you
+want to do then when you're all done
+with that you can configure the rest of
+your options and you can go through
+these SEO keywords and edit them if you
+really want to but it's going to try to
+use these so keywords as it writes the
+article then finally you just either
+start the writer with scraping or no
+scraping it doesn't really matter and it
+will write your article it's very easy
+with Ser scraping now inside of Zim
+writer to bring in factually correct
+data from the Google ser and then bring
+in those keywords and build a really
+high quality outline with just a couple
+clicks of a button if you have any
+questions drop them in the comments
+below or hit me up on Facebook otherwise
+like the video subscribe and I will see
+you in the next lesson

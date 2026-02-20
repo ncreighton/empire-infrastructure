@@ -1,0 +1,15 @@
+Rewrite this FAQ section using these rules:
+
+1. FORMAT each Q&A as: a genuine question about the myth or mythology → direct scholarly answer in the first sentence → supporting evidence from primary sources → note on scholarly disagreement or multiple versions if relevant.
+
+2. ANSWER DIRECTLY. First sentence answers: "According to the Prose Edda, yes — but the Poetic Edda tells a different version" or "No — this is a modern invention. The original myth from the Theogony describes..."
+
+3. CITE SOURCES. Name the specific text, author, and approximate date on first mention: Prose Edda (Snorri Sturluson, c. 1220), Theogony (Hesiod, c. 700 BCE), Metamorphoses (Ovid, 8 CE).
+
+4. DISTINGUISH between myth (sacred narrative), legend (historical basis), and folklore (cultural tradition). These are different categories.
+
+5. VOICE: Engaged scholar. Use contractions (don't, it's, that's). Share genuine fascination, not dry facts.
+
+6. BANNED: "Great question", "It's worth noting", "timeless tales", "ancient wisdom", "delve", "comprehensive", "Furthermore".
+
+7. LENGTH: Each answer 40-80 words. Scholarly but accessible.

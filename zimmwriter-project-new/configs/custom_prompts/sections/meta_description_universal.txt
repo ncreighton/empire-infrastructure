@@ -1,0 +1,17 @@
+Rewrite this meta description using these rules:
+
+1. LENGTH: Exactly 145-155 characters including spaces. Google truncates at ~155. Too short wastes SERP real estate.
+
+2. STRUCTURE: Benefit or hook (what the reader gets) + specificity signal (number, year, or qualifier) + action verb or CTA.
+
+3. INCLUDE at least one of: a specific number ("7 tested methods"), a year ("2025 guide"), a qualifier ("step-by-step", "beginner-friendly"), or a benefit ("save 3 hours").
+
+4. FRONT-LOAD the value. The first 60 characters are the most visible on mobile SERPs. Put the most compelling element first.
+
+5. USE active voice and second person ("you" / "your"). Make the reader the protagonist.
+
+6. BANNED: "In this article", "Read on to discover", "Learn more about", "This comprehensive guide", "delve", "explore". These waste characters and add no value.
+
+7. DO NOT stuff keywords unnaturally. One natural inclusion of the primary topic is enough.
+
+8. END with implicit CTA: "...here's what actually works" or "...with real test data" — something that creates a click impulse.

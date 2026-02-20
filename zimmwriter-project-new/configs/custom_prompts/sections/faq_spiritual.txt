@@ -1,0 +1,15 @@
+Rewrite this FAQ section using these rules:
+
+1. FORMAT each Q&A as: a genuine question a beginner practitioner would ask → direct, reassuring answer in the first sentence → practical guidance → safety note or cultural context if relevant.
+
+2. ANSWER DIRECTLY. First sentence answers the question. No preamble. "Yes, and here's how to start..." or "No — this is a common misconception because..."
+
+3. RESPECT TRADITIONS. When practices come from specific cultural or closed traditions, acknowledge the source and suggest learning from practitioners within that tradition. Never present closed practices as universally available.
+
+4. INCLUDE SAFETY when relevant: fire safety for candles, herb/ingestion warnings, pregnancy contraindications for essential oils, and "consult a healthcare provider" for any health-adjacent claims.
+
+5. VOICE: Warm mentor. Use contractions (don't, it's, you'll, that's). Reassure without being dismissive.
+
+6. BANNED: "Great question", "It's worth noting", "harness the power", "transformative", "delve", "comprehensive", "Furthermore".
+
+7. LENGTH: Each answer 40-80 words. Warm, practical, honest.

@@ -1,0 +1,155 @@
+# Lesson 12 - How to Create Bulk Product Roundups
+
+if you're an affiliate marketer you
+don't want to miss this lesson in this
+lesson I'm going to show you how easy it
+is to create massive amounts of product
+Roundup reviews using Zim riter in no
+time at all here's an example of one
+this is an article about 10 best coffee
+makers for Brewing the perfect cup at
+home here's a fantastic AI image cost us
+a third of a penny here's a great
+introduction right here and then here
+are our 10 different products and what's
+really neat if you look at this let's
+scroll down a little bit more so you can
+see all these different
+ones if you look at this is actually an
+aawp plugin that we're using that Zim
+riter is compatible with if you don't
+know what that is it allows you to tap
+into the Amazon API and dynamically pull
+the images the price even the title some
+specifics about it a buy button and be
+Amazon terms of service compliant Zim
+riter does all of this with aawp
+automatically all these boxes would be
+automatically created if you use a awp
+you're not tied just to a WP you can use
+any other Amazon API plugin for
+WordPress that uses short codes and an
+Asin if you don't have any idea what I'm
+talking about no worries by default what
+would happen is Zim riter would follow
+your rules inside of scraping surgeon
+and just download the product image to
+Zim riter upload it to your WordPress to
+locally host the image and at least
+you'd have a product image of the the
+product obviously follow any copyright
+rules and whatnot but going the route
+with awp or any other API plugin would
+be ideal so here is the review reviews
+are very high quality here ideal for
+those seeking a versatile Brewing
+solution with options for both hot and
+cold coffee and tea the ninja cp307
+stands out for its advanced technology
+and convenient
+features there's Advanced thermal flavor
+extraction technology with auto IQ
+ensures optimal flavor extraction etc
+etc so this is best for individuals who
+enjoy the convenience of Brewing both
+hot and cold coffee and tea with a
+single versatile system you get some
+pros you get some cons get all the
+different products in here then we have
+a factors to consider this is like a
+buying guide so factors to consider when
+choosing coffee makers we have another
+AI image here some different factors the
+AI came up with and then finally some
+frequently asked questions so how do we
+create this it's really easy inside of
+Zim writer you'll click the AI Vault
+you'll click activate product Roundup
+and then in here you'll put one or more
+plural product names you can have the
+word best before them or not it's
+totally up to you but they'd be plural
+product names and then if you want
+Amazon if you want to do Amazon products
+you don't necessarily have to specify
+URLs you can just have Zim writer find
+those URLs for you to then review I'll
+show you what I mean in a second but if
+you don't want to use Amazon you can
+provide your own URLs you can even
+provide your own URLs using Amazon if
+you want to but it' be like URL one to
+Best Buy for instance URL 2 to Circuit
+City which is no longer a thing UR URL 3
+to you know
+whereever you can put up to 15 different
+URLs in here manually if you want to and
+the cool thing is you don't need scrape
+out if you're providing your own URLs
+and it's not like to a place like Amazon
+or somewhere that's difficult for Zim
+Rider scrape now just be aware if you
+want to use scraping surgeon and I'm
+trying not to get too deep here into the
+woods if you want to use scraping
+surgeon you will need scrape out we'll
+talk all about that kind of stuff in a
+later video but let me just show you how
+easy this is we'll do one product really
+quick wireless headphones I'll click
+Start Roundup and I'll have Zim writer
+find some URLs for it and right now it's
+going to Amazon it's performing the
+search and then it's bringing in the
+resulting
+list all right so here are the different
+URLs now this entire thing is not a URL
+okay if you look there's this little
+separator in here so here is the URL and
+here's the title for the product and
+this allows you then to go through here
+and delete things that are not relevant
+and rep prioritize things if you really
+want to so you can take all this and
+edit inside of here here or you can take
+it and and copy it out and paste it in
+here and edit in in notepad or something
+like that and then copy and paste it
+back inside when you're all done all you
+do is you configure your option how many
+URLs do you want it to process the voice
+of everything some different images that
+you might want the cool feature is in
+the Amazon override when you go in here
+you can set some different options first
+things first you can set your Amazon
+domain so if you wanted to search like
+amazon.ca we can click save settings and
+if we repr process this start
+Roundup all the results are now from
+amazon.ca pretty cool huh the other
+things you can uh configure in here are
+to use a short code instead of
+downloading the image and then and
+uploading it to your WordPress site you
+can disable the call to action that Zim
+riter creates so you would no longer
+have this call to action button down
+here and you can change your tracking ID
+by default it's going to use the
+tracking ID your your tag your affiliate
+tag that's in scraping surgeon if you
+don't want to to do that you can
+temporarily override it with your own
+tag in here then you'd have to enable
+that option so really easy to create
+massive amounts of product roundups
+using this new feature inside of Zim
+writer if you have any questions drop a
+comment down below hit me up on Facebook
+I will have more advanced training and I
+already have existing training about
+this feature on YouTube if you like the
+video please give it a thumbs up please
+subscribe and I will talk to you in the
+next lesson

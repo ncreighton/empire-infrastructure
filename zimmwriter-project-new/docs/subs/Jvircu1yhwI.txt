@@ -1,0 +1,319 @@
+# Lesson 23 - Bulk Generate 10,000 AI Images
+
+so I get this phone call last night and
+it's these companies that sell stock
+photos and they said Matt I heard you're
+working on a feature in Zim writer where
+if you press a single button it will
+generate hundreds thousands even tens of
+thousands of images using Ai and and I
+said yeah I'm working on that and they
+said if you release that we could all go
+out of business and I said so what and I
+hung up the phone I'm going to share
+that update with you and those events
+might have been based on a true story or
+inspired by a true story or I might have
+been dreaming them but the updates for
+real to share with you right now you go
+to zoom writer you open up the AI Vault
+and there's this button called the bulk
+AI image generator before I show you it
+I want to show you the the pudding first
+the proof is in the pudding so here's
+the pudding here are different images I
+generated all in batch clicking a single
+button all right so this is seven
+popular types of magnolia trees and
+shrubs these are images that the AI
+generated look at those happy dogs under
+that beautiful magnolia
+tree we get some images this is for
+washing a dog how to wash a dog
+different images or
+that this is for strategies for
+Effective lesson planning look at that
+dude looks like a real dude drinking his
+OJ these are some beaches in the
+Philippines I'd love to go I love Clear
+Water you like Clear Water love it now
+these are mustt tried dishes in Italy
+top five dishes got our pasta had our
+pizza got some rice with some parsley I
+guess I'm assuming those are meatballs
+we got
+canoli and we have Egypt best places to
+visit in
+Egypt even got some AI Travelers in
+those
+images never been to Egypt before I'd
+loved to go heard it's hot though all
+right so all of these were generated
+using AI let me show you how we did it
+so I clicked on the bulk image generator
+and it brings up this menu and then what
+we need to do is we need to enter some
+titles or blog post URLs so one of the
+titles I entered was how to wash a dog
+and those were the the images we saw
+over here how to wash a dog I just
+entered a title for that you can also
+provide URLs so I have this site here a
+website and I've used Zim writer to
+generate a lot of different articles for
+it demonstrate the quality of the type
+of articles that Zim writer creates CU
+if you don't know Zim writer actually
+creates blog posts so these are blog
+posts in that are created and I said let
+me recreate these images sometimes AI
+images have glitches or sometimes you
+want to upgrade the quality of the
+images so for whatever reason you can
+put in a URL and have Zim riter generate
+images after the fact for those URLs so
+these are the different articles that we
+had Zim writer generate I just put them
+in like this in
+here so we're like remaking images for
+these blog posts
+and then this is a really cool example I
+found this this is University of
+Michigan so this is strategies for
+Effective lesson planning there's really
+no images on here so maybe you have some
+blog posts or you have a client that has
+blog posts and it doesn't have any
+images but you want to add images to it
+yeah you can do that so these are the
+images that it
+generated for this blog post that
+doesn't have any
+images now with all AI you can get a
+glitch here there like it looks like
+this is his left hand but it's on right
+side of his body so every now and then
+you can get a glitch but if you have a
+glitch you just generate more images so
+we have images for a blog post that
+doesn't have any images so I took that
+and I pasted it right in here all right
+now before we click this create AI
+images okay we need a prompt otherwise
+we'll get an error message there's a
+default prompt that I provide in here
+and you can provide your own prompts but
+it takes a moment to wrap your head
+around what's going
+on inside of this output folder
+is a text file for each of these groups
+of images like how to was a dog for
+instance and what's happening is Zim
+writer for each of these posts right
+here each of these titles or each of
+these blog posts it's taking whatever
+you put in this box and using it to
+generate another prompt and that other
+prompt will be used to generate the
+image so this right here this prompt is
+not used to directly generate the image
+it's like it's like the the first step
+and the second step is the prompt that
+this will generate that's why this says
+write a prompt to generate an image
+we're not saying generate an image we're
+saying write a prompt to generate an
+image and the prompt the output from
+this you can see right here all right so
+this is the text file that's in that
+folder we got a text file for each one
+of these groups so strategies for
+Effective Lessing planning there's a
+text file for that and it shows you what
+Zim writer
+created as the prompt which was then
+used to generate the image so recapping
+that here is the prompt we put in which
+caused for this title Zim writer to
+generate this prompt right here and then
+this prompt was fed into the AI
+depending on what AI you choose and
+there's a couple different models
+there's Dolly which is an open AI model
+and there's different stable diffusion
+models from
+stability. right so you select the model
+that you want and then this prompt gets
+fed in automatically all behind the
+scenes into that model to generate your
+image now you'll notice in here there's
+two interesting things in curly brackets
+there's the PHR or the word title and
+the word subheading what Zim writer will
+do behind the scenes is it will take the
+title of the blog post or the title that
+you put in like how to wash a dog and
+replace this placeholder behind the
+scenes right with that phrase and then
+it will replace subheading with one of
+the subheadings that Zim writer
+automatically generates behind the
+scenes for this it's generating like
+different I call them subheadings but
+there are different contexts for the
+titles that you put in and also the blog
+post so you get a variety of different
+images so again it used this and it
+generated five different prompts and
+then fed them all into the AI and
+generated those images you can test this
+out I I don't want to get too deep in
+the woods but you can test this out by
+going to something like the playground
+platform. open.com go to the playground
+and you can paste in your your prompt
+tweak your prompt and and test your
+prompt you can take your prompt you can
+paste it in here you can replace the
+title with how to wash a dog the
+subtopic of uh find a location to wash
+your dog fantastic and then you can
+select the model that you want to
+generate the prompt
+with and so there is our output
+and we can take that output and we can
+go to something like dream Studio which
+uses your stability. a key we can paste
+it in here select 16 by9 select four
+images and see what the result would be
+now this is if we're using comic book
+over here when you select stable
+diffusion you can choose like comic book
+or you can choose photographic go there
+it is photographic and we can like click
+the button called dream and get the
+image result again now all of this is
+running I don't want to get again too
+too confusing this is running on this
+particular model right here which is the
+SD model the SDC is more expensive in a
+higher quality model the sdt is even a
+higher quality and then sd3 is the
+highest quality so you can choose what
+you want but you can only preview the SD
+type of models in this tool but usually
+when you use the the the next level up
+the SDC the quality will be even better
+so this is the how to wash a dog the
+photographic
+style okay so what you can expect so you
+can test out your prompts in dream
+Studio to dial this in and and tweak
+this to to something that you really
+like and then once you've done that
+you'll go over here and you'll select
+your model that Zim Rider uses to
+generate this right here okay to take
+this and generate this obviously if you
+use GPT 4 Turbo you'll get a higher
+quality prompt because it will follow
+your directions better
+uh but it is a little bit more expensive
+and then you want to select how many
+images you want per title or URL so over
+here I chose five for each of these so
+for um this URL the beaches in the
+Philippines I got five results for the
+dishes in Italy to try I got five
+results so you select the number of
+images that you want for each of these
+you can choose all the way up to 15 and
+you might say I want 100 images on the
+topic of washing a dog then all you do
+is you take that title and you just just
+paste it in multiple times and now you
+can get a 100 or a thousand or 10,000
+different images as many as you want and
+then finally there's a button called
+compress images if you don't press this
+button you'll get just the raw output
+from the AI so these are all about three
+or 4 megabytes but if you click the
+compress image button they'll be reduced
+down to about 100 kilobytes which is
+great if you want to just upload them
+directly to
+Wordpress the last thing I want to cover
+and I have a a different guide on this
+uh but you can find some of the
+instructions in this link are loading
+these saved prompts so you can type your
+own prompt in if you want to you can
+also load in the default but there's
+others that you can add so I have some
+websites here that I could add custom
+prompts to and I also have a default
+override that we can add to we can't
+save them to these different profiles we
+can simply load from these profiles or
+start from scratch and just type
+something in if you want to save some a
+prompt to a
+profile you'll open up the options menu
+in Zim riter and you'll open up the set
+AI image prompt and so this is the
+default prompt for creating images that
+Zim Rider uses and then you can do an
+override and here's an override so we
+can you know make this 20 and I'll show
+you how it will change in a
+second and we save the custom prompt and
+then when we go back to
+the bulk image
+generator it pulls from the database the
+the updated prompt so we can have an o a
+default prompt we can have our default
+override prompt and then you can also if
+you've added some WordPress sites create
+specific prompts for each of your
+WordPress sites so Zoom writer allows
+you to add like a thousand different
+WordPress sites a lot of those sites
+might require different styles of images
+different types of prompts so once you
+dial those prompts in you can save them
+in here and then pull them up as you
+generate your bulk images but then also
+Zim writer if you don't know allows you
+to upload your images automatically to
+Wordpress and then it will create those
+images on the Fly and Associate those
+with the blog post and it will use those
+settings
+from in here if you're uploading to a
+specific blog post so if you're
+uploading to your site here it will use
+whatever custom prompt you have in here
+to generate those images to upload them
+all like an Inception like Fri your mind
+when you try to wrap your head around
+all of it but all you need to know is
+the bulk image generator it's really
+cool way to generate lots and lots of
+images you can just use the default
+prompt and get great results if you have
+any questions drop them in the comments
+down below there's also in the
+description a link to Zim writer link to
+the Facebook group with with over 13,000
+Zim writer users who are always online
+and willing to help you very fantastic
+Community unique community so lots of
+help there if you have any other
+questions you know where to reach me on
+Facebook or just send me a private
+message other than that I'd love to hear
+how you're using this Tool uh drop a
+comment down below and good luck with
+your content generation and I'll talk to
+you later

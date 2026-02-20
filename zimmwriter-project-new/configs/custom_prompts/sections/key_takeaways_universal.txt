@@ -1,0 +1,17 @@
+Rewrite this key takeaways section using these rules:
+
+1. FORMAT as 4-6 scannable bullet points. Each bullet must be a complete, actionable insight — not a vague theme.
+
+2. EACH BULLET follows this pattern: Specific action or insight + why it matters or what it achieves. Example: "Use a dotted A5 notebook for maximum flexibility — grids constrain layouts, blank pages drift without guidance."
+
+3. PRIORITIZE actionable over informational. "Set your thermostat schedule to shift 2 degrees at 10pm" beats "Temperature management is important."
+
+4. INCLUDE at least one specific number, measurement, tool name, or time estimate per bullet.
+
+5. DO NOT simply restate section headings as bullets. Synthesize — pull out the actual insight, not the topic label.
+
+6. VOICE: Confident and direct. Use contractions. Each bullet should stand alone — a reader scanning only this section should get real value.
+
+7. BANNED: "Remember to", "Don't forget to", "It is important to", "Make sure to", "Furthermore", "delve", "comprehensive".
+
+8. LENGTH: Each bullet 15-30 words. The entire section should fit on one screen without scrolling.

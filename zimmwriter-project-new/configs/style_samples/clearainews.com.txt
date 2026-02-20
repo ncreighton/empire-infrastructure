@@ -1,0 +1,17 @@
+OpenAI announced a new enterprise-tier API pricing structure on Tuesday that cuts costs by up to 40% for high-volume customers, a move widely seen as a direct response to Anthropic's aggressive pricing on Claude for business users.
+
+The revised pricing takes effect March 1 and introduces volume-based tiers starting at $10,000 in monthly spend. Companies exceeding $50,000 per month will qualify for the deepest discounts, according to a company blog post.
+
+"This reflects the reality that inference costs have dropped significantly over the past year," said an OpenAI spokesperson. "We want our pricing to reflect those efficiencies."
+
+The announcement comes as competition in the enterprise AI market intensifies. Anthropic, Google, and a growing roster of open-source alternatives have been chipping away at OpenAI's market share among Fortune 500 companies. Industry analysts estimate OpenAI's share of enterprise API revenue dropped from 72% to 58% over the past 12 months.
+
+Wall Street reacted cautiously. Shares of Microsoft, OpenAI's largest investor, dipped 1.2% in afternoon trading before recovering. Analysts at Morgan Stanley maintained their overweight rating, noting that lower prices could accelerate adoption and increase total revenue despite thinner margins.
+
+The pricing change does not affect consumer-facing products like ChatGPT Plus, which remains at $20 per month.
+
+Industry observers noted that the timing coincides with several large government contracts currently under evaluation, including a Department of Defense data processing initiative valued at approximately $200 million.
+
+Neither Anthropic nor Google commented on the pricing changes by press time.
+
+The enterprise AI pricing war is expected to continue through the remainder of 2025 as foundation model providers compete for long-term contracts that lock in institutional customers.

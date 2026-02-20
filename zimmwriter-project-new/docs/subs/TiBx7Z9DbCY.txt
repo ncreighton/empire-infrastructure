@@ -1,0 +1,61 @@
+# Lesson 20 - How to 1-Click Nuke AI Words
+
+in a nutshell the AI delves into the
+realm of language with a deep dive
+ensuring a transition into the crucial
+yet daunting task of selecting words as
+if it were a kid in a candy store unable
+to resist its
+favorites I hate AI words do you hate AI
+words too now there's a way inside of
+Zim writer to Nuke those AI words let me
+show you how it works so inside of Zim
+writer there's an options menu click the
+button and you'll see this option down
+here called set AI words to Nuke you
+open it up and there's a default list in
+here right now now some of these you
+might not want you might not think
+they're important so you can just delete
+them or maybe you have your own list of
+words just keep in mind the words need
+to be comma separated so you'll put them
+in here and you'll put a comma next to
+each one and then once you have your
+list completed you'll click save
+changes and also read the directions up
+here there's more in the directions that
+I don't cover in this video uh some
+nuances on how this whole thing works
+and then when you go into the bulk
+writer or the SEO writer or Penny Arcade
+or the product runup feature if you go
+into any of these tools there's a little
+check box called nuke AI words all you
+have to do is click that button and then
+Zoom writer will do an additional prompt
+after it's generated the particular
+section and this works on introduction
+conclusion subheadings and then also
+FAQs after it's written that particular
+section but before it does a skinny
+paragraph before it does a translation
+before it does your your custom prompts
+okay it will try to nuke those AI words
+now just be aware all right I want to
+leave you with one thing sometimes it
+will replace a word with another AI word
+so you know we can get like a 90%
+reduction or maybe a 95% reduction but
+you still might see one of those AI
+words still hanging around but it's
+going to be significantly better if
+nuking AI words is your number one
+priority in life so any questions about
+that uh just drop a comment down below
+join the Facebook group uh there's a
+link to Zim writer you can get Zim rer
+with this this new nuking AI feature
+other than that good luck with your
+content generation and I'll talk to you
+later

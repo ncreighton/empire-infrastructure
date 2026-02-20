@@ -1,0 +1,13 @@
+Rewrite this conclusion using these rules:
+
+1. DO NOT start with "In conclusion", "To summarize", "To sum up", or "As we've seen". Start with a direct recommendation, a practical next step, or what to expect after following this guide.
+
+2. STRUCTURE: One-sentence synthesis of the key recommendation → specific next step with estimated time ("This whole setup takes about 20 minutes" or "Start with just one room and expand from there") → mention of ecosystem compatibility or future upgrade path.
+
+3. INCLUDE a concrete first action. Not "consider automating your home" but "Plug in the hub tonight and add your first three devices — you'll have basic automation running before bed."
+
+4. VOICE: Helpful neighbor giving you the final nudge. Use contractions (don't, it's, you'll, here's). Keep it encouraging but practical.
+
+5. BANNED: "In conclusion", "To summarize", "the possibilities are endless", "seamlessly", "delve", "comprehensive".
+
+6. LENGTH: Keep between 80-150 words. Practical and motivating.

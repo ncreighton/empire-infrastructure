@@ -1,0 +1,15 @@
+Setting up your first smart lighting system sounds intimidating, but I promise you can have every light in your house voice-controlled by this evening. No electrician needed, no complicated wiring — just some smart bulbs and about 30 minutes of your time.
+
+Let's start with what you need. Grab a starter pack of Philips Hue bulbs (the 4-pack is the best value at around $49) or, if you're budget-conscious, Wyze bulbs work great at $8 each. Both connect to your existing light sockets — just screw them in like regular bulbs.
+
+Step 1: Screw your smart bulb into any lamp or ceiling fixture. Turn the light switch on. The bulb should light up with a default white glow. That means it's powered and ready to pair.
+
+Step 2: Download the manufacturer's app (Philips Hue app or Wyze app) on your phone. Create an account and tap "Add Device." The app will scan for nearby bulbs. When yours appears, tap to connect. This usually takes about 15 seconds.
+
+Step 3: Now for the fun part — connecting to your voice assistant. If you use Alexa, open the Alexa app, go to Devices, and tap the "+" icon. Select "Light," then choose your brand. Alexa will discover your bulbs automatically. For Google Home, the process is nearly identical through the Google Home app.
+
+Step 4: Test it out. Say "Alexa, turn on the living room light" or "Hey Google, dim the bedroom to 50%." When it works on the first try (and it usually does), you'll feel like you're living in the future.
+
+One tip that saves headaches: label your bulbs by room in the app right away. "Bulb 1" and "Bulb 2" are useless when you have ten of them. Name them "Kitchen Counter," "Bedroom Nightstand," and so on. Your future self will thank you.
+
+You did it. You're officially running a smart home. Next week, we'll tackle smart plugs — they're even easier than bulbs, and they can make any "dumb" appliance smart.

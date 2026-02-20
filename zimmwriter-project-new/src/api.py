@@ -20,8 +20,12 @@ from pydantic import BaseModel, Field
 from .controller import ZimmWriterController
 from .site_presets import SITE_PRESETS, get_preset, get_all_domains
 from .monitor import JobMonitor
-from .orchestrator import Orchestrator
+from .orchestrator import Orchestrator, CampaignOrchestrator
 from .intelligence import IntelligenceHub
+from .campaign_engine import CampaignEngine
+from .article_types import classify_title, classify_titles, get_dominant_type
+from .screen_navigator import ScreenNavigator, Screen, MENU_BUTTONS
+from .link_pack_builder import LinkPackBuilder
 
 app = FastAPI(
     title="ZimmWriter Controller API",
@@ -508,6 +512,195 @@ def orchestrate(req: OrchestrateReq, background_tasks: BackgroundTasks):
 
 
 # ═══════════════════════════════════════════
+# CAMPAIGN ENGINE
+# ═══════════════════════════════════════════
+
+class CampaignPlanReq(BaseModel):
+    domain: str
+    titles: List[str]
+
+class CampaignRunReq(BaseModel):
+    domain: str
+    titles: List[str]
+    profile_name: Optional[str] = None
+    wait: bool = True
+
+class CampaignBatchReq(BaseModel):
+    campaigns: List[Dict[str, Any]]  # [{domain, titles, profile_name?, wait?}]
+    delay_between: int = 10
+
+@app.post("/campaign/plan", tags=["Campaign"])
+def campaign_plan(req: CampaignPlanReq):
+    """
+    Plan a campaign: analyze titles, detect types, select settings,
+    generate SEO CSV. Does NOT execute — returns plan for review.
+    """
+    engine = CampaignEngine()
+    plan, csv_path = engine.plan_and_generate(req.domain, req.titles)
+    summary = engine.get_campaign_summary(plan)
+    return {
+        "status": "planned",
+        "csv_path": csv_path,
+        "summary": summary,
+        "title_types": plan.title_types,
+        "per_title_config": plan.per_title_config,
+    }
+
+@app.post("/campaign/run", tags=["Campaign"])
+def campaign_run(req: CampaignRunReq, background_tasks: BackgroundTasks):
+    """
+    Plan and execute a single-site campaign with intelligent settings.
+    Uses CampaignEngine for title analysis + SEO CSV generation,
+    then runs via CampaignOrchestrator.
+    """
+    co = CampaignOrchestrator(get_ctrl())
+    if req.wait:
+        result = co.run_campaign(
+            domain=req.domain, titles=req.titles,
+            profile_name=req.profile_name, wait=True,
+        )
+        return result
+    else:
+        background_tasks.add_task(
+            co.run_campaign,
+            req.domain, req.titles, req.profile_name, True,
+        )
+        return {"status": "started_in_background", "domain": req.domain}
+
+@app.post("/campaign/batch", tags=["Campaign"])
+def campaign_batch(req: CampaignBatchReq, background_tasks: BackgroundTasks):
+    """
+    Run campaigns across multiple sites. Each item: {domain, titles, profile_name?, wait?}
+    Runs in background.
+    """
+    co = CampaignOrchestrator(get_ctrl())
+    background_tasks.add_task(co.run_multi_campaign, req.campaigns, req.delay_between)
+    return {"status": "batch_started", "campaign_count": len(req.campaigns)}
+
+@app.post("/campaign/classify", tags=["Campaign"])
+def campaign_classify(req: CampaignPlanReq):
+    """Classify article titles by type without generating a full plan."""
+    types = classify_titles(req.titles)
+    dominant = get_dominant_type(req.titles)
+    return {
+        "title_types": types,
+        "dominant_type": dominant,
+        "type_counts": dict(__import__("collections").Counter(types.values())),
+    }
+
+
+# ═══════════════════════════════════════════
+# SCREEN NAVIGATION
+# ═══════════════════════════════════════════
+
+@app.get("/screen/current", tags=["Navigation"])
+def screen_current():
+    """Detect which ZimmWriter screen is currently active."""
+    ctrl = get_ctrl()
+    nav = ScreenNavigator(ctrl)
+    screen = nav.detect_screen()
+    return {"screen": screen.value, "title": ctrl.get_window_title()}
+
+@app.get("/screen/available", tags=["Navigation"])
+def screen_available():
+    """List all navigable screens with their menu button info."""
+    return {
+        "screens": [
+            {"screen": s.value, "auto_id": info["auto_id"], "label": info["label"]}
+            for s, info in MENU_BUTTONS.items()
+        ]
+    }
+
+class NavigateReq(BaseModel):
+    screen: str = Field(..., description="Target screen name (e.g., 'bulk_writer', 'seo_writer')")
+
+@app.post("/screen/navigate", tags=["Navigation"])
+def screen_navigate(req: NavigateReq):
+    """Navigate to a specific screen (via Menu hub)."""
+    try:
+        target = Screen(req.screen)
+    except ValueError:
+        raise HTTPException(400, f"Unknown screen: {req.screen}")
+    ctrl = get_ctrl()
+    nav = ScreenNavigator(ctrl)
+    success = nav.navigate_to(target)
+    return {"success": success, "screen": nav.detect_screen().value}
+
+@app.post("/screen/menu", tags=["Navigation"])
+def screen_menu():
+    """Navigate back to Menu from any screen."""
+    ctrl = get_ctrl()
+    nav = ScreenNavigator(ctrl)
+    success = nav.back_to_menu()
+    return {"success": success, "screen": nav.detect_screen().value}
+
+
+# ═══════════════════════════════════════════
+# LINK PACKS
+# ═══════════════════════════════════════════
+
+class LinkPackBuildReq(BaseModel):
+    domain: str = Field(..., description="Domain to build link pack for")
+    max_posts: int = Field(100, description="Maximum posts to fetch")
+
+@app.post("/link-packs/build", tags=["Link Packs"])
+def link_pack_build(req: LinkPackBuildReq):
+    """Build a link pack for a site by scraping its WordPress REST API."""
+    preset = get_preset(req.domain)
+    if not preset:
+        raise HTTPException(404, f"No preset for: {req.domain}")
+    wp = preset.get("wordpress_settings", {})
+    site_url = wp.get("site_url")
+    if not site_url:
+        raise HTTPException(400, f"No site_url in preset for: {req.domain}")
+
+    builder = LinkPackBuilder()
+    pack_text = builder.build_pack(req.domain, site_url, max_posts=req.max_posts)
+    output_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "link_packs")
+    os.makedirs(output_dir, exist_ok=True)
+    link_count = len(pack_text.strip().split("\n")) if pack_text else 0
+    path = builder.save_pack(req.domain, pack_text, output_dir)
+    return {"domain": req.domain, "links": link_count, "path": path}
+
+@app.post("/link-packs/build-all", tags=["Link Packs"])
+def link_pack_build_all():
+    """Build link packs for all sites that have WordPress settings."""
+    builder = LinkPackBuilder()
+    results = []
+    output_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "link_packs")
+    os.makedirs(output_dir, exist_ok=True)
+    for domain, config in SITE_PRESETS.items():
+        wp = config.get("wordpress_settings", {})
+        site_url = wp.get("site_url")
+        if not site_url:
+            results.append({"domain": domain, "status": "skipped", "reason": "no site_url"})
+            continue
+        try:
+            pack_text = builder.build_pack(domain, site_url, max_posts=100)
+            link_count = len(pack_text.strip().split("\n")) if pack_text else 0
+            path = builder.save_pack(domain, pack_text, output_dir)
+            results.append({"domain": domain, "status": "ok", "links": link_count, "path": path})
+        except Exception as e:
+            results.append({"domain": domain, "status": "error", "error": str(e)})
+    return {"results": results, "built": sum(1 for r in results if r["status"] == "ok")}
+
+@app.get("/link-packs/list", tags=["Link Packs"])
+def link_pack_list():
+    """List all saved link pack files."""
+    pack_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "link_packs")
+    if not os.path.isdir(pack_dir):
+        return {"packs": []}
+    packs = []
+    for f in os.listdir(pack_dir):
+        if f.endswith(".txt"):
+            path = os.path.join(pack_dir, f)
+            with open(path, encoding="utf-8") as fh:
+                line_count = sum(1 for _ in fh)
+            packs.append({"name": f, "path": path, "links": line_count})
+    return {"packs": packs}
+
+
+# ═══════════════════════════════════════════
 # HEALTH
 # ═══════════════════════════════════════════
 
@@ -515,7 +708,7 @@ def orchestrate(req: OrchestrateReq, background_tasks: BackgroundTasks):
 def root():
     return {
         "name": "ZimmWriter Controller API",
-        "version": "1.0.0",
+        "version": "1.2.0",
         "docs": "http://localhost:8765/docs",
         "sites_configured": len(SITE_PRESETS),
     }

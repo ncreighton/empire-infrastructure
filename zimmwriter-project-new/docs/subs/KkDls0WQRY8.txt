@@ -1,0 +1,173 @@
+# Lesson 15 - How to Use Custom Prompts
+
+hey and welcome to your beginner guide
+to getting started with custom prompts
+inside of Zim writer custom prompts are
+incredibly powerful they allow you to
+layer your prompts onto my prompts so
+then apply your prompts after Z writer
+generated the content for a specific
+section and completely tailor your
+output for your specific needs very
+powerful let me show you how it all
+works again this is our beginner guide
+there's a lot to digest in here so I'm
+going to have a more advanced lesson
+later on but right now we're just going
+to give you that high level overview now
+you can use the custom prompt feature in
+the bulk writer the SEO writer the penny
+arcade and then also the product Roundup
+feature but we'll open up the bulk
+writer and you can find the custom
+prompts in this custom prompt button
+right here and this is the area where
+you would both create your custom
+prompts and apply your custom prompts so
+I have a couple in here but before let
+me take a step back before we look at
+them I want to highly recommend clicking
+this button which will take you to this
+guide to using custom prompts very
+important to read out of all the
+different guides this is probably the
+most important to read if you're going
+to start using custom prompts I don't
+just create prompts in Zim writer and
+just say I hope they work I test
+everything I test everything hundreds of
+times if you're going to create custom
+prompts and use those custom prompts you
+need to be testing your custom prompts
+this guide shows you exactly how to do
+it it's not hard but you do need to
+understand the basics so let me show you
+what a custom prompt looks like so we'll
+open up this this dog conclusion one so
+this is a situation where someone wanted
+a call to action like a textual call to
+action in their conclusion I think they
+had a kennel it's called PBG kennels and
+they wanted to mention that people
+should reach out if they have any
+questions or anything like that so here
+is the prompt rewrite the text at an
+eighth grade level by using visual
+language to evoke emotion while making a
+concluding main point mention that the
+reader should reach out to PB G kennels
+if they need help and then what we can
+do is we can say I want to apply this
+to the conclusion so prompt for the
+conclusion CP dog conclusion and then
+you can specify what model you want the
+prompt to be applied in so we'll say I
+want this to be applied in 3.5 turbo
+11106 and now we just leave this and
+your custom prompt will now be applied
+whenever we write an article that has a
+conclusion we can say oh you know what I
+want to apply this for the intro also
+now we can do that now it's going to
+apply for the intro in the conclusion
+there's other custom prompts you can
+make so let's say remove AI terms
+rewrite the text to remove any of these
+words if they are present in the text
+delve dive maybe you don't want those
+words so you say I want everything to
+apply the uh the remove AI terms and now
+what this is going to do is apply this
+prompt everywhere for the intro for the
+conclusion for the subheading
+transitions product layout key takeaways
+FAQs for everything it's going to apply
+this prompt now I mentioned testing your
+prompts is so critical I explained
+exactly how to test your prompts inside
+of here this is what I send to open AI I
+send a context so I literally you can go
+into the playground and test this this
+is literally what I put in here all
+right I have the context which would be
+the article title or subheading title so
+if we apply this to the intro the intro
+it would Supply the title of the article
+if we applied this to a subheading it
+would where's our intro it would be the
+subheading title for whatever the the
+subheading is the text to modify this
+would be the text that Zim writer
+generated so Zim writer generates the
+text first and then it goes back to open
+Ai and applies your prompt after it
+generated the text and then I say modify
+the text according to these rules and
+this is where I paste your prompt in and
+this is the modify text this is what we
+get as a result so as an example this is
+what it looks like completely filled
+out so we'll take this and I'll paste it
+right into the playground if you're not
+familiar with the playground is a place
+where you can test your prompts because
+it's not biased based on previous
+generations like chat GPT because you're
+having a string of conversations with it
+it's biased you never want to develop
+your prompts inside a Chad GPT develop
+them in the playground and then also I
+forgot to mention set this to like a
+thousand for the length and set this to
+7 don't mess with anything else in here
+so the context this is just I was
+reviewing some I think flood lights or
+something so this is the context H2 and
+this is the text it wrote and then this
+is the custom prompt rewrite the text in
+the style of Dr Seuss and also include a
+markdown format bullet list so we click
+submit and see what we get so now it's
+right in it like Dr
+Seuss and it gives us this markdown
+bullet list now if you'll see like it
+says markdown format bullet list maybe
+we don't want that in there all right
+maybe we don't want it to say markdown
+format bullet list so you come back up
+here and you tweak your prompt all right
+you tweak it a little bit and then you
+delete this and you run it again run it
+like 10 times run it like 15 times try
+your prompt on different models or just
+stick to whatever model you're going to
+use in here because your prompt is going
+to function on different models test
+this thing out because that's exactly
+what I do and that gives us that high
+quality output inside a zim writer if
+you're not testing you're not going to
+get good output one more thing
+you're allowed to let's see if we go
+back to the custom outline feature that
+we talked about in the last lesson
+there's a way for you to even specify
+your custom prompt on a subheading level
+CP all your custom prompts have to start
+with CP uncore and then your custom
+prompt name and so in the SEO writer yes
+we have this custom prompt button to
+apply custom prompts you can even apply
+your custom prompt to your subheadings
+so it' be like CP
+if we get a prompt named Seuss you could
+apply it just like that extremely
+extremely powerful we need a much deeper
+die but that was just to give you a
+taste on what you can do with this I do
+have more videos on this right now
+definitely check them out any questions
+drop a comment in the comments below uh
+hit me up on Facebook like the video
+subscribe I'll see you in the next
+lesson

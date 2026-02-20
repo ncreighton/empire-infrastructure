@@ -1,0 +1,13 @@
+Rewrite this introduction using these rules:
+
+1. OPEN with a relatable smart home moment — a frustration ("Your lights still won't sync after the update?"), a discovery, or a real before/after scenario. Never open with a generic statement about smart homes being the future.
+
+2. HOOK STRUCTURE: Recognizable daily scenario → what this article solves → quick credibility signal ("After living with this setup for 6 months" or "I've tested this across three ecosystems").
+
+3. STATE the core takeaway or recommendation within the first 3 sentences.
+
+4. VOICE: Helpful neighbor who's already figured it out. Use contractions naturally (don't, can't, it's, you'll). Mix sentence lengths — some flowing, some just 4-5 words for emphasis.
+
+5. BANNED: Do not start with "In today's world", "Smart home technology has", or "In the ever-evolving landscape". Do not use "delve", "comprehensive", "myriad", "plethora", or "seamlessly".
+
+6. LENGTH: Keep between 80-120 words. Every sentence must pull the reader deeper.

@@ -163,3 +163,145 @@ class Orchestrator:
                 logger.info(f"No CSV for {domain}, skipping")
 
         return self.run_all()
+
+
+class CampaignOrchestrator:
+    """
+    Enhanced orchestrator that uses CampaignEngine for intelligent job planning.
+    Analyzes titles, detects article types, generates SEO CSVs with per-title
+    outlines and settings, then runs jobs with optimal configuration.
+
+    Usage:
+        co = CampaignOrchestrator()
+        results = co.run_campaign("smarthomewizards.com", [
+            "How to Set Up Alexa Routines",
+            "10 Best Smart Plugs for 2026",
+            "Ring vs Nest Doorbell Comparison",
+        ])
+    """
+
+    def __init__(self, controller: ZimmWriterController = None):
+        from .campaign_engine import CampaignEngine
+        self.controller = controller or ZimmWriterController()
+        self.engine = CampaignEngine()
+        self.results: List[Dict] = []
+
+    def run_campaign(self, domain: str, titles: List[str],
+                     profile_name: str = None, wait: bool = True,
+                     delay_between: int = 10) -> Dict:
+        """
+        Plan and execute a single-site campaign with intelligent settings.
+        Returns result dict with plan summary, CSV path, and execution status.
+        """
+        result = {
+            "domain": domain,
+            "started": datetime.now().isoformat(),
+            "status": "unknown",
+        }
+
+        try:
+            # Plan the campaign
+            plan, csv_path = self.engine.plan_and_generate(domain, titles)
+            result["plan_summary"] = self.engine.get_campaign_summary(plan)
+            result["csv_path"] = csv_path
+
+            # Connect if needed
+            if not self.controller._connected:
+                self.controller.connect()
+
+            # Clear previous data
+            self.controller.clear_all_data()
+            time.sleep(1)
+
+            # Load profile if specified
+            if profile_name:
+                self.controller.load_profile(profile_name)
+                time.sleep(2)
+
+            # Apply site preset with campaign overrides
+            preset = get_preset(domain)
+            if not preset:
+                raise ValueError(f"No preset for: {domain}")
+
+            merged = {**preset, **plan.settings_overrides}
+            self.controller.apply_site_config(merged)
+            time.sleep(1)
+
+            # Apply the campaign's selected outline template
+            if plan.outline_template:
+                try:
+                    self.controller.toggle_feature("custom_outline", enable=True)
+                    time.sleep(0.5)
+                    self.controller.configure_custom_outline(
+                        outline_text=plan.outline_template,
+                        outline_name=f"campaign_{plan.dominant_type}",
+                    )
+                    time.sleep(0.5)
+                    logger.info("Applied outline template for type: %s", plan.dominant_type)
+                except Exception as e:
+                    logger.warning("Could not apply outline template: %s", e)
+
+            # Load the campaign CSV
+            self.controller.load_seo_csv(csv_path)
+            result["source"] = f"Campaign CSV: {csv_path}"
+            time.sleep(1)
+
+            # Start generation
+            self.controller.start_bulk_writer()
+
+            if wait:
+                monitor = JobMonitor(self.controller)
+                monitor.start(total_articles=len(titles))
+                completed = monitor.wait_until_done(timeout=7200)
+                result["status"] = "completed" if completed else "timeout"
+            else:
+                result["status"] = "started"
+
+        except Exception as e:
+            result["status"] = "error"
+            result["error"] = str(e)
+            logger.error(f"Campaign failed for {domain}: {e}")
+
+        result["finished"] = datetime.now().isoformat()
+        self.results.append(result)
+        return result
+
+    def run_multi_campaign(self, campaigns: List[Dict[str, Any]],
+                           delay_between: int = 10) -> List[Dict]:
+        """
+        Run campaigns across multiple sites sequentially.
+        Each campaign dict: {domain: str, titles: list, profile_name?: str, wait?: bool}
+        """
+        if not self.controller._connected:
+            self.controller.connect()
+
+        all_results = []
+        total = len(campaigns)
+
+        for i, camp in enumerate(campaigns, 1):
+            logger.info(f"═══ Campaign {i}/{total}: {camp['domain']} ═══")
+            result = self.run_campaign(
+                domain=camp["domain"],
+                titles=camp["titles"],
+                profile_name=camp.get("profile_name"),
+                wait=camp.get("wait", True),
+            )
+            all_results.append(result)
+
+            if i < total and delay_between > 0:
+                logger.info(f"Waiting {delay_between}s before next campaign...")
+                time.sleep(delay_between)
+
+        success = sum(1 for r in all_results if r["status"] == "completed")
+        logger.info(f"═══ DONE: {success}/{total} campaigns completed ═══")
+
+        self.results = all_results
+        self._save_results()
+        return all_results
+
+    def _save_results(self):
+        """Save campaign orchestration results."""
+        filepath = ensure_output_dir() / f"campaign_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        with open(filepath, "w") as f:
+            json.dump(self.results, f, indent=2, default=str)
+        logger.info(f"Campaign results saved: {filepath}")

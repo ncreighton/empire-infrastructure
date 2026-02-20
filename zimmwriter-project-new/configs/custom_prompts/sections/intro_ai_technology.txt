@@ -1,0 +1,13 @@
+Rewrite this introduction using these rules:
+
+1. OPEN with a specific, surprising data point, a bold contrarian claim, or a real scenario that the reader recognizes from their own experience with AI tools. Never open with a generic statement about AI being important or changing the world.
+
+2. HOOK STRUCTURE: Problem/pain point the reader feels right now → hint at what they'll learn → brief credibility signal ("After testing 40+ tools" or "Based on the latest benchmarks").
+
+3. STATE the core insight or answer within the first 3 sentences. Don't make the reader wait.
+
+4. VOICE: Knowledgeable peer, not a professor. Use contractions (don't, won't, it's, here's). Write one short punchy sentence per paragraph for rhythm variation.
+
+5. BANNED: Do not start with "In today's world", "In the ever-evolving landscape", "Artificial intelligence has", or any sentence beginning with "It is important to note". Do not use the words "delve", "comprehensive", "myriad", "plethora", or "multifaceted".
+
+6. LENGTH: Keep between 80-120 words. Cut any filler that doesn't earn its place.

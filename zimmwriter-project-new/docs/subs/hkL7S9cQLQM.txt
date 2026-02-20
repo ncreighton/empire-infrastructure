@@ -1,0 +1,140 @@
+# Lesson 21 - How to Mimic Any Writing Style
+
+one of the most common questions I get
+is how can I have the AI write less like
+an AI and more like me more like my
+style we all have different writing
+styles and I'm not talking about AI
+words there's already a feature inside
+of Zim writer to Nuke AI words your
+delve your dive and things like that so
+I'm not talking about AI words I'm just
+talking about the style of the writing
+the humor that's involved all right the
+sentence structure the vocabulary that
+the word choices is it a 10th grade word
+level or is it an eighth grade word
+level all of these factors affect the
+writing style but it's hard especially
+if you have multiple websites with
+multiple Styles it's hard to to dial
+that in with an AI as it writes but now
+you can with the style mimic inside a
+zim writer you can create up to a
+thousand different styles for all your
+different blogs all your different
+clients or whatever and then select them
+whenever you want to write in that
+particular style let me show you how it
+works so we'll open up Zim writer and
+the style mimic feature is in the bulk
+writer the SEO writer the penny arcade
+if you don't know what the penny arcade
+is you can put in up to a thousand URLs
+and summarize those so that's called the
+penny arcade and then product roundups
+if you're doing like a top 10 products
+or whatever the style mimics in there
+too but we're going to look at the bulk
+writer right now and you'll see this
+button called style mimic open it up and
+the first thing I want you to do is
+click on this directions link and it
+will bring up the style mimic directions
+page that has more information that I'm
+not going to cover in this video in it
+it's definitely a worth your time
+reading you'll see in the mimic menu a
+style to mimic box where you can feed in
+up to 40,000 characters that you want
+the AI to mimic and you can and this can
+be anything you want this can be a text
+document this can be a Word document a
+web page your web page a competitor's
+web page whatever you want again we're
+we're mimicking the writing style of
+this so I have this blog post I wrote
+here and I'm going to just take the
+content from here and put it right
+inside here now it's not that long
+there's other blog posts I wrote that
+are longer again the longer the better
+but we'll run with this now the model
+you choose down here is the model that
+it's going to use to generate the mimic
+so in a way you might want to use a
+higher end model like GPT 4 Turbo or GPT
+4 as opposed to GPT 3.5 so we'll check
+uh GPT for Turbo and then you press
+generate
+mimic this
+generate so the mimic is right in a
+style that is conversational informative
+and slightly playful now that's pretty
+accurate suitable for readers at a high
+school level the sentences are a mix of
+medium and occasional long length
+utilizing commas for clarity the tone is
+balanced with a tone of touch of
+enthusiasm engaging The Reader through
+varied sentence structure detailed
+explanations are provided without
+overwhelming complexity and light humor
+is used sparingly to maintain reader
+interest throughout the text I really
+like that actually so we can give this
+mimic a name now I'll call this mimic of
+Matt one I'm going to call it one
+because we're going to generate this
+again I don't want to lose this because
+we we can't edit this this is our mimic
+now so we'll save
+it now it's in there mimic of mat one
+but now what we can do if we want is we
+can generate this again if we want to so
+we'll put generate
+mimic so write in the style that's
+informative instructional casually
+engage aging utilizing accessible
+vocabulary light humor at a 2 out of 10
+rating details provided at a 7 out of 10
+level this is cool too so I'm actually
+going to call this mimic of Mat 2 so I
+have two different variations in here
+we'll save the mimic and then what we
+can do right now we've loaded mimic of
+Mat 2 if we want to load mimic of mat
+one we just click this right here click
+this right here load number two right
+now number two is loaded and then as we
+will put in our blog post title like how
+to get more back links and there we'll
+configure our options and then as we
+write this it will use that mimic now we
+can look at the output if we don't like
+the output if we don't like the style
+that it's writing in we come up here and
+we just load a different mimic load that
+one now and now that one's loaded all
+right if you don't like the mimics you
+can come in here and you can delete the
+mimic you can also regenerate and then
+update the mimic if you want to we can
+call this like default now or we could
+regenerate and then rename this and we
+can say update mimic and now it's called
+default so that's how mimics work I'm
+really excited to hear how you guys are
+using them how you're are liking them if
+you do uh like all this or you have a
+question drop a comment down below I'd
+love to hear from you please subscribe
+like the video there's links to Zim
+Rider down below there's links to the
+Facebook group if you haven't joined it
+there's over 12,000 people in the
+Facebook group very thriving Community
+even if you don't get Zim writer join
+the group other than that hey thanks for
+watching good luck with your content
+generation I'll talk to you later

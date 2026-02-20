@@ -1,0 +1,11 @@
+I wore the Garmin Forerunner 265 for six weeks straight — through 23 runs, 8 strength sessions, two 50-mile bike rides, and one ill-advised trail race in freezing rain. Here's what the data tells me about whether this watch deserves its spot in the $400 GPS watch category.
+
+Heart rate accuracy was the first thing I tested. Using a Polar H10 chest strap as the control, the Forerunner 265's wrist-based optical sensor stayed within 2-3 BPM during steady-state runs below 160 BPM. During high-intensity intervals where my heart rate spiked above 175, the wrist sensor lagged by 4-8 seconds and occasionally underread by up to 7 BPM. That's consistent with other wrist-based sensors and acceptable for most training purposes, but serious interval athletes will still want a chest strap.
+
+GPS tracking impressed me. On a measured 10K course, the Forerunner 265 recorded 6.22 miles across five runs — within 0.3% of the actual distance. The multi-band GPS locked on in under 8 seconds every time, even under heavy tree cover on wooded trails where my previous watch would lose signal entirely.
+
+The AMOLED display is the headline upgrade from the 255, and it genuinely changes the user experience. Pace data is readable at a glance in direct sunlight, and the always-on mode — which I kept enabled — still delivered 11 days of battery life with 45 minutes of daily GPS tracking. Garmin claims 13 days; I'd call 11 realistic with my usage patterns.
+
+Recovery metrics are where Garmin's ecosystem pulls ahead of competitors. The morning report combines HRV status, sleep quality, and training load to deliver a readiness score that I found surprisingly accurate. On days it recommended a rest day, my actual performance in evening runs confirmed the assessment — my pace suffered and perceived effort was elevated.
+
+At $399, it sits between the Coros Pace 3 ($299) and the Garmin Forerunner 965 ($599). For runners who want reliable data without entering the luxury tier, the 265 hits the sweet spot between capability and value.

@@ -1,0 +1,198 @@
+# Lesson 19 - How to Use the Text Discombobulator
+
+and welcome to your getting started
+guide with the text discombobulator
+inside of zenwriter it's a mouthful it
+sounds complicated it's a little hard to
+explain but I think if I demonstrate an
+example it will make a lot of sense to
+you let me show you how it works so
+we're g to not talk about the text
+discombobulator first we're going to
+talk about the problem I'm trying to
+solve so the problem I'm trying to solve
+is I have these these keywords here but
+these keywords are actually categories
+on my SEO website so a categor is SEO a
+categories SEO Checker a categories SEO
+agency what I want to do is write a
+paragraph description about each of
+these categories how can I go about
+doing that I would go to the playground
+to build my prompt for that so I'm in
+the playground right now and this prompt
+right here is what I feed into open AI
+when we use the text discombobulator I'm
+going to feed in a line of text so the
+line of text could be SEO agency all
+right so here's our line of text
+and then we feed in a prompt that you
+create you or I create and then we run
+the prompt and we get the output now the
+prompt I want to tell open AI that I
+want a one paragraph description about
+this category now I've already done this
+behind the scenes I'll show you what it
+looks like so SEO agency and then here's
+the prompt I created write one paragraph
+about the data above use the keyword SEO
+in the paragraph now I'm saying this
+because my whole websites about SEO so I
+want to just pepper the these different
+categories with the word SEO and kind of
+help the AI understand the context of
+where I'm coming from like for instance
+rank Checker over here it might not know
+that involves SEO so I'm hinting that
+hey everything involves SEO so here is
+the prompt I have and you can test it
+under different models but we'll test it
+here looking for a reliable SEO agency
+to help boost your online presence an
+SEO agent so I don't really like that I
+don't want looking for for I want let's
+modify this
+description about the data above let's
+try
+that no I don't want that I want
+basically this one paragraph one
+paragraph that could represent like one
+par it's hard to do this in real time
+I'm like prompting in real time write a
+one
+paragraph
+category one
+paragraph to explain the
+category listed
+above the category relates to the
+concept of SEO all right let's try
+that I like that now whenever I test
+prompts I'll do it multiple times and
+we'll do it under different models if
+I'm if I'm always going to use GPT 3.5
+turbo 0125 then I'll just maintain this
+I won't test it on other ones you might
+want to test it under different models
+so that's
+good and the reason we do this inside of
+the playground is because it doesn't
+bias when you do this inside of when you
+try to build a prompt inside of chat gbt
+it's you're biasing the prompt the
+results based on everything above it but
+here we're deleting our conversation and
+we're simply feeding this in again and
+again all right so looks like it's
+succeeding very well I could test it
+under gp4 turbo but I'm not going to
+let's try rank Checker now let's paste
+that in see if this prompt works for
+rank
+Checker I like
+it it's it's basically explaining what
+this is fantastic let's try one more SEO
+for
+lawyers another interesting concept here
+I like it now the only thing this is a
+little bit long for a WordPress category
+so let's dial this down let's see if we
+can say let's say 50 words or less let's
+try that now sometimes a word limit
+doesn't work very well under
+turbo but this actually seems to be
+working
+up all right we'll do one more
+now again we're pretending we're just
+pretending that these are categories on
+my
+website
+fantastic cool now what we can do now
+that we've made our prompt right again
+this is the template that I feed into
+open AI when we're using the text
+discombobulator I feed in this heading
+this heading and up here I'm going to
+put in one line at a time I'll tell you
+what that means in a second and I'll
+feed in your prompt so let's go create
+this prompt let's go create this prompt
+inside a zim writer right now so we'll
+go into the bulk writer because this is
+where you can create your custom prompts
+we'll click custom prompt and I'll paste
+this in here and I'll call this there's
+a format you got to follow you can read
+the directions up top you can read the
+directions link right here for how to
+format this kind of stuff but custom
+prompt
+save right so there's our prompt and now
+we can finally go to the text
+discombobulate
+so here's the text
+discombobulator now we can feed in some
+lines of text so let's just do 15 for
+the sake of time paste them right there
+now we'll load our custom prompt CP cat
+you can do multiple prompts see this
+works a lot like the Ser discombobulator
+but it just works on text and not it's
+not going to go out and perform a Ser
+scrape or something on this so uh but
+there's a second prompt that you can
+apply you can apply prompt stacking you
+can read all about that in the the
+directions up here but we're just
+loading this one prompt right here and
+we'll call this cat and we'll choose uh
+GPT 3.5 turbo because we tested it under
+that we know it works and we will create
+the output so I'll close
+this and let's see you see it running
+right
+now all right let's check our output so
+here's our CSV file it created now what
+you got to do let make this a little bit
+bigger expand this and I never use the
+help up here the search but it actually
+works for rap text it works very well
+actually an SEO agency is a company that
+specializes in search engine
+optimization SEO tools local SEO so
+we're creating a category Andor we're
+defining all of these words fantastic
+now you might be thinking that's fine
+well and dandy but I really don't want
+to categorize or write category
+descriptions for keywords that's
+perfectly fun the text discombobulator
+what it does
+is it takes a line of text and processes
+a custom prompt against that line of
+text one line of text can be up to 5,000
+characters long all right and you can
+have up to 500 lines of text so the use
+case here was to write paragraphs for
+different categories but maybe that's
+not your use case there's all kinds of
+different use cases I don't have a clue
+what they might be uh only you would so
+feel free to share those in the Facebook
+group or or in the comments down below
+maybe you're even have a use case right
+now the feature is here if you do need
+it it's a very powerful tool just make
+sure to do what I I showed you and test
+your prompts out inside of the uh open
+AI playground and your mileage will will
+be a lot better than just trying to to
+come up with a prompt and just testing
+it out uh in real times if you like the
+video please uh give it a thumbs up
+subscribe drop a comment down below
+there's links to Zim writer down below
+join the Facebook group there's over
+12,000 members in there right now if I
+don't talk to you again good luck with
+your content generation I'll talk to you
+later

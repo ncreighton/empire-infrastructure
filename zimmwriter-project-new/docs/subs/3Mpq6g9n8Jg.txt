@@ -1,0 +1,268 @@
+# Lesson 24 - How to Run ZimmWriter on Mac (Using UTM)
+
+so this video I want to talk about how
+to get Zim Rider running on a Mac we had
+a user Jeff Jenkins today ask about
+using Zim Rider with UTM I had a video I
+made about UTM and he was running into
+an issue so I want to refresh that video
+we're going to specifically look at
+using UTM which is like parallels but
+it's free to run Zim Rider let me give
+you the high level overview on running
+Zim Rider on a Mac right now because
+there's a lot of different ways to go
+about it right now I record all my
+videos for for my my YouTube channel on
+on a Mac and I'll I'll do that with
+something called parallels parallels is
+essentially a a virtualized version of
+Windows full blown Windows runs on my
+Mac computer I can run all of my windows
+applications it's very fast it's very
+smooth the speed is going to depend on
+the the type of Mac you have I'm running
+an M2 Mac right now very fast I have no
+issues running Zim Rider I can just open
+up Zim riter it runs no problem
+whatsoever I'll use this to to record
+all my videos I'm here in Windows but
+I'm I'm on my Mac this is how I prefer
+to run Zim Rider on my Mac because I'm
+making videos if I wasn't making videos
+I just wanted to write blog posts I
+probably would not go through the
+trouble of using parallels what I would
+probably use is something called whiskey
+whiskey only runs on an M series Mac so
+M1 M2 M3 M4 all right and you can
+containerize different Windows
+applications and Whiskey's free
+parallels is 100 a year Whiskey's
+completely free you can go to get
+whiskey. download the latest version I
+have a video on this go to my site
+ranking Tac click on secret training
+scroll down to this big big playlist and
+at the bottom you'll see this complete
+step-by-step guide on setting up whiskey
+you set up whiskey install Zim riter and
+then you can use Zim Rider on your
+computer the only thing you don't get
+working is Magic commands because whiski
+can't access the clipboard copy and
+paste like you could in Windows so if
+you want to use magic command this is
+not how you're going to do it but this
+will run everything else it will run
+your bulk writer your penny arcade your
+SEO writer basically you get a a native
+Mac experience with Zim riter it's also
+very low resource uh usage so that's
+another way to to run Zim writer on a
+Mac right now now the other way is
+through something called UTM UTM is just
+like parallels it's like a virtualized
+containerized Windows Experience but
+it's completely free now because it's
+free there's some quality of life stuff
+that is not as userfriendly as you would
+get through something like parallels but
+we'll go ahead and set up UTM and get it
+working on here the first thing you want
+to do is go to Google and type in get
+UTM Mac you'll want to download the file
+or you can get it on the Mac Store the
+Mac Store is $10 and that's just to
+support the developers you can just
+download it from right here but you'll
+download that and you'll also need an
+application let's open up the app store
+called Crystal
+Fetch and this this is going to download
+the actual Windows um ISO file like the
+image file of windows it's free you'll
+want to download this and open it up I
+have UTM open here and Crystal fetch
+open here first thing you want to do is
+in Crystal fetch you want to select
+Windows 11 and then whatever
+architecture you're running on so if you
+have an M series Mac select Apple
+silicon if you have an Intel Mac select
+this once you've made your selections
+click download it's going to download
+the windows ISO file and you'll want to
+put it some where I'm putting it you I'm
+making like a download because you're
+going to want to keep this if you delete
+this ISO file UTM will no longer work so
+I made a little directory called UTM and
+I moved the file in here don't rename
+the file just leave it as is here's the
+ISO file that Crystal fetch downloaded
+now we go into UTM itself click create a
+new virtual machine and we are going to
+virtualize remember this will not work
+if you selected the wrong architecture
+I'm on an M series Mac so downloaded the
+Apple silicon one if you're on Intel you
+want to download the Intel one so I'm
+going to click Windows because that's
+what I want to install I want to install
+Windows or higher I want to browse for
+this ISO file and we will not check this
+box we'll leave this unchecked there's
+also there's a install guide here if you
+want to read more about it we'll just
+click continue we want to give it a
+healthy amount of ram so 8192 for 8 GB I
+found 4 GB just not work that well and
+we'll give this this you don't have to
+give it 64 gigs but maybe like 48 gigs
+of disk space cuz Windows does take a
+little bit to install and then finally
+our share directory because we want to
+be able to access files like share files
+between our downloads folder and our UTM
+install so I'm going to just select my
+downloads folder and click continue and
+click save so now it's made my little
+Windows UTM instance I'll press play now
+this is going to come up you're going to
+see something that says press a key when
+that happens you press enter if you
+don't press enter it junks up and you'll
+have to press the red button and close
+it and retry
+it if you get any other error message or
+or like problems or something you
+probably did something wrong so just
+rewind the video and do everything that
+I showed you uh step by step and and it
+should work just fine for you otherwise
+you'll get the the issue that Jeff's
+having which is like this thing right
+here let's go over here click next we
+have window is running now we're just
+going through the setup I don't have a
+product key we're going to do Windows
+Home click I accept I was doing the
+install so I can close a lot of these
+windows I don't need Crystal fetch open
+anymore if I just wanted to write blog
+posts and I had an M series Mac I would
+just use whiskey it's so easy to get up
+and running you can install other
+windows applications with it
+too I'll cut the video and we'll come
+back when this thing's completely done I
+think we're in the home stretch here
+we're not going to press anything we're
+going to let it do its thing see what's
+nice about whiskey is you don't have to
+do any of this stuff right you just
+literally install whiskey and then it
+gives you like you just we'll follow my
+video but then you can just install Zone
+Rider you don't have to go through any
+of this stuff it's a lot quicker but
+again it only works on an M series Mac
+Windows just takes forever to set
+up
+finally look at that now when this first
+starts up it's going to ask you to do
+this guest tools I think the guest tools
+is going to enable copying and pasting
+between Windows and your
+Mac let's reboot
+now so when you boot this thing up from
+now on you're not going to press any
+Keys over here because you're not
+booting from your CD or your DVD you're
+just going to let it boot from the
+virtual hard drive I'll show you
+something really cool we'll actually
+duplicate this and make like a second
+version a second virtualized instance
+once you go through the whole trouble of
+setting this all up duplicating the
+virtual instances is actually very easy
+so we should have everything up and
+working now let's try
+notepad now I don't have Windows
+activated but I think you can just
+continue to use it without being
+activated so let's copy from here paste
+it works I thought the keyboard the keys
+are different though
+so so yeah copy and paste Works
+phenomenal let's check for our shared
+folders click on this PC my network Z
+Drive is my downloads folder that we
+shared with our setup we select the
+downloads fold folder if you didn't you
+can come into the virtualized instance
+and change your directory now we can
+copy and and move stuff between our two
+instances let's copy
+this and move it to our downloads
+folder we're just going to unzip this
+finally we have Zim
+riter fantastic so Zim riter is now set
+up on this virtual instance of windows
+and again the benefit of this over
+something like parallels is it's
+completely free so let me shut this down
+then I'll show you something really cool
+so we'll shut down I can actually
+clone
+yes and we can
+edit call this
+Windows two and I guess there's other
+options you can configure in here lots
+of different options you can
+configure and then we'll edit this one
+right here
+we'll call this Windows
+[Music]
+one cool so we have like two virtualized
+instances so
+theoretically I should be able to open
+up both of them if you want to use Zim
+riter this way you you'd need two
+licenses because it's still going to be
+pinging the gumroad server you don't
+want to be in a situation where your
+license will get revoked but this is a
+way to run multiple versions of Windows
+simultaneously I think parallels really
+is a lot faster for the initial startup
+I don't know if it's going slower here
+because I'm running two instances but
+the parallel startup is a lot
+faster we
+have two versions of Windows running
+simultaneously let me just start one of
+them up at a time to see if it actually
+runs faster maybe it was going slower
+because I was running two let's just run
+one yeah it's going a little bit faster
+with just one instance that's how you
+can get Zim Rider in and virtually any
+other windows application running on a
+Mac without too much trouble and start
+generating lots of Articles if this
+video was useful to you drop a comment
+down below subscribe all that good stuff
+and then obviously pray for that day
+that we have the native version of Zim
+riter which would even be more powerful
+than what exists right now running on a
+Mac and windows simultaneously so that's
+all I got don't forget also to check out
+my 8 hour YouTube course on creating uh
+a WordPress website from scratch that's
+all in the description link down below
+good luck with using Zim riter and I
+will talk to you later

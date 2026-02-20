@@ -1,0 +1,275 @@
+# Lesson 22 - How to Run ZimmWriter on Mac (M-Series + macOS 14+)
+
+I'm going to share with you in this
+video how to get Zim Rider up and
+running on your your Mac and actually
+you can use this to to get almost any
+Windows uh Windows application running
+on a Mac so it is uh it's not just
+limited to Zim riter but we're going to
+use it just for Zim riter in this video
+it's actually really easy to do and it's
+completely free also one of the one of
+the ways people will use zom Rider on a
+Mac is using something called parallels
+which runs an entire Windows operating
+system on your Mac but it is more
+resource intensive it uses battery and
+it's not as not as fast to get up and
+running with it so what I'm going to
+show you is very battery efficient very
+quick and it's pretty cool the only
+difference is Magic commands won't work
+the same way that they work on a Windows
+PC so if you want the entire
+functionality of Zim Rider then you'd
+have to use something like parallels or
+a Windows PC otherwise you know if
+you're just looking for the bulk writer
+the SEO writer the penny arcade and the
+other um non keyboard you know magic
+commands for writer then this would work
+perfectly for you so first things first
+what you want to do is go to my web page
+ranking tactics.com and click on secret
+training and you'll scroll down and
+you'll want to download Zer now don't
+click this button this button right here
+is to download it for people on a
+Windows computer if you're running on a
+Mac then you want to click on this link
+right here to download the alternate
+version okay so download this version
+right here it will be a zip file and
+that will get you the alternate version
+the next thing you want to do is go to
+this website get whiskey. a so g t whh i
+k
+Y.A just a little
+background the program that we're going
+to use to run Zoom right on a Mac is
+called wine okay and wine is a it's more
+technical it's cumbersome to to install
+you have to get to the terminal the
+command line if you're not good with
+technology even for me it's a little bit
+cumbersome to use so this is something
+that makes doing all that very simple so
+you'll download the latest version so
+get whiskey. download the latest version
+that's all we need right now from our
+browser okay actually I didn't click the
+download button it's download latest
+there we go okay so there's whiskey so
+we'll double click it to unzip it in the
+whiskey app now before I run it I'm
+actually going to move this to my
+applications
+folder okay so drag it and put it in my
+applications folder because I want it to
+appear in my Launchpad there we go want
+it to be inside of here okay says
+whiskey is downloaded from the internet
+are you sure you want to open it yes now
+you might not see this screen when you
+first start up whiskey it will actually
+ask you to download like this missing
+file that requires like GH TK or G GT KP
+I don't know what it is but there's some
+400 megabyte file it's going to ask you
+to download you'll just follow the
+prompts and download that it might take
+a minute or two but then when you
+finally download it you'll come to this
+screen right here okay now the first
+thing we want to do is create a bottle
+the bottle is like a container that's
+going to hold any programs that we want
+to install so we'll create a bottle and
+I'm going to call this bottle zom writer
+you can call the bottle whatever you
+want because you can have multiple
+bottles but we'll call this Zim
+writer and you don't need to configure
+any other settings this is all fine
+we'll click create now it's not going to
+allow you to do anything right now it's
+thinking right now and if you have a
+slower Mac this might take longer I'm on
+an M1 Pro but if you have a faster Mac
+this might go quicker we'll wait for
+this little spinny thing to finish all
+right now there's a c drive that we can
+access but before we do anything we want
+to go back to our Mac folder and get our
+Zim writer okay this is the Zim writer
+zip file that we downloaded okay and
+double click to unzip it there it is now
+what we want to do is go back to Whiskey
+okay and open our C drive okay see this
+little link we'll click
+it so on this side we have our C drive
+for Windows that's where stuff stored
+and on this side we have our Mac
+downloads folder okay so in our C drive
+we'll click on
+users and you'll see this thing called
+crossover we'll click on that and we'll
+look for the downloads
+folder then what you want to do is take
+the Zim writer alternative version okay
+and drag it over to that C drive
+downloads folder okay see how easy that
+was now what we're going to do is we're
+going to go in here back to the whiskey
+menu we'll click pin program because in
+this bottle any programs that we want to
+install we're going to pin those uh ex
+executable files okay so we can easy
+like more easily access them as opposed
+to like having to hunt them down inside
+of here and stuff okay so we'll click
+pin program and we're going to pin Zim
+writer so we'll put in Zim
+writer we'll find where it's installed
+remember it's in the users folder
+crossover folder your downloads folder
+and there's Zim riter so we'll open it
+up we're going to pin this exe so we
+just double click on it okay we click
+pin now you won't see it at first
+because you have to click the refresh
+button there it is now check this out
+all we have to do to run Zoom writer
+okay is double click it now it might
+take a second to to start
+up and there it is now we'll have to go
+through the the setup so if you're doing
+this for the first time you'll have to
+enter your API key from open AI okay and
+then you'll have to enter your Zim
+writer email and your Zim writer license
+key okay I'm not going to do that on
+camera what I'm actually going to do is
+I store all of the Zim writer data for
+like your license and whatnot and
+something called a settings.ini file so
+if you have an older version of Zim
+riter or you're migrating over from a PC
+version you can find your settings inii
+file in the zoom writer directory okay
+and then you can open up
+I'll do this from scratch to show you
+you go into your C drive in here you'll
+go into users crossover downloads
+alternative version we actually take our
+settings ini
+I and copy it into here make sure Zoom
+writer is not doing not not running when
+you do that okay again and again I don't
+want you guys to get confused what I
+just did is only for people that have a
+previous install of Zim riter that for
+whatever reason are setting this up
+freshh and don't want to have to go
+through the whole enter your open AI key
+and zom writer license key and all that
+stuff okay so now I can close all these
+windows don't need them anymore and I
+can run Zim writer again but before I do
+that I want to close whiskey to show you
+how You' start Zim rer fresh so we can
+go over here to lunch
+pad okay and we can open up whiskey and
+remember it's in here now because we
+moved whiskey to our applications folder
+double click on that and we go on the
+zoom riter bottle in case you have
+multiple BT models and we open up Zim
+riter so we're already set up now so Zim
+riter you can minimize this and you can
+run it as normal okay but all right one
+problem you're going to run into is
+where your output files are going to be
+stored okay so right now the output
+files let me show you are going to be
+stored on that like C drive which is
+hard to find and hard to access it would
+be much better in my opinion to have
+your output flat folders let's see here
+stored inside of your Mac downloads
+folder so in the Mac downloads folder
+let's make an output directory for Zoom
+writer let's make a folder called Zim
+writer output and then what we're got to
+do is we got to find that inside of here
+so let's go set directory to save blogs
+now what you want to look for is this
+forward slash because this like my
+computer and whatnot this is your
+Windows computer okay we don't want that
+we want the folder from your Mac okay so
+look for this little forward slash and
+then we'll scroll down to users and
+you'll find your Mac
+User and you'll find your downloads
+folder you'll find the directory we just
+created called zom writer output and
+we'll set that as our directory now and
+we'll save the
+options I'll show you let's write
+something really quick how to wash a dog
+and we'll make it one H2 disable
+conclusions and we'll start the writer
+okay and I'll go to that folder I'll
+show you how the output now will go to
+into that folder on your Mac hard drive
+otherwise like I said it would be in
+like your C drive which you can't really
+access inside of here you can only
+access inside of the whiskey app and
+then by clicking this button so it's
+cumbersome you don't want to do that
+you'd rather probably have your output
+in the Mac uh downloads folder cool
+there it is so we have our little popup
+saying it's done and there's our our
+file right there inside of our Mac
+downloads folder now the last thing I
+want to show you before I let you guys
+go off to the races is how to update
+okay so whenever I release a new update
+you don't have to you should not have to
+redo all those steps again all you
+should have to do is click this update
+button it will tell you when update's
+available and you'll click the update
+button you might have to wait a second
+because it will download Z the the
+update in the background you just click
+it once you'll wait a second and then if
+there's an update available you'll see
+this appear and you'll click yes and
+zoom writer will close count to five in
+your head so it updates in the
+background and then when you double
+click to reopen it you should be on the
+new version I was on version 10 and now
+we are in version
+10.1 that is the latest version of Zoom
+writer again everything should work and
+all the outputs should go to that output
+folder that we created your magic
+commands won't work as expected they're
+they're going to work differently inside
+of here so using magic commands with
+with whiskey or whatnot is not really
+recommended if you want your magic
+commands to work I'd either recommend
+using parallels or get a Windows PC
+other than that I hope this helped you
+get up and running with Zim writer on a
+Mac if you have any questions you can
+reach me in the Facebook group otherwise
+good luck with your content generation
+and I'll talk to you guys later

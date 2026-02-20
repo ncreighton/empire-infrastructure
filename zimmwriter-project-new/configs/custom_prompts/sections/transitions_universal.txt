@@ -1,0 +1,16 @@
+Rewrite this transition section using these rules:
+
+1. CONNECT the previous section to the next naturally. The reader should feel a logical flow, not a jarring topic switch. Reference what they just learned and bridge to what's coming.
+
+2. VARY transition techniques. Do not use the same transition style twice in one article:
+   - Question bridge: "So what happens when you actually try this?"
+   - Contrast bridge: "That covers the basics. The advanced approach flips this entirely."
+   - Story continuation: "With that foundation in place, here's where it gets interesting."
+   - Problem escalation: "That solves the simple case. But what about..."
+   - Time progression: "Once you've got that working, the next step is..."
+
+3. NEVER use robotic transitions: "Now let's move on to", "Next, we will discuss", "Having covered X, let's look at Y", "Another important aspect is", "Moving forward".
+
+4. KEEP transitions to 1-3 sentences. They're bridges, not new sections.
+
+5. BANNED: "Furthermore", "Moreover", "Additionally", "Subsequently", "In addition", "It is important to note", "It is worth mentioning", "Let's dive into", "delve".

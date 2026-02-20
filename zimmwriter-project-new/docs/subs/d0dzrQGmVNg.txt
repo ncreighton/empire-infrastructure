@@ -1,0 +1,90 @@
+# Lesson 17 - Bulk Convert 1,000 SEO Keywords to 5,000 Blog Post Titles
+
+hey and welcome to the getting started
+guide for turning SEO keywords into blog
+post titles using Zim writer this is a
+powerful feature it allows you to take
+up to a thousand different keywords from
+HRS or semrush or neuron writer keyword
+Chef wherever feed those into Zim writer
+and you'll get a list of blog post
+titles out for every keyword you put in
+you'll get five blog post titles let me
+show you how it works so you'll go into
+Zim writer you'll click on the AI Vault
+and you'll click on SEO keywords to blog
+post titles there's a link to the
+directions up here you can click and
+read but it's very simple all you do is
+put in your list up to a thousand
+different SEO keywords you'll give this
+a job name you'll select your model
+you'll click go so these are some
+keywords that I got from HS but again
+you can get them from wherever I took
+the first 50 I simply copied them went
+over here pasted them in I gave this a
+job name of dogs I I chose GPT 3.5 turbo
+1.25 and click go and this is what we
+got as an output let me make this bigger
+so you guys can I'll see it and we'll
+zoom in a little bit all right so again
+for each keyword we'll get five
+different blog post titles and then zom
+writer will try to pick the best one so
+can dogs eat strawberries so this is the
+five different titles we got and then
+here's the one Zer chose but you're free
+to replace it if you want to introducing
+strawberries to dogs easy eating tips
+Zim Rider will also create a slug for
+you okay so the slug is going to be your
+WordPress Slug and when you paste this
+merged column in with your title and the
+slug Zim writer will automatically
+create that slug as it uploads the
+article to Wordpress and the slug is the
+keyword so you're going to get that SEO
+boost by having the exact match keyword
+as your slug so this is introducing
+strawberries to dogs easy eating tips
+what makes bungo stray dogs a must watch
+for an I guess that's an anime I did not
+know that safely introducing bananas to
+your dog's diet expert tips for dogs to
+enjoy strawberries safely ensuring dogs
+eat apples the right way help helpful
+guide I can't pronounce that word expert
+advice on buying dogs for sale
+introducing blueberri to dogs a safe way
+to have them teaching dogs to eat
+blueberries the right way and if you're
+like oh there's some overlap right here
+then you just simply delete this now
+what you can do is if you want to
+actually paste this into to Zim writer
+we'll go over here and we'll click
+filter let's see
+data filter and we'll scroll over now
+I'm going to take the merged column you
+don't have to take the merged column if
+you don't want the slug you can just
+take this column right here but what you
+have to do is you'll scroll down and say
+I don't want
+blanks and then you just have your list
+seems like something got messed up right
+here so we'll take this
+list and we'll copy it have to go over
+here and make a new thing we'll take
+this entire list go to Zim
+writer go to the bulk writer paste this
+in and as long as you set the the
+WordPress site then you'll have the auto
+created Slug and whatnot very powerful
+very easy to do if you have any
+questions drop them in the comments
+below there's a link to get Zim riter
+also down below join the Facebook group
+good luck with your content generation
+I'll talk to you later

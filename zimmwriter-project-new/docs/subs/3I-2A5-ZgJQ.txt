@@ -1,0 +1,223 @@
+# Lesson 18 - How to Use the SERP Discombobulator
+
+hey and welcome to your getting started
+guide with the discombobulator inside of
+Zim rer I love saying that word it's a
+fun tool you won't use it for every
+situation but I want to explain what it
+is because you might find a really great
+use case for your
+situation so before I explain what this
+is let me give you the use case all
+right so we can go to the bulk writer
+for instance and put in some different
+titles so these are some different
+titles for different types of barbecue
+chicken slow cooker barbecue chicken
+Southern barbecue chicken zesty slow
+cooker barbecue chicken okay so if we
+were to write an article about each of
+these we'd configure our options and if
+we wanted to Ser scrape we'd go into
+this option over here and click enable
+Sur scraping and then set some different
+stuff and then we'd write the Articles
+and as it it's writing the Articles what
+Z writer will do if you've enabled Ser
+scraping is zom writer will use scrape
+Al to go out and perform that Google
+search find the the best five URLs best
+five web pages for that query and the
+query would be like for instance recipe
+for zesty slow cooker for chicken and
+then it would Summarize each of those
+five URLs it would use the AI to
+Summarize each of those five URLs and
+then all of that Ser data and all of
+those summaries would be stored into the
+database Zim riter has a database it
+stores 5,000 of those surp scrapes and
+then also 5,000 different scraped URLs
+with corresponding summaries okay what
+if you wanted to further manipulate that
+data that's in the database those
+summaries of those URLs corresponding to
+each one of these titles okay so again
+maybe we've written our blog posts
+already but we want to further
+manipulate these maybe you want to come
+up with some different social media
+posts about these particular topics that
+you're writing about or maybe you want
+to extract some factual information or
+maybe you're revisiting these articles
+later in time and you want to see if
+there's something else that the Ser
+talks about now some updated information
+that you want to pull some data out from
+okay that's where the Ser
+discombobulator comes into play well
+close this and we'll click on AI Vault
+and we'll click on surf discombobulator
+there's a directions link up here it
+takes you to this page very useful
+information okay because we're going to
+create custom prompts for this but the
+custom prompts are slightly different
+than what you're used to okay so this is
+the discombobulator and we can put in up
+to 250 different search titles now these
+search titles would typically be your
+blog post titles but basically whatever
+you put in here on a new line is going
+to be the search query that zom writer
+is going to use to go out to Google and
+perform that Ser scrape okay so often
+these would just be your titles for your
+your different articles that you already
+wrote all right then you can select up
+to two different custom prompts okay so
+we don't Define the custom prompts in
+here if you want to define the custom
+prompts you'll first go into the bulk
+writer for instance and you'll set your
+C you can Define your custom prompts in
+here okay now again we can load custom
+prompts for running the bulk writer but
+we're not doing that we just want to
+Define find our custom prompts save them
+to the the database I have two in here I
+have recipe write the name of the recipe
+in the steps to make it along with
+ingredients write only two paragraphs I
+think I spelled ingredients wrong and
+then so we saved this as CP recipe and I
+have another called CP Facebook post
+write a Facebook post for the recipe it
+should list the exact ingredients in
+step-by-step directions to prepare the
+dish okay I'm going to leave the bulk
+writer we've created our custom prompts
+I'll go back into the
+discombobulator and we'll put in our
+different different titles in here let's
+just do two right now since we're on
+camera and I want to speed this up and
+we can select the different custom
+prompt so we'll say
+recipe and then I'll say Facebook post
+and what this will do is it will take
+the aggregate of the the summaries from
+those five URLs for each of these title
+so sur's great for this got five URLs
+did a summary on it aggregated them
+together into one giant summary okay it
+will run this prompt on that aggregate
+summary for this it will run this prompt
+on that aggregate summary for this okay
+that makes sense if you want to Stack
+the prompts you can also do that and
+what that will do is maybe you wanted a
+first prompt to run on that aggregate
+summary and a second prompt just to run
+on the result of this prompt right here
+okay if you want to do that's when you
+would enable prompt stacking you can
+read more about it in the directions
+link okay if you want the output to be
+in non-english that's where you specify
+this remember everything needs to be in
+English going in but this is where you
+can say Okay I want non-english coming
+out if you do prompt stack okay only
+prompt two the result from prompt two is
+going to be in non-english if you don't
+prom stack and you put something in here
+you'll have a translated version for
+each one of these okay you'll give this
+a job name and we'll give this like on
+camera test okay and we'll say create
+discombobulated output and save to
+CSV and what it will
+do so it's running it and you'll see
+this underscore over here in the corner
+underscore two means it's running prompt
+two underscore one means it's running
+prompt
+one just comb relating title 2 prompt 2
+right now when it's all done you'll see
+a little popup up here and and you'll
+have a a nice Excel sheet now look
+you're going to see some depending on
+what your prompt was you might see some
+nonsense in here like some stuff that
+doesn't make any sense see like these
+characters and stuff Excel has a problem
+rendering some of these characters so
+you'll have to load this stuff up inside
+a Google Sheets so I ran this prompt
+this setup on these four titles before
+the video and here is the result in
+Google Sheets okay so we have the the
+two paragraphs here and then we have our
+recipe re for the Facebook post two
+paragraphs here a recipe oops I'm
+scrolling too fast two paragraphs here
+recipe okay so get this all in your your
+CSV file
+realize the AI will follow your prompts
+better depending on the model that you
+choose if you choose turbo or gp4 you'll
+get a better better following of your
+prompts but if you have a very simple
+prompt something very easy then just 3.5
+turbo 125 will work just fine for you
+trying to think if there's anything else
+I want to cover oh yeah
+so the let's do this let's go back into
+the discom bobul this is the last thing
+I want to show
+you the custom prompts for the
+discombobulator are a little bit
+different we'll go to the custom prompt
+page now this is what a a normal custom
+prompt like in the the bulk writer looks
+like when I send it to open AI I have
+something called context and the article
+title or subheading title the text to
+modify all all this stuff this is what
+normal custom prompt looks like but when
+you create your custom prompts that are
+going to be and you create them in the
+same place when you create your custom
+prompts to be used in the
+discombobulator this is what I'm feeding
+into open AI right data to process it is
+basically the merge summaries of the
+five URLs that were scraped and then I
+have this instructions bit and this is
+where your custom prompt would go okay
+so inside do BU
+writer custom
+prompt Facebook post so this prompt
+right here would go right in here and
+the summaries from the the merge
+summaries from the five different URLs
+go right in there and then you get your
+results use this in the playground play
+with it a little bit I explain how to
+get those summaries ahead of time so you
+can test this out in the playground and
+make sure your prompts are really dialed
+in but that's all there is to it
+powerful tool you're not going to use it
+in every situation every different use
+case maybe some of you will never even
+use it but I know some of you will
+really enjoy using it any questions drop
+a comment down below like this video
+subscribe
+there's links to zom writer down below
+join the Facebook group other than that
+good luck with your content generation
+and I'll talk to you later

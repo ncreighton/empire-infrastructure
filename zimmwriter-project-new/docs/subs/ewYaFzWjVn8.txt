@@ -1,0 +1,141 @@
+# ZimmWriter Lesson 11 - How to Connect ZimmWriter to Wordpress
+
+hey in this video I'm going to show you
+just how easy it is to connect Zim
+writer to Wordpress and start uploading
+all kinds of blog posts so the first
+thing you want to do is click on the
+options menu inside of Zoom writer and
+then click on setup
+WordPress now with this open you'll see
+this directions link click the
+directions link it will take you to this
+install guide I'm going to cover
+everything in this but this is also good
+for reference too so the first thing you
+need is your WordPress site URL so I
+have it here and this is just going to
+be the https followed by your domain
+name and if your domain uses the www
+leave that in if it does not then then
+don't add that just have whatever it is
+in this little box up here now we don't
+want WP admit we're not including that
+stuff just it should just end with
+whatever your top level extension is
+usually it's just now if you do have
+your site set up on a subdomain you
+should be able to add that too like if
+you had like site. your domain that
+should also work too from a connection
+standpoint the next thing you need is
+your WordPress username now you can find
+all your users on the left hand tab
+there's a user section and all users
+you'll find the user that you want to
+then give access to you can give access
+to your administrator user or to a
+secondary user like a VA or something
+that's perfectly fine you'll get that
+username so our user here is called test
+user and then before we enter the
+password we need to be very sure that
+this user has uh new post creation
+Authority so look at the role and then
+make sure that this user is either an
+author or administrator if it's not one
+of those he's you're likely going to get
+an error telling you that you cannot
+create posts as this user if you do get
+that error this is likely the cause so
+after you've confirmed that they are uh
+either an author or administrator you
+scroll down to the app passwords so this
+app password is completely different
+than the user's password to log into
+WordPress okay two different passwords
+this allows you to add it's like an open
+AI key in that it allows you to add
+multiple different passwords for
+different apps that you might be using
+without compromising your entire user
+login so we'll just call this you can
+call whatever you want we'll call it ZW
+we'll click add new password and just
+like open AI you know you copy this
+because once you copy it you can never
+get it back you can always revoke this
+stuff very easily then we'll come over
+here and we'll click paste and then all
+you have to do is press save new
+config it says we successfully created a
+test post so we'll go to our posts we'll
+do a
+refresh test post created there you go
+so our connection is now successful and
+we can close
+this and then go into one of the writers
+and click
+WordPress and then from the dropdown
+select our site and it will take a
+second because it's going to contact the
+site now and pull out your categories so
+we click automotive and then it's going
+to pull all the subcategories if any
+exist and then you can set subcategory
+if you want you can set the article
+status if you want you can also set a
+schedule an autop publish schedule this
+schedule is really awesome it's very
+configurable and it's all dependent like
+I'm in the bulk writer for instance this
+is all dependent on how many titles I
+have in here if I just have one title in
+here all right then I can schedule oh
+where' it go I can schedule that one
+title but imagine I had I had a bunch of
+titles in here know let's just say
+that's 15 titles then it becomes more of
+a of an important thing to focus
+on so we can say I want three posts to
+publish each what each day week or month
+we'll say week starting on you pick your
+starting date couple years in advance if
+you want to and then you can pick your
+month you can pick your day now what's
+really neat about this is let's say
+we've you know we schedule a 100 blog
+posts and we we say I went three blog
+posts each week starting on this
+particular date you can then come back
+later after you've you know done this
+run and everything's been scheduled and
+schedule more blog posts but schedule
+them to take effect later on in the year
+so maybe you've scheduled out through
+September you now want to start
+scheduling in October you can easily do
+that now very
+cool what else uh let's see here now if
+you ever need to get in and modify your
+stuff modify your WordPress setup it's
+really simple to do click on setup
+WordPress we can load our saved
+site and we can change the user we can
+change the password then we can press
+update to update it or we can delete the
+config at the moment you can have about
+10 sites saved in the database and
+what's cool is when you quit Zim riter
+and then start it back up this is all
+permanently saved here so just realize
+that whenever you go to one of these new
+features in here you'll have to select
+what site and select what category you
+want to upload this stuff to so that's
+it if you have any questions about this
+drop a comment down below or hit me up
+on the Facebook group other than that
+give this video a thumbs up subscribe if
+you liked it and I will see you in the
+next lesson talk to you soon

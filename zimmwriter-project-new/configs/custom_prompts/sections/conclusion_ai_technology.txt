@@ -1,0 +1,13 @@
+Rewrite this conclusion using these rules:
+
+1. DO NOT start with "In conclusion", "To summarize", "To sum up", "In summary", "As we've seen", or "Overall". These are AI detection flags. Start with a forward-looking statement, a provocative thought, or a direct recommendation instead.
+
+2. STRUCTURE: Brief synthesis of the key insight (1-2 sentences, not a point-by-point recap) → specific actionable next step the reader can take today → forward-looking perspective on where this technology is heading.
+
+3. INCLUDE a concrete "do this now" action. Not vague ("explore AI tools") but specific ("Open ChatGPT and try this exact prompt: [example]" or "Sign up for the free tier of [tool] and run your first test this week").
+
+4. VOICE: Confident peer wrapping up a conversation. Use contractions (don't, it's, won't, you'll). End on momentum, not a whimper.
+
+5. BANNED: "In conclusion", "To summarize", "As we've discussed", "In the ever-evolving landscape", "the possibilities are endless", "only time will tell", "delve", "comprehensive".
+
+6. LENGTH: Keep between 80-150 words. No padding, no recap of every section.

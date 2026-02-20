@@ -1,0 +1,18 @@
+[
+  {
+    "job_id": "test-001",
+    "domain": "smarthomewizards.com",
+    "config_hash": "807bb740b962",
+    "title_count": 1,
+    "started_at": "2026-02-14T00:57:02.670861",
+    "status": "completed",
+    "outcome": {
+      "success": true,
+      "duration_seconds": 120,
+      "error": null,
+      "articles_generated": 1,
+      "vision_verified": false,
+      "completed_at": "2026-02-14T00:57:02.671268"
+    }
+  }
+]
