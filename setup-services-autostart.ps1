@@ -17,6 +17,11 @@ $services = @(
         Name = "Empire Dashboard"
         Description = "Starts Empire Dashboard at login (port 8000)"
         VbsPath = "D:\Claude Code Projects\launchers\launch-empire-dashboard.vbs"
+    },
+    @{
+        Name = "Grimoire API"
+        Description = "Starts Grimoire Intelligence API at login (port 8080)"
+        VbsPath = "D:\Claude Code Projects\launchers\launch-grimoire-api.vbs"
     }
 )
 
@@ -72,11 +77,12 @@ Write-Host "Services will start automatically at login:" -ForegroundColor White
 Write-Host "  - Screenpipe        -> http://localhost:3030" -ForegroundColor White
 Write-Host "  - Vision Service    -> http://localhost:8002" -ForegroundColor White
 Write-Host "  - Empire Dashboard  -> http://localhost:8000" -ForegroundColor White
+Write-Host "  - Grimoire API      -> http://localhost:8080" -ForegroundColor White
 Write-Host ""
 Write-Host "Logs at: $env:LOCALAPPDATA\EmpireArchitect\" -ForegroundColor Gray
 Write-Host ""
 
 # Show task status
-Get-ScheduledTask -TaskName "Screenpipe", "Vision Service", "Empire Dashboard" -ErrorAction SilentlyContinue |
+Get-ScheduledTask -TaskName "Screenpipe", "Vision Service", "Empire Dashboard", "Grimoire API" -ErrorAction SilentlyContinue |
     Select-Object TaskName, State |
     Format-Table -AutoSize
