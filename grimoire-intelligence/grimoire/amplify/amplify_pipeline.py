@@ -17,8 +17,16 @@ practice enhancement rather than PDF product generation.
 """
 
 import time
+from pathlib import Path
 from datetime import datetime
 
+from grimoire.forge.variation_engine import (
+    VariationEngine,
+    CHALLENGE_POOLS,
+    CHECKLIST_POOLS,
+    AFTERCARE_AMPLIFY_POOLS,
+    ETHICAL_NOTE_POOLS,
+)
 from grimoire.models import RitualPlan, AmplifyResult
 from grimoire.knowledge.correspondences import (
     HERBS,
@@ -182,8 +190,12 @@ class AmplifyPipeline:
         result = pipeline.amplify_quick("protection")
     """
 
-    def __init__(self):
-        pass
+    def __init__(self, db_path: str | None = None):
+        if db_path is None:
+            db_path = str(
+                Path(__file__).resolve().parent.parent / "data" / "grimoire.db"
+            )
+        self.variation = VariationEngine(db_path)
 
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     # PUBLIC API
@@ -649,19 +661,12 @@ class AmplifyPipeline:
             ],
         }
 
-        # --- Ethical notes ---
-        fortifications["ethical_notes"] = [
-            "'An it harm none, do what ye will.' Consider the ripple effects of every working.",
-            "Love magick must never override another person's free will or consent. "
-            "Focus on self-love, attracting compatible energy, or strengthening existing mutual bonds.",
-            "Source herbs and crystals ethically. White sage is over-harvested from Indigenous lands; "
-            "garden sage, rosemary, or cedar are excellent alternatives.",
-            "Cultural respect: research the origins of practices you adopt. Credit traditions "
-            "and avoid claiming sacred practices from closed or marginalized communities as your own.",
-            "Never use magick to manipulate, control, or harm another being.",
-            "Respect the land and environment when gathering materials outdoors. "
-            "Take only what you need and leave an offering of gratitude.",
-        ]
+        # --- Ethical notes — select 4-5 from expanded pool ---
+        fortifications["ethical_notes"] = self.variation.pick_n(
+            "amplify_ethics",
+            ETHICAL_NOTE_POOLS,
+            min(5, len(ETHICAL_NOTE_POOLS)),
+        )
 
         # --- Medical disclaimer ---
         fortifications["medical_disclaimer"] = (
@@ -688,65 +693,23 @@ class AmplifyPipeline:
         anticipations: dict = {}
         intention = plan.intention.lower()
 
-        # --- Common challenges ---
+        # --- Common challenges — select 5-7 from expanded pool ---
+        selected_challenges = self.variation.pick_n(
+            "amplify_challenges",
+            [c["challenge"] for c in CHALLENGE_POOLS],
+            min(7, len(CHALLENGE_POOLS)),
+        )
+        challenge_map = {c["challenge"]: c for c in CHALLENGE_POOLS}
         anticipations["common_challenges"] = [
-            {
-                "challenge": "Candle won't stay lit",
-                "solution": "Try a draft-free location. Cup your hands around the flame gently. "
-                            "An LED candle is an equally valid substitute — the intention matters, not the flame.",
-            },
-            {
-                "challenge": "Mind keeps wandering during meditation or visualization",
-                "solution": "This is completely normal, especially for beginners. Gently return "
-                            "your focus without judgment each time. Wandering is not failure; "
-                            "noticing it is awareness. Try focusing on your breath as an anchor.",
-            },
-            {
-                "challenge": "Don't feel anything during the working",
-                "solution": "Magick does not require dramatic sensations. Many experienced "
-                            "practitioners feel nothing in the moment. Trust the process and "
-                            "look for subtle shifts in the days that follow.",
-            },
-            {
-                "challenge": "Interrupted mid-ritual",
-                "solution": "Pause, handle the interruption calmly, then return. You can "
-                            "resume where you left off or close gracefully. The energy is "
-                            "not lost — it simply waits for your attention.",
-            },
-            {
-                "challenge": "Materials unavailable",
-                "solution": "Intention is more powerful than any tool. Use substitutions from "
-                            "the fortifications section, or practice with visualization alone. "
-                            "A working done with full focus and no tools outshines a distracted "
-                            "ritual with every correspondence perfectly matched.",
-            },
-            {
-                "challenge": "Feeling anxious or emotional during the working",
-                "solution": "This can happen, especially with transformation, healing, or "
-                            "shadow work. Pause and ground yourself: feel your feet on the floor, "
-                            "take slow breaths, hold a grounding stone. You can always stop and "
-                            "return to the working another day.",
-            },
-            {
-                "challenge": "Unsure if the words are 'right'",
-                "solution": "There is no single correct incantation. Speak from your heart in "
-                            "your own words. Authenticity is more powerful than perfection. "
-                            "If you prefer structure, use the provided scripts as a starting point.",
-            },
+            challenge_map[ch] for ch in selected_challenges if ch in challenge_map
         ]
 
-        # --- Preparation checklist ---
-        anticipations["preparation_checklist"] = [
-            "Choose your date and time (consult the timing guidance in optimizations).",
-            "Gather all materials and place them in your working area.",
-            "Cleanse your space: open a window, burn cleansing herbs, or sprinkle salt water.",
-            "Cleanse yourself: wash your hands, take a ritual bath, or simply take three conscious breaths.",
-            "Silence your phone and minimize potential interruptions.",
-            "Set up your altar or working surface with materials arranged intentionally.",
-            "Review the steps of your working so you are not reading mid-ritual.",
-            "Ground and center: stand or sit quietly, feel your connection to the earth.",
-            "State your intention clearly to yourself before beginning.",
-        ]
+        # --- Preparation checklist — select 8-9 from expanded pool ---
+        anticipations["preparation_checklist"] = self.variation.pick_n(
+            "amplify_checklist",
+            CHECKLIST_POOLS,
+            min(9, len(CHECKLIST_POOLS)),
+        )
 
         # --- What to expect ---
         anticipations["what_to_expect"] = {
@@ -766,16 +729,12 @@ class AmplifyPipeline:
             ],
         }
 
-        # --- Aftercare ---
-        anticipations["aftercare"] = [
-            "Ground yourself: eat something, drink water, place your hands on the earth.",
-            "Record your experience in a journal or grimoire while it is fresh.",
-            "Rest if you feel drained — energy work can be tiring.",
-            "Avoid immediately scrolling social media or engaging in stressful tasks.",
-            "Take a warm shower or bath to wash away any residual energy.",
-            "Spend a few minutes in gratitude for the practice itself.",
-            "Be gentle with yourself for the rest of the day.",
-        ]
+        # --- Aftercare — select 6-7 from expanded pool ---
+        anticipations["aftercare"] = self.variation.pick_n(
+            "amplify_aftercare",
+            AFTERCARE_AMPLIFY_POOLS,
+            min(7, len(AFTERCARE_AMPLIFY_POOLS)),
+        )
 
         # --- Signs of success ---
         anticipations["signs_of_success"] = self._signs_of_success(intention)

@@ -16,6 +16,7 @@ from grimoire.knowledge.moon_phases import (
     MOON_PHASES,
     MOON_IN_SIGNS,
     calculate_moon_phase,
+    calculate_moon_phase_precise,
     get_phase_data,
     get_sign_data,
     get_combined_energy,
@@ -145,6 +146,10 @@ class MoonOracle:
     * Which dates optimise a particular working?
     """
 
+    def __init__(self, lat: float | None = None, lon: float | None = None):
+        self.lat = lat
+        self.lon = lon
+
     # ------------------------------------------------------------------ #
     #  Public methods                                                      #
     # ------------------------------------------------------------------ #
@@ -154,14 +159,17 @@ class MoonOracle:
     ) -> MoonInfo:
         """Return a complete magical-energy profile for *dt* (default: now).
 
-        Combines moon phase, approximate zodiac sign, day ruler, planetary
-        hour, and seasonal context into a single :class:`MoonInfo` object.
+        Combines moon phase, precise zodiac sign (via ephem when available),
+        day ruler, planetary hour, and seasonal context into a single
+        :class:`MoonInfo` object.
         """
         if dt is None:
             dt = datetime.datetime.now()
 
-        # 1. Moon phase & illumination
-        phase_key, illumination = calculate_moon_phase(dt.year, dt.month, dt.day)
+        # 1. Moon phase, illumination, and zodiac sign (precise when ephem available)
+        phase_key, illumination, precise_zodiac = calculate_moon_phase_precise(
+            dt.year, dt.month, dt.day, dt.hour
+        )
         phase_data = get_phase_data(phase_key) or MOON_PHASES["new_moon"]
 
         # 2. Map phase key to MoonPhase enum
@@ -170,14 +178,16 @@ class MoonOracle:
         except ValueError:
             phase_enum = MoonPhase.NEW_MOON
 
-        # 3. Approximate zodiac sign
-        zodiac = self.get_moon_sign_for_date(dt.date())
+        # 3. Zodiac sign — prefer precise from ephem, fallback to approximate
+        zodiac = precise_zodiac if precise_zodiac else self.get_moon_sign_for_date(dt.date())
         sign_data = get_sign_data(zodiac)
 
-        # 4. Day ruler & planetary hour
+        # 4. Day ruler & planetary hour (with real sunrise/sunset when available)
         weekday = dt.weekday()  # Monday=0
         day_ruler = get_day_ruler(weekday)
-        current_hour = get_current_planetary_hour(weekday, dt.hour)
+        current_hour = get_current_planetary_hour(
+            weekday, dt.hour, lat=self.lat, lon=self.lon
+        )
 
         # 5. Seasonal context
         seasonal = get_seasonal_context(dt.month)
@@ -249,11 +259,13 @@ class MoonOracle:
 
         for offset in range(days_ahead):
             d = today + datetime.timedelta(days=offset)
-            phase_key, illumination = calculate_moon_phase(d.year, d.month, d.day)
+            phase_key, illumination, precise_zodiac = calculate_moon_phase_precise(
+                d.year, d.month, d.day
+            )
             phase_data = get_phase_data(phase_key) or {}
             weekday = d.weekday()
             day_ruler = get_day_ruler(weekday)
-            zodiac = self.get_moon_sign_for_date(d)
+            zodiac = precise_zodiac if precise_zodiac else self.get_moon_sign_for_date(d)
 
             # Scoring
             s_phase = self._score_moon_phase_for_intention(phase_key, norm_intention)
@@ -345,11 +357,13 @@ class MoonOracle:
 
         for offset in range(7):
             d = start_date + datetime.timedelta(days=offset)
-            phase_key, illumination = calculate_moon_phase(d.year, d.month, d.day)
+            phase_key, illumination, precise_zodiac = calculate_moon_phase_precise(
+                d.year, d.month, d.day
+            )
             phase_data = get_phase_data(phase_key) or MOON_PHASES["new_moon"]
             weekday = d.weekday()
             day_ruler = get_day_ruler(weekday)
-            zodiac = self.get_moon_sign_for_date(d)
+            zodiac = precise_zodiac if precise_zodiac else self.get_moon_sign_for_date(d)
             sign_data = get_sign_data(zodiac) or {}
 
             # Track phase counts for weekly theme
@@ -442,11 +456,13 @@ class MoonOracle:
         if dt is None:
             dt = datetime.datetime.now()
 
-        phase_key, illumination = calculate_moon_phase(dt.year, dt.month, dt.day)
+        phase_key, illumination, precise_zodiac = calculate_moon_phase_precise(
+            dt.year, dt.month, dt.day, dt.hour
+        )
         phase_data = get_phase_data(phase_key) or MOON_PHASES["new_moon"]
         weekday = dt.weekday()
         day_ruler = get_day_ruler(weekday)
-        zodiac = self.get_moon_sign_for_date(dt.date())
+        zodiac = precise_zodiac if precise_zodiac else self.get_moon_sign_for_date(dt.date())
         sign_data = get_sign_data(zodiac) or {}
         seasonal = get_seasonal_context(dt.month)
 

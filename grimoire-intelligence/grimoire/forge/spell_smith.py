@@ -7,7 +7,18 @@ template-based with zero AI API calls.
 
 import random
 import datetime
+from pathlib import Path
 
+from grimoire.forge.variation_engine import (
+    VariationEngine,
+    AFFIRMATION_POOLS,
+    ELEMENT_IMAGERY_POOLS,
+    AFTERCARE_POOLS,
+    PREPARATION_POOLS,
+    TIMING_ADVICE_POOLS,
+    DAILY_SUGGESTION_POOLS,
+    QUICK_PRACTICE_POOLS,
+)
 from grimoire.models import (
     GeneratedSpell,
     GeneratedRitual,
@@ -318,8 +329,21 @@ class SpellSmith:
     daily practices, tarot spreads, and journal prompts.
 
     All generation is deterministic from the template data — no AI
-    API calls are made.
+    API calls are made. When a VariationEngine is provided, outputs
+    vary across invocations via weighted anti-repetition pools.
     """
+
+    def __init__(
+        self,
+        db_path: str | None = None,
+        codex_advisor=None,
+    ):
+        if db_path is None:
+            db_path = str(
+                Path(__file__).resolve().parent.parent / "data" / "grimoire.db"
+            )
+        self.variation = VariationEngine(db_path)
+        self.advisor = codex_advisor
 
     # ------------------------------------------------------------------
     # Public: craft_spell
@@ -404,19 +428,21 @@ class SpellSmith:
         # 11. Closing
         closing = apply_voice(template.get("closing", get_closing()))
 
-        # 12. Aftercare
-        aftercare = [
-            apply_voice("Ground yourself by eating something, drinking water, or touching the earth."),
-            apply_voice("Record your experience in your journal while the details are fresh."),
-            apply_voice(get_closing()),
-        ]
+        # 12. Aftercare — select from variant pool
+        aftercare_set = self.variation.pick(
+            "aftercare_spell",
+            [str(i) for i in range(len(AFTERCARE_POOLS))],
+        )
+        aftercare_idx = int(aftercare_set) if aftercare_set.isdigit() else 0
+        aftercare = [apply_voice(line) for line in AFTERCARE_POOLS[aftercare_idx]]
 
-        # 13. Preparation
-        preparation = [
-            apply_voice("Cleanse your space with smoke, sound, or salt water."),
-            apply_voice("Gather all materials before beginning."),
-            apply_voice("Center yourself with three deep breaths."),
-        ]
+        # 13. Preparation — select from variant pool
+        prep_set = self.variation.pick(
+            "preparation_spell",
+            [str(i) for i in range(len(PREPARATION_POOLS))],
+        )
+        prep_idx = int(prep_set) if prep_set.isdigit() else 0
+        preparation = [apply_voice(line) for line in PREPARATION_POOLS[prep_idx]]
 
         return GeneratedSpell(
             title=title,
@@ -796,33 +822,17 @@ class SpellSmith:
         elif phase in ("waning_crescent", "waning crescent", "dark_moon", "dark moon"):
             suggestion_type = random.choice(["meditation", "journaling"])
 
-        # Planet-specific suggestions
+        # Planet-specific suggestions — select from variant pool
         ruler_display = ruler.title()
-        planet_suggestions = {
-            "moon": f"Connect with your intuition tonight. Hold a moonstone or selenite and sit in quiet reflection for 10 minutes.",
-            "mars": f"Light a red candle and speak your intentions with the fierce energy of Mars. Today favors courage and bold action.",
-            "mercury": f"Write a letter to your future self, or pull a single tarot card and journal about its message.",
-            "jupiter": f"Light a green candle for Thursday's Jupiter energy and speak abundance affirmations. Today magnifies prosperity workings.",
-            "venus": f"Create a small love or beauty ritual — add rose petals to your bath, or carry rose quartz today.",
-            "saturn": f"Perform a grounding meditation. Sit with black tourmaline and release one thing that no longer serves you.",
-            "sun": f"Stand in sunlight for five minutes and absorb solar vitality. Carry citrine or tiger's eye for confidence.",
-        }
+        daily_pool = DAILY_SUGGESTION_POOLS.get(ruler, [f"Honor today's {ruler_display} energy with mindful intention."])
         suggestion = apply_voice(
-            planet_suggestions.get(ruler, f"Honor today's {ruler_display} energy with mindful intention.")
+            self.variation.pick(f"daily_{ruler}", daily_pool)
         )
 
-        # Quick 5-minute version
-        quick_suggestions = {
-            "moon": "Hold your hands over a bowl of water and whisper one wish into it.",
-            "mars": "Light a match, state one bold intention, and let the flame carry it.",
-            "mercury": "Write three words that describe your intention and carry the paper with you.",
-            "jupiter": "Blow cinnamon toward your front door for abundance.",
-            "venus": "Hold rose quartz to your heart for one minute and breathe self-love.",
-            "saturn": "Place both palms flat on the ground and breathe out tension five times.",
-            "sun": "Face the sun (or a bright light), close your eyes, and affirm your power.",
-        }
+        # Quick 5-minute version — select from variant pool
+        quick_pool = QUICK_PRACTICE_POOLS.get(ruler, ["Take three deep, intentional breaths and set one micro-intention."])
         quick_practice = apply_voice(
-            quick_suggestions.get(ruler, "Take three deep, intentional breaths and set one micro-intention.")
+            self.variation.pick(f"quick_{ruler}", quick_pool)
         )
 
         # Correspondences for today
@@ -1070,6 +1080,9 @@ class SpellSmith:
     ) -> tuple[list[str], dict[str, str]]:
         """Select materials and generate substitution dict.
 
+        If a CodexAdvisor is available, uses the practitioner's preferred
+        herbs/crystals and injects one discovery item they haven't tried.
+
         Returns:
             (materials_list, substitutions_dict)
         """
@@ -1079,6 +1092,19 @@ class SpellSmith:
         herbs = corr.get("herbs", [])[:count]
         crystals = corr.get("crystals", [])[:max(1, count // 2)]
         colors = corr.get("colors", [])[:2]
+
+        # Personalize with CodexAdvisor if available
+        if self.advisor:
+            preferred_herbs = self.advisor.get_preferred_herbs(intention, limit=count)
+            if preferred_herbs:
+                herbs = preferred_herbs[:count]
+            preferred_crystals = self.advisor.get_preferred_crystals(intention, limit=max(1, count // 2))
+            if preferred_crystals:
+                crystals = preferred_crystals[:max(1, count // 2)]
+            # Inject one discovery herb the user hasn't tried
+            discovery = self.advisor.get_discovery_candidates(intention, category="herb")
+            if discovery and len(herbs) < count:
+                herbs.append(discovery[0])
 
         materials: list[str] = []
         substitutions: dict[str, str] = {}
@@ -1119,6 +1145,8 @@ class SpellSmith:
     def _generate_visualization(self, intention: str, element: str) -> str:
         """Create an evocative visualization paragraph.
 
+        Uses VariationEngine to select from expanded element imagery pools.
+
         Args:
             intention: The spell/ritual intention.
             element: The primary element (fire, water, earth, air, spirit).
@@ -1126,14 +1154,16 @@ class SpellSmith:
         Returns:
             A paragraph of visualization text.
         """
-        base = _ELEMENT_IMAGERY.get(
-            element.lower(),
-            _ELEMENT_IMAGERY["spirit"],
-        )
+        el_key = element.lower()
+        pool = ELEMENT_IMAGERY_POOLS.get(el_key, ELEMENT_IMAGERY_POOLS.get("spirit", []))
+        if pool:
+            base = self.variation.pick(f"viz_{el_key}", pool)
+        else:
+            base = _ELEMENT_IMAGERY.get(el_key, _ELEMENT_IMAGERY["spirit"])
 
         # Personalize with intention
         return (
-            f"{base} As the energy of {element.lower()} fills you, "
+            f"{base} As the energy of {el_key} fills you, "
             f"direct it toward your intention of {intention}. See it "
             f"taking shape, becoming real, settling into the fabric of "
             f"your life with quiet certainty."
@@ -1142,16 +1172,18 @@ class SpellSmith:
     def _build_timing_notes(self, intention: str) -> str:
         """Return timing advice based on intention.
 
+        Uses VariationEngine to select from expanded timing pools.
+
         Args:
             intention: The magical intention keyword.
 
         Returns:
             A timing advice string.
         """
-        # Direct match
-        for key, advice in _TIMING_ADVICE.items():
+        # Try expanded pool via VariationEngine
+        for key, pool in TIMING_ADVICE_POOLS.items():
             if key in intention:
-                return advice
+                return self.variation.pick(f"timing_{key}", pool)
 
         # Fallback
         return (
@@ -1210,6 +1242,9 @@ class SpellSmith:
     def _generate_affirmation(self, intention: str) -> str:
         """Create a present-tense affirmation for the intention.
 
+        Uses VariationEngine to select from expanded pools, falling back
+        to the original single affirmations if no pool match is found.
+
         Args:
             intention: An intention keyword.
 
@@ -1218,15 +1253,15 @@ class SpellSmith:
         """
         intention_lower = intention.lower().strip()
 
-        # Direct match
-        for key, affirmation in _AFFIRMATIONS.items():
+        # Try expanded pool via VariationEngine
+        for key, pool in AFFIRMATION_POOLS.items():
             if key in intention_lower:
-                return affirmation
+                return self.variation.pick(f"affirmation_{key}", pool)
 
-        # Fuzzy match against IntentionCategory values
-        for key, affirmation in _AFFIRMATIONS.items():
+        # Fuzzy match
+        for key, pool in AFFIRMATION_POOLS.items():
             if intention_lower in key:
-                return affirmation
+                return self.variation.pick(f"affirmation_{key}", pool)
 
         # Generic fallback
         return (

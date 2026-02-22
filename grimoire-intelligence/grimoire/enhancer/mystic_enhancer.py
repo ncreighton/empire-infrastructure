@@ -279,6 +279,7 @@ class MysticEnhancer:
         3. Seasonal / Wheel of the Year context
         4. Historical / traditional context
         5. Depth / nuance guidance layer
+        6. Personalization from CodexAdvisor (when user has logged sessions)
 
     Usage::
 
@@ -287,6 +288,9 @@ class MysticEnhancer:
         print(result.enhanced_query)
         print(f"Score: {result.score_before} -> {result.score_after}")
     """
+
+    def __init__(self, codex_advisor=None):
+        self.advisor = codex_advisor
 
     # ── Public API ────────────────────────────────────────────────────────
 
@@ -321,6 +325,11 @@ class MysticEnhancer:
         # Layer 5 — depth / nuance
         enhanced = self._add_depth_layer(enhanced, query_type)
 
+        # Layer 6 — personalization from CodexAdvisor (only when user has data)
+        personal_ctx = ""
+        if self.advisor:
+            enhanced, personal_ctx = self._add_personalization(enhanced, query)
+
         # Apply voice profile substitutions
         enhanced = apply_voice(enhanced)
 
@@ -337,6 +346,8 @@ class MysticEnhancer:
         if historical_ctx:
             injections.append("historical")
         injections.append("depth_layer")
+        if personal_ctx:
+            injections.append("personalization")
 
         return EnhancedQuery(
             original_query=query,
@@ -803,6 +814,68 @@ class MysticEnhancer:
             query_type, DEPTH_LAYERS[QueryType.GENERAL_WITCHCRAFT]
         )
         return f"{query}\n\n[Depth] {depth_text}"
+
+    # ── Layer 6: Personalization ──────────────────────────────────────────
+
+    def _add_personalization(self, query: str, raw_query: str) -> tuple[str, str]:
+        """Inject personalization context from the practitioner's history.
+
+        Only adds context when the CodexAdvisor has meaningful data
+        (session_count > 0). Returns empty string when no data exists,
+        so brand-new users see no change.
+
+        Returns:
+            A tuple of ``(enhanced_query, personalization_text)``.
+        """
+        if not self.advisor:
+            return query, ""
+
+        try:
+            intention = self._extract_intention(raw_query)
+            ctx = self.advisor.get_personalization_context(intention)
+        except Exception:
+            return query, ""
+
+        if ctx.get("session_count", 0) == 0:
+            return query, ""
+
+        parts: list[str] = []
+
+        # Session and streak info
+        parts.append(
+            f"Practitioner has logged {ctx['session_count']} sessions"
+        )
+        if ctx.get("streak", 0) > 1:
+            parts.append(f"with a {ctx['streak']}-day streak")
+
+        # Preferred materials
+        if ctx.get("preferred_herbs"):
+            parts.append(
+                f"Preferred herbs: {', '.join(ctx['preferred_herbs'][:3])}"
+            )
+        if ctx.get("preferred_crystals"):
+            parts.append(
+                f"Preferred crystals: {', '.join(ctx['preferred_crystals'][:3])}"
+            )
+
+        # Discovery suggestion
+        if ctx.get("discovery_herb"):
+            parts.append(f"New herb to explore: {ctx['discovery_herb']}")
+        if ctx.get("discovery_crystal"):
+            parts.append(f"New crystal to explore: {ctx['discovery_crystal']}")
+
+        # Best moon phase
+        if ctx.get("best_moon_phase"):
+            parts.append(
+                f"Most effective moon phase: {ctx['best_moon_phase']}"
+            )
+
+        if not parts:
+            return query, ""
+
+        personal_text = ". ".join(parts) + "."
+        enhanced = f"{query}\n\n[Personalization] {personal_text}"
+        return enhanced, personal_text
 
     # ── Extraction Helpers ────────────────────────────────────────────────
 

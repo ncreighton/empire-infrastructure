@@ -217,8 +217,10 @@ def get_planet_data(planet: str) -> dict | None:
 def get_current_planetary_hour(
     weekday: int,
     hour: int,
-    sunrise_hour: int = 6,
-    sunset_hour: int = 18,
+    sunrise_hour: float | int | None = None,
+    sunset_hour: float | int | None = None,
+    lat: float | None = None,
+    lon: float | None = None,
 ) -> dict:
     """Determine the current planetary hour based on a 24-hour clock value.
 
@@ -229,6 +231,21 @@ def get_current_planetary_hour(
     Returns a dict with keys: ``planet``, ``hour_number`` (0-11),
     ``is_daytime``, ``hour_start``, ``hour_end``, and ``correspondences``.
     """
+    # Auto-calculate sunrise/sunset via ephem if not provided
+    if sunrise_hour is None or sunset_hour is None:
+        try:
+            from grimoire.knowledge.moon_phases import get_sunrise_sunset
+            now = datetime.now()
+            sr, ss = get_sunrise_sunset(
+                now.year, now.month, now.day,
+                lat=lat or 40.7128, lon=lon or -74.0060,
+            )
+            sunrise_hour = sr if sunrise_hour is None else sunrise_hour
+            sunset_hour = ss if sunset_hour is None else sunset_hour
+        except Exception:
+            sunrise_hour = sunrise_hour if sunrise_hour is not None else 6
+            sunset_hour = sunset_hour if sunset_hour is not None else 18
+
     if sunrise_hour >= sunset_hour:
         raise ValueError("sunrise_hour must be less than sunset_hour")
 
@@ -274,8 +291,10 @@ def get_current_planetary_hour(
 
 def get_all_hours_for_day(
     weekday: int,
-    sunrise_hour: int = 6,
-    sunset_hour: int = 18,
+    sunrise_hour: float | int | None = None,
+    sunset_hour: float | int | None = None,
+    lat: float | None = None,
+    lon: float | None = None,
 ) -> list[dict]:
     """Return all 24 planetary hours for *weekday* with times and
     correspondences.
@@ -283,6 +302,20 @@ def get_all_hours_for_day(
     Each entry is a dict matching the shape returned by
     :func:`get_current_planetary_hour`.
     """
+    if sunrise_hour is None or sunset_hour is None:
+        try:
+            from grimoire.knowledge.moon_phases import get_sunrise_sunset
+            now = datetime.now()
+            sr, ss = get_sunrise_sunset(
+                now.year, now.month, now.day,
+                lat=lat or 40.7128, lon=lon or -74.0060,
+            )
+            sunrise_hour = sr if sunrise_hour is None else sunrise_hour
+            sunset_hour = ss if sunset_hour is None else sunset_hour
+        except Exception:
+            sunrise_hour = sunrise_hour if sunrise_hour is not None else 6
+            sunset_hour = sunset_hour if sunset_hour is not None else 18
+
     if sunrise_hour >= sunset_hour:
         raise ValueError("sunrise_hour must be less than sunset_hour")
 
@@ -327,8 +360,10 @@ def get_all_hours_for_day(
 def get_best_planetary_hour(
     intention: str,
     weekday: int,
-    sunrise_hour: int = 6,
-    sunset_hour: int = 18,
+    sunrise_hour: float | int | None = None,
+    sunset_hour: float | int | None = None,
+    lat: float | None = None,
+    lon: float | None = None,
 ) -> list[dict]:
     """Return the best planetary hours today for *intention*, sorted by
     relevance (primary planet first, then secondary).
@@ -347,7 +382,7 @@ def get_best_planetary_hour(
         if not planets:
             return []
 
-    all_hours = get_all_hours_for_day(weekday, sunrise_hour, sunset_hour)
+    all_hours = get_all_hours_for_day(weekday, sunrise_hour, sunset_hour, lat=lat, lon=lon)
     results: list[dict] = []
 
     for entry in all_hours:

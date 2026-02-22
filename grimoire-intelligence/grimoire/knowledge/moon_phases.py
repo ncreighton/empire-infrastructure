@@ -673,6 +673,107 @@ def calculate_moon_phase(year: int, month: int, day: int) -> tuple[str, float]:
     return phase_key, round(illumination, 4)
 
 
+def calculate_moon_phase_precise(
+    year: int, month: int, day: int, hour: int = 12
+) -> tuple[str, float, str]:
+    """Calculate precise moon phase, illumination, and zodiac sign via PyEphem.
+
+    Falls back to the approximate algorithm if ephem is not installed.
+
+    Args:
+        year: Calendar year.
+        month: Month number (1-12).
+        day: Day of the month.
+        hour: Hour of the day (0-23), defaults to noon.
+
+    Returns:
+        A tuple of ``(phase_key, illumination, zodiac_sign)`` where
+        zodiac_sign is a lowercase sign name (e.g. ``"scorpio"``), or
+        an empty string if ephem is unavailable.
+    """
+    try:
+        import ephem
+
+        date_str = f"{year}/{month}/{day} {hour:02d}:00:00"
+        moon = ephem.Moon(date_str)
+        illumination = moon.phase / 100.0
+
+        # Ecliptic longitude -> zodiac sign
+        ecliptic_lon = float(ephem.Ecliptic(moon).lon) * 180.0 / math.pi
+        sign_index = int(ecliptic_lon / 30.0) % 12
+        signs = [
+            "aries", "taurus", "gemini", "cancer", "leo", "virgo",
+            "libra", "scorpio", "sagittarius", "capricorn", "aquarius", "pisces",
+        ]
+        zodiac_sign = signs[sign_index]
+
+        # Determine waxing/waning by checking illumination change
+        tomorrow_str = f"{year}/{month}/{day} {(hour + 6) % 24:02d}:00:00"
+        moon_later = ephem.Moon(tomorrow_str)
+        later_illumination = moon_later.phase / 100.0
+        is_waxing = later_illumination >= illumination
+
+        phase_key = get_moon_phase_from_illumination(illumination, is_waxing)
+
+        return phase_key, round(illumination, 4), zodiac_sign
+
+    except ImportError:
+        phase_key, illum = calculate_moon_phase(year, month, day)
+        return phase_key, illum, ""
+
+
+def get_sunrise_sunset(
+    year: int, month: int, day: int,
+    lat: float = 40.7128, lon: float = -74.0060,
+) -> tuple[float, float]:
+    """Calculate real sunrise and sunset times via PyEphem.
+
+    Falls back to (6.0, 18.0) if ephem is not installed.
+
+    Args:
+        year: Calendar year.
+        month: Month number (1-12).
+        day: Day of the month.
+        lat: Observer latitude (default: New York City).
+        lon: Observer longitude (default: New York City).
+
+    Returns:
+        A tuple of ``(sunrise_hour, sunset_hour)`` as floats
+        (e.g. ``(6.5, 19.2)``).
+    """
+    try:
+        import ephem
+
+        obs = ephem.Observer()
+        obs.lat = str(lat)
+        obs.lon = str(lon)
+        obs.date = f"{year}/{month}/{day} 12:00:00"
+
+        sun = ephem.Sun()
+        try:
+            sr = obs.previous_rising(sun)
+            ss = obs.next_setting(sun)
+        except ephem.AlwaysUpError:
+            return 0.0, 24.0
+        except ephem.NeverUpError:
+            return 6.0, 6.0
+
+        # Convert ephem.Date to hour floats in local observer frame
+        sr_tuple = ephem.Date(sr).tuple()
+        ss_tuple = ephem.Date(ss).tuple()
+        sunrise_hour = sr_tuple[3] + sr_tuple[4] / 60.0
+        sunset_hour = ss_tuple[3] + ss_tuple[4] / 60.0
+
+        # Ensure valid range
+        if sunset_hour <= sunrise_hour:
+            sunset_hour = sunrise_hour + 12.0
+
+        return round(sunrise_hour, 2), round(sunset_hour, 2)
+
+    except ImportError:
+        return 6.0, 18.0
+
+
 def get_lunar_month_forecast(year: int, month: int) -> list[dict]:
     """Return approximate moon phase info for every day of a calendar month.
 

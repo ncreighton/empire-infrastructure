@@ -28,24 +28,37 @@ class GrimoireEngine:
     and the Mystic Prompt Enhancer into a unified interface.
     """
 
-    def __init__(self, db_path: str | None = None):
+    def __init__(
+        self,
+        db_path: str | None = None,
+        lat: float | None = None,
+        lon: float | None = None,
+    ):
         if db_path is None:
             db_path = str(Path(__file__).parent / "data" / "grimoire.db")
         # Ensure data directory exists
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
 
+        self.lat = lat
+        self.lon = lon
+
         # FORGE modules
         self.scout = SpellScout()
         self.sentinel = RitualSentinel()
-        self.oracle = MoonOracle()
-        self.smith = SpellSmith()
+        self.oracle = MoonOracle(lat=lat, lon=lon)
         self.codex = PracticeCodex(db_path)
 
+        # CodexAdvisor — bridges user history into generation
+        from grimoire.forge.codex_advisor import CodexAdvisor
+        self.advisor = CodexAdvisor(self.codex)
+
+        self.smith = SpellSmith(db_path=db_path, codex_advisor=self.advisor)
+
         # AMPLIFY pipeline
-        self.amplify = AmplifyPipeline()
+        self.amplify = AmplifyPipeline(db_path=db_path)
 
         # Prompt enhancer
-        self.enhancer = MysticEnhancer()
+        self.enhancer = MysticEnhancer(codex_advisor=self.advisor)
 
     # ── Primary methods ────────────────────────────────────────────────
 

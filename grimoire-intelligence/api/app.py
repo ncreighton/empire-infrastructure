@@ -127,8 +127,12 @@ def consult(req: ConsultRequest):
 
 
 @app.get("/energy")
-def energy():
+def energy(lat: float | None = None, lon: float | None = None):
     try:
+        if lat is not None or lon is not None:
+            from grimoire import GrimoireEngine as _GE
+            local_engine = _GE(lat=lat, lon=lon)
+            return local_engine.current_energy()
         return engine.current_energy()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
