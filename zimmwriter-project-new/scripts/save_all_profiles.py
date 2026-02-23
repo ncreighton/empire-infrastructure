@@ -25,6 +25,7 @@ Usage:
     python scripts/save_all_profiles.py --site smarthomewizards.com
     python scripts/save_all_profiles.py --skip-image-options  # Skip Phase 0
     python scripts/save_all_profiles.py --skip-image-prompts  # Skip P buttons
+    python scripts/save_all_profiles.py --skip-features       # Skip feature toggles
 """
 
 import sys
@@ -268,7 +269,8 @@ def configure_model_options_prepass(zw: ZimmWriterController, domains: list) -> 
 
 
 def update_profile_for_site(zw: ZimmWriterController, domain: str, preset: dict,
-                             skip_image_prompts: bool = False) -> dict:
+                             skip_image_prompts: bool = False,
+                             skip_features: bool = False) -> dict:
     """
     Load an existing profile, apply all settings, then click Update Profile.
 
@@ -448,7 +450,7 @@ def update_profile_for_site(zw: ZimmWriterController, domain: str, preset: dict,
         # (closing the window). _open_config_window now checks for an
         # already-open window first, but the cleanest approach is to just
         # let configure_*() handle the single click.
-        if not skip_image_prompts:  # reuse flag to gate feature config too
+        if not skip_features:
             # Check process is alive before feature toggles
             if not zw._is_process_alive():
                 result["errors"].append("ZimmWriter died before features")
@@ -457,8 +459,34 @@ def update_profile_for_site(zw: ZimmWriterController, domain: str, preset: dict,
 
             print("features...", end=" ", flush=True)
 
-            # SERP Scraping
-            if preset.get("serp_scraping"):
+            # WordPress Upload
+            wp_cfg = preset.get("wordpress_settings")
+            if wp_cfg:
+                try:
+                    zw.configure_wordpress_upload(
+                        site_url=wp_cfg.get("site_url"),
+                        user_name=wp_cfg.get("user_name"),
+                        category=wp_cfg.get("category", "Automatically Determine Category"),
+                        article_status=wp_cfg.get("article_status", "schedule"),
+                        posts_per_day=wp_cfg.get("posts_per_day"),
+                        schedule_start_current_day=wp_cfg.get("schedule_start_current_day", False),
+                    )
+                    screenshot(domain, "04a_wordpress_ok")
+                    time.sleep(0.5)
+                except Exception as e:
+                    result["errors"].append(f"wordpress: {e}")
+                    screenshot(domain, "04a_wordpress_err")
+                # Reconnect — config window close can invalidate main handle
+                try:
+                    zw.connect()
+                except Exception:
+                    pass
+
+            # SERP Scraping vs Deep Research (mutually exclusive)
+            use_serp = preset.get("serp_scraping", False)
+            use_dr = preset.get("deep_research", False)
+
+            if use_serp:
                 serp_cfg = preset.get("serp_settings")
                 if serp_cfg:
                     try:
@@ -475,9 +503,18 @@ def update_profile_for_site(zw: ZimmWriterController, domain: str, preset: dict,
                 else:
                     zw.toggle_feature("serp_scraping", True)
                     zw._dismiss_dialog(timeout=2)
-
-            # Deep Research
-            if preset.get("deep_research"):
+                # Reconnect after config window
+                try:
+                    zw.connect()
+                except Exception:
+                    pass
+                # Explicitly disable Deep Research (mutual exclusion)
+                try:
+                    zw.toggle_feature("deep_research", False)
+                    zw._dismiss_dialog(timeout=2)
+                except Exception as e:
+                    result["errors"].append(f"disable deep_research: {e}")
+            elif use_dr:
                 dr_cfg = preset.get("deep_research_settings")
                 if dr_cfg:
                     try:
@@ -494,6 +531,23 @@ def update_profile_for_site(zw: ZimmWriterController, domain: str, preset: dict,
                 else:
                     zw.toggle_feature("deep_research", True)
                     zw._dismiss_dialog(timeout=2)
+                # Reconnect after config window
+                try:
+                    zw.connect()
+                except Exception:
+                    pass
+                # Explicitly disable SERP Scraping (mutual exclusion)
+                try:
+                    zw.toggle_feature("serp_scraping", False)
+                    zw._dismiss_dialog(timeout=2)
+                except Exception as e:
+                    result["errors"].append(f"disable serp_scraping: {e}")
+
+            # Reconnect before remaining features
+            try:
+                zw.connect()
+            except Exception:
+                pass
 
             # Link Pack
             if preset.get("link_pack"):
@@ -512,6 +566,11 @@ def update_profile_for_site(zw: ZimmWriterController, domain: str, preset: dict,
                 else:
                     zw.toggle_feature("link_pack", True)
                     zw._dismiss_dialog(timeout=2)
+                # Reconnect after config window
+                try:
+                    zw.connect()
+                except Exception:
+                    pass
 
             # Style Mimic
             sm_cfg = preset.get("style_mimic_settings")
@@ -523,6 +582,30 @@ def update_profile_for_site(zw: ZimmWriterController, domain: str, preset: dict,
                 except Exception as e:
                     result["errors"].append(f"style_mimic: {e}")
                     screenshot(domain, "07_style_mimic_err")
+                # Reconnect after config window
+                try:
+                    zw.connect()
+                except Exception:
+                    pass
+
+            # YouTube Videos
+            yt_cfg = preset.get("youtube_settings")
+            if yt_cfg:
+                try:
+                    zw.configure_youtube_videos(
+                        enable=True,
+                        max_videos=yt_cfg.get("max_videos"),
+                    )
+                    screenshot(domain, "08a_youtube_ok")
+                    time.sleep(0.5)
+                except Exception as e:
+                    result["errors"].append(f"youtube_videos: {e}")
+                    screenshot(domain, "08a_youtube_err")
+                # Reconnect after config window
+                try:
+                    zw.connect()
+                except Exception:
+                    pass
 
             # Custom Prompt (per-section prompts + dropdown assignments)
             cp_cfg = preset.get("custom_prompt_settings")
@@ -545,6 +628,17 @@ def update_profile_for_site(zw: ZimmWriterController, domain: str, preset: dict,
                 except Exception as e:
                     result["errors"].append(f"custom_prompt: {e}")
                     screenshot(domain, "08_custom_prompt_err")
+                # Reconnect after config window
+                try:
+                    zw.connect()
+                except Exception:
+                    pass
+
+        # Reconnect before Update Profile to ensure valid handle
+        try:
+            zw.connect()
+        except Exception:
+            pass
 
         # ── Step 5: Click Update Profile (NOT Save Profile) ──
         print("updating...", end=" ", flush=True)
@@ -648,6 +742,8 @@ def main():
                         help="Skip Phase 0 (image model O button options pre-pass)")
     parser.add_argument("--skip-image-prompts", action="store_true",
                         help="Skip configuring image prompts (P buttons) per site")
+    parser.add_argument("--skip-features", action="store_true",
+                        help="Skip configuring feature toggles (WordPress, SERP, etc.)")
     parser.add_argument("--skip-verify", action="store_true",
                         help="Skip the final verification pass")
     args = parser.parse_args()
@@ -771,14 +867,22 @@ def main():
                 title = zw.get_window_title()
             except Exception:
                 title = ""
-            if "Bulk" not in title and "Menu" in title:
-                try:
-                    zw.open_bulk_writer()
-                    time.sleep(2)
-                    zw.connect()
-                    title = zw.get_window_title()
-                except Exception:
-                    pass
+            if "Bulk" not in title:
+                for nav_attempt in range(3):
+                    try:
+                        zw.open_bulk_writer()
+                        time.sleep(3)
+                        zw.connect()
+                        title = zw.get_window_title()
+                        if "Bulk" in title:
+                            break
+                    except Exception:
+                        time.sleep(2)
+                        try:
+                            zw.connect()
+                            title = zw.get_window_title()
+                        except Exception:
+                            title = ""
             print(f"now on '{title}'")
 
         elif "Bulk" not in title:
@@ -814,12 +918,22 @@ def main():
             except Exception:
                 title = ""
             if "Bulk" not in title:
-                try:
-                    zw.open_bulk_writer()
-                    time.sleep(2)
-                    title = zw.get_window_title()
-                except Exception:
-                    pass
+                # Navigate to Bulk Writer with retry + reconnect loop
+                for nav_attempt in range(3):
+                    try:
+                        zw.open_bulk_writer()
+                        time.sleep(3)
+                        zw.connect()
+                        title = zw.get_window_title()
+                        if "Bulk" in title:
+                            break
+                    except Exception:
+                        time.sleep(2)
+                        try:
+                            zw.connect()
+                            title = zw.get_window_title()
+                        except Exception:
+                            title = ""
             print(f"now on '{title}'")
 
         # Clean slate: close any stale config windows from previous site
@@ -834,7 +948,8 @@ def main():
         print(f"[{i:2d}/{len(domains)}] {domain}...")
         result = update_profile_for_site(
             zw, domain, preset,
-            skip_image_prompts=args.skip_image_prompts
+            skip_image_prompts=args.skip_image_prompts,
+            skip_features=args.skip_features,
         )
         results.append(result)
 

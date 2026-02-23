@@ -1413,6 +1413,8 @@ class ZimmWriterController:
     def configure_wordpress_upload(self, site_url: str = None, user_name: str = None,
                                     category: str = None, sub_category: str = None,
                                     author: str = None, article_status: str = "draft",
+                                    posts_per_day: str = None,
+                                    schedule_start_current_day: bool = False,
                                     disable_meta_desc: bool = False,
                                     disable_auto_tags: bool = False):
         """
@@ -1422,7 +1424,10 @@ class ZimmWriterController:
         Control auto_ids (verified v10.872 via discover_all_feature_windows.py):
           Dropdowns: site(113), user(115), category(117), sub-category(119),
                      author(121), status(123)
-          Checkboxes: disable_meta_desc(133), disable_auto_tags(134)
+          Edit: posts_per_day(125)
+          ComboBox: time_period(127)
+          Checkboxes: schedule_start_current_day(132),
+                      disable_meta_desc(133), disable_auto_tags(134)
         Note: v10.870 M-Swap/Manage shifted ALL sub-window IDs +2.
         """
         win = self._open_config_window("wordpress")
@@ -1445,6 +1450,11 @@ class ZimmWriterController:
                 self._set_config_dropdown(win, "121", author)
             if article_status:
                 self._set_config_dropdown(win, "123", article_status)
+            if posts_per_day:
+                self._set_config_text(win, "125", str(posts_per_day))
+                time.sleep(0.3)
+            if schedule_start_current_day:
+                self._set_config_checkbox(win, "132", True)
             self._set_config_checkbox(win, "133", disable_meta_desc)
             self._set_config_checkbox(win, "134", disable_auto_tags)
         except Exception as e:
@@ -1568,16 +1578,22 @@ class ZimmWriterController:
             return False
 
         try:
-            if style_text:
+            if style_text and style_text.strip():
                 self._set_config_text(win, "114", style_text)
-
-            self._click_config_button(win, title="Save Mimic")
-            time.sleep(0.5)
+                time.sleep(0.5)
+                self._click_config_button(win, title="Save Mimic")
+                time.sleep(1.0)
+                # Dismiss any error dialog ("Style to Mimic box cannot be empty")
+                self._dismiss_dialog(timeout=2)
+            else:
+                logger.warning("Style Mimic: no text provided, skipping Save")
         except Exception as e:
             logger.error(f"Style Mimic config failed: {e}")
         finally:
+            # Dismiss any lingering dialog before closing
+            self._dismiss_dialog(timeout=1)
             self._close_config_window(win)
-            self._dismiss_dialog()
+            self._dismiss_dialog(timeout=1)
 
         logger.info("Style Mimic configured")
         return True

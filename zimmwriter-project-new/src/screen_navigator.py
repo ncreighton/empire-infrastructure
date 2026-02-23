@@ -270,9 +270,12 @@ class ScreenNavigator:
 
     def _refresh_window(self):
         """Refresh controller's window reference after screen change."""
+        # Full reconnect to pick up new window handle after screen transitions
         try:
-            self.zw.main_window = self.zw.app.top_window()
-            self.zw._control_cache.clear()
-        except Exception:
-            # Reconnect if window reference is stale
             self.zw.connect()
+        except Exception:
+            try:
+                self.zw.main_window = self.zw.app.top_window()
+                self.zw._control_cache.clear()
+            except Exception:
+                pass
