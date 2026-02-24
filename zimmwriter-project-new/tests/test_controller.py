@@ -40,7 +40,7 @@ class TestSitePresets:
 
     def test_witchcraft_preserves_voice(self):
         config = get_preset("witchcraftforbeginners.com")
-        assert config["serp_scraping"] == True  # SERP enabled on all sites
+        assert config.get("serp_scraping") or config.get("deep_research")
         assert config["literary_devices"] == True
 
     def test_all_sites_use_claude_model(self):
@@ -172,10 +172,15 @@ class TestScreenNavigator:
 
 
 class TestSitePresetsFeatures:
-    def test_all_sites_have_serp(self):
+    def test_all_sites_have_serp_or_deep_research(self):
         for domain, config in SITE_PRESETS.items():
-            assert config.get("serp_scraping") == True, f"{domain} missing serp_scraping"
-            assert "serp_settings" in config, f"{domain} missing serp_settings"
+            has_serp = config.get("serp_scraping")
+            has_dr = config.get("deep_research")
+            assert has_serp or has_dr, f"{domain} missing both serp_scraping and deep_research"
+            if has_serp:
+                assert "serp_settings" in config, f"{domain} missing serp_settings"
+            if has_dr:
+                assert "deep_research_settings" in config, f"{domain} missing deep_research_settings"
 
     def test_deep_research_sites(self):
         dr_sites = [d for d, c in SITE_PRESETS.items() if c.get("deep_research")]
@@ -191,8 +196,9 @@ class TestSitePresetsFeatures:
         for domain, config in SITE_PRESETS.items():
             assert config.get("custom_prompt") == True, f"{domain} missing custom_prompt"
             cp = config.get("custom_prompt_settings", {})
-            assert cp.get("prompt_text"), f"{domain} has empty custom_prompt text"
-            assert cp.get("prompt_name"), f"{domain} has empty prompt_name"
+            has_legacy = cp.get("prompt_text") and cp.get("prompt_name")
+            has_new = cp.get("prompts") and cp.get("section_assignments")
+            assert has_legacy or has_new, f"{domain} has neither legacy nor new prompt format"
 
     def test_link_pack_sites_have_settings(self):
         for domain, config in SITE_PRESETS.items():
