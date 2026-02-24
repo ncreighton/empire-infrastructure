@@ -109,6 +109,11 @@ DROPDOWN_MAP = {
     "ai_model_translation":    "93",
 }
 
+# Dropdowns that ZimmWriter does NOT persist in profiles.
+# After load_profile(), these revert to global defaults.
+# The orchestrator handles this at runtime via apply_site_config().
+NON_PERSISTENT_DROPDOWNS = {"featured_image", "section_length", "subheading_images_model"}
+
 # Checkbox keys -> auto_ids (from controller.CHECKBOX_IDS, v10.870)
 CHECKBOX_MAP = {
     "literary_devices":         "49",
@@ -677,14 +682,29 @@ def update_profile_for_site(zw: ZimmWriterController, domain: str, preset: dict,
 
 def verification_pass(zw: ZimmWriterController, domains: list) -> dict:
     """
-    Final verification: load each profile and check a few key dropdowns match.
-    This confirms the Update Profile actually persisted the settings.
+    Final verification: load each profile and check key dropdowns.
+
+    Mirrors real runtime behavior: after load_profile(), apply runtime fixups
+    for NON_PERSISTENT_DROPDOWNS (featured_image, section_length, etc.) —
+    just like orchestrator.apply_site_config() does at job time.
+
+    Reports which values persisted natively vs needed runtime fixup.
     """
     print("\n" + "=" * 65)
     print("VERIFICATION PASS: Load each profile and check settings")
+    print("  (non-persistent dropdowns get runtime fixup, matching orchestrator)")
     print("=" * 65)
 
     results = {}
+    total_persisted = 0
+    total_fixedup = 0
+
+    check_keys = [
+        ("ai_model", lambda p: p.get("ai_model", "")),
+        ("section_length", lambda p: p.get("section_length", "")),
+        ("featured_image", lambda p: p.get("featured_image", "")),
+        ("subheading_images_model", lambda p: p.get("subheading_images_model", "")),
+    ]
 
     for domain in domains:
         preset = SITE_PRESETS.get(domain, {})
@@ -700,34 +720,62 @@ def verification_pass(zw: ZimmWriterController, domains: list) -> dict:
                 results[domain] = False
                 continue
 
-            # Check 3 key dropdowns
-            checks = []
-            for dd_key, expected in [
-                ("ai_model", preset.get("ai_model", "")),
-                ("section_length", preset.get("section_length", "")),
-                ("featured_image", preset.get("featured_image", "")),
-            ]:
-                actual = read_combo_selected(zw, DROPDOWN_MAP[dd_key])
-                checks.append(actual == expected)
+            persisted = []
+            fixedup = []
+            failed = []
 
-            all_ok = all(checks)
+            for dd_key, get_expected in check_keys:
+                expected = get_expected(preset)
+                if not expected:
+                    continue
+                auto_id = DROPDOWN_MAP[dd_key]
+                actual = read_combo_selected(zw, auto_id)
+
+                if actual == expected:
+                    persisted.append(dd_key)
+                elif dd_key in NON_PERSISTENT_DROPDOWNS:
+                    # Apply runtime fixup (mirrors orchestrator behavior)
+                    try:
+                        zw.set_dropdown(auto_id=auto_id, value=expected)
+                        time.sleep(0.3)
+                        verify = read_combo_selected(zw, auto_id)
+                        if verify == expected:
+                            fixedup.append(dd_key)
+                        else:
+                            failed.append((dd_key, expected, verify))
+                    except Exception as e:
+                        failed.append((dd_key, expected, f"error: {e}"))
+                else:
+                    failed.append((dd_key, expected, actual))
+
+            all_ok = len(failed) == 0
+            total_persisted += len(persisted)
+            total_fixedup += len(fixedup)
+
             icon = "OK" if all_ok else "XX"
-            print(f"  [{icon}] {domain}")
-            if not all_ok:
-                # Show which checks failed
-                for dd_key, expected in [
-                    ("ai_model", preset.get("ai_model", "")),
-                    ("section_length", preset.get("section_length", "")),
-                    ("featured_image", preset.get("featured_image", "")),
-                ]:
-                    actual = read_combo_selected(zw, DROPDOWN_MAP[dd_key])
-                    if actual != expected:
-                        print(f"       {dd_key}: expected '{expected}', got '{actual}'")
+            parts = []
+            if persisted:
+                parts.append(f"{len(persisted)} persisted")
+            if fixedup:
+                parts.append(f"{len(fixedup)} runtime-fixed")
+            detail = f" ({', '.join(parts)})" if parts else ""
+            print(f"  [{icon}] {domain}{detail}")
+
+            if fixedup:
+                for dd_key in fixedup:
+                    print(f"       ~ {dd_key}: runtime-fixed (normal — not profile-persistent)")
+            if failed:
+                for dd_key, expected, actual in failed:
+                    print(f"       ! {dd_key}: expected '{expected}', got '{actual}'")
+
             results[domain] = all_ok
 
         except Exception as e:
             print(f"  [XX] {domain}: {e}")
             results[domain] = False
+
+    # Summary line
+    print(f"\n  Totals: {total_persisted} persisted, {total_fixedup} runtime-fixed")
 
     return results
 
@@ -963,7 +1011,7 @@ def main():
         time.sleep(1.5)
 
     # ── Final verification pass ──
-    if not args.skip_verify and len(domains) > 1:
+    if not args.skip_verify:
         # Ensure healthy connection before verification
         try:
             zw.connect()
@@ -986,8 +1034,11 @@ def main():
     print(f"  Verified: {verified}/{len(results)} (inline)")
     if verify_results:
         final_verified = sum(1 for v in verify_results.values() if v)
-        print(f"  Final:    {final_verified}/{len(verify_results)} (load-and-check)")
+        print(f"  Final:    {final_verified}/{len(verify_results)} (load-and-check, with runtime fixups)")
     print(f"  Failed:   {failed}/{len(results)}")
+    if verify_results:
+        print(f"\n  Note: {len(NON_PERSISTENT_DROPDOWNS)} dropdowns ({', '.join(sorted(NON_PERSISTENT_DROPDOWNS))})")
+        print(f"        are not profile-persistent — the orchestrator fixes them at runtime.")
 
     if failed > 0:
         print("\n  Failed sites:")
