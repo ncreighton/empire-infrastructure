@@ -539,14 +539,7 @@ def generate_voiceover_script(model_name, print_specs="", duration_seconds=15):
     else:
         script = random.choice(long_scripts)
 
-    return {
-        "script": script,
-        "estimated_duration_seconds": len(script.split()) / 2.5,  # ~150 wpm
-        "voice_recommendations": {
-            "elevenlabs": {"voice": "Adam", "stability": 0.5, "clarity": 0.75},
-            "style": "conversational, warm, confident — not salesy",
-        },
-    }
+    return script
 
 
 # ============================================================================
@@ -636,7 +629,13 @@ def generate_all_captions(model_name, mode="turntable", print_specs="",
         "generated": datetime.now().isoformat(),
         "platforms": {},
         "tracking": generate_tracking_links(model_name, platforms=platforms),
-        "voiceover": generate_voiceover_script(model_name, print_specs),
+        "voiceover": {
+            "script": generate_voiceover_script(model_name, print_specs),
+            "voice_recommendations": {
+                "elevenlabs": {"voice": "Adam", "stability": 0.5, "clarity": 0.75},
+                "style": "conversational, warm, confident — not salesy",
+            },
+        },
         "schedule": generate_schedule_metadata(),
     }
 

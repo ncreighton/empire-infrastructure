@@ -168,7 +168,16 @@ def run_blender_render(stl_path, output_dir, mode="turntable", platforms=None,
 
     log_stage(logger, "render", f"Blender: {mode} | formats={render_formats} | preset={preset or 'default'}")
 
-    result = subprocess.run(cmd, capture_output=False, timeout=3600)
+    try:
+        result = subprocess.run(cmd, capture_output=False, timeout=3600)
+    except FileNotFoundError:
+        log_stage(logger, "render",
+                  f"Blender not found. Install from https://www.blender.org/download/ "
+                  f"and add to PATH, or set BLENDER_PATH environment variable.", level=40)
+        return False
+    except subprocess.TimeoutExpired:
+        log_stage(logger, "render", "Blender render timed out (>1 hour)", level=40)
+        return False
 
     if result.returncode != 0:
         log_stage(logger, "render", f"Blender failed (exit {result.returncode})", level=40)

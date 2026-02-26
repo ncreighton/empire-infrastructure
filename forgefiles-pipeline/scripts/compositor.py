@@ -60,7 +60,9 @@ class BrandConfig:
         ]
         for font in candidates:
             if font.exists():
-                return f"fontfile={font}:"
+                # FFmpeg drawtext needs forward slashes and double-escaped colons
+                safe_path = str(font).replace("\\", "/").replace(":", "\\\\:")
+                return f"fontfile={safe_path}:"
         return ""
 
     @classmethod
