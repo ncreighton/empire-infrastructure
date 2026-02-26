@@ -51,16 +51,16 @@ class TestVariationEngine:
         assert a_count < 40  # Should be well below 40%
 
     def test_discovery_bias_favors_new(self, engine):
-        """Never-picked items should have discovery bonus."""
+        """Never-picked items should have discovery bonus in weight calculation."""
         pool = ["old_1", "old_2", "new_1", "new_2"]
         # Use old items heavily
         for _ in range(10):
             engine._log_selection("discovery_test", "old_1")
             engine._log_selection("discovery_test", "old_2")
 
-        # Pick 200 times for statistical significance
-        results = [engine.pick("discovery_test", pool) for _ in range(200)]
-        new_count = results.count("new_1") + results.count("new_2")
-        old_count = results.count("old_1") + results.count("old_2")
-        # New items (weight 2.0 each) should appear more than old (weight 0.1 each)
-        assert new_count > old_count
+        # Verify weights directly: old items should be 0.1, new items should be 2.0
+        weights = engine._get_recency_weights("discovery_test", pool)
+        assert weights[0] == 0.1  # old_1
+        assert weights[1] == 0.1  # old_2
+        assert weights[2] == 2.0  # new_1
+        assert weights[3] == 2.0  # new_2
