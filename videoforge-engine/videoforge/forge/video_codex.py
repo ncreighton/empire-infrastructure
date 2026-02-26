@@ -3,7 +3,7 @@
 import os
 import sqlite3
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 _SCHEMA = """
@@ -81,7 +81,7 @@ class VideoCodex:
             "INSERT INTO video_log (created_at, topic, niche, platform, format, "
             "hook_formula, trending_format, quality_score, total_cost, render_url, status) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (datetime.utcnow().isoformat(), topic, niche, platform, format,
+            (datetime.now(timezone.utc).isoformat(), topic, niche, platform, format,
              hook_formula, trending_format, quality_score, total_cost, render_url, status),
         )
         self._conn.commit()
@@ -96,7 +96,7 @@ class VideoCodex:
             "INSERT INTO performance_log (video_id, logged_at, views, likes, comments, "
             "shares, watch_time_seconds, retention_percent, ctr_percent) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (video_id, datetime.utcnow().isoformat(), views, likes, comments,
+            (video_id, datetime.now(timezone.utc).isoformat(), views, likes, comments,
              shares, watch_time_seconds, retention_percent, ctr_percent),
         )
         self._conn.commit()
@@ -107,7 +107,7 @@ class VideoCodex:
         self._conn.execute(
             "INSERT INTO cost_log (video_id, logged_at, category, provider, amount, details) "
             "VALUES (?, ?, ?, ?, ?, ?)",
-            (video_id, datetime.utcnow().isoformat(), category, provider, amount, details),
+            (video_id, datetime.now(timezone.utc).isoformat(), category, provider, amount, details),
         )
         self._conn.commit()
 
@@ -135,7 +135,7 @@ class VideoCodex:
             query += " AND niche = ?"
             params.append(niche)
         if days:
-            cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
             query += " AND created_at > ?"
             params.append(cutoff)
         row = self._conn.execute(query, params).fetchone()
@@ -146,7 +146,7 @@ class VideoCodex:
         query = "SELECT COALESCE(SUM(amount), 0) FROM cost_log WHERE 1=1"
         params = []
         if days:
-            cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
             query += " AND logged_at > ?"
             params.append(cutoff)
         row = self._conn.execute(query, params).fetchone()
@@ -154,7 +154,7 @@ class VideoCodex:
 
     def get_avg_cost_per_video(self, days: int = 30) -> float:
         """Get average cost per video over a period."""
-        cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
         row = self._conn.execute(
             "SELECT COALESCE(AVG(total_cost), 0) FROM video_log WHERE created_at > ?",
             (cutoff,),
@@ -201,7 +201,7 @@ class VideoCodex:
 
     def get_cost_breakdown(self, days: int = 30) -> dict:
         """Get cost breakdown by category."""
-        cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
         rows = self._conn.execute(
             "SELECT category, SUM(amount) as total FROM cost_log "
             "WHERE logged_at > ? GROUP BY category ORDER BY total DESC",

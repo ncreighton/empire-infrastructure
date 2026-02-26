@@ -1,7 +1,7 @@
 """VideoSmith — Template-based storyboard and audio plan generation (zero AI cost)."""
 
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from ..models import (
     SceneSpec, Storyboard, AudioPlan, SubtitleTrack, VideoPlan,
 )
@@ -247,7 +247,7 @@ class VideoSmith:
             storyboard=sb,
             audio_plan=audio,
             subtitle_track=subs,
-            created_at=datetime.utcnow().isoformat(),
+            created_at=datetime.now(timezone.utc).isoformat(),
             status="draft",
         )
 

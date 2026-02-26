@@ -17,7 +17,7 @@ from ..knowledge.trending_formats import get_trending_formats
 from ..knowledge.subtitle_styles import SUBTITLE_STYLES
 from ..forge.variation_engine import VariationEngine
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class AmplifyPipeline:
@@ -69,7 +69,7 @@ class AmplifyPipeline:
         category = profile.get("category", "tech")
 
         # Seasonal context
-        month = datetime.utcnow().month
+        month = datetime.now(timezone.utc).month
         seasons = {
             12: "winter", 1: "winter", 2: "winter",
             3: "spring", 4: "spring", 5: "spring",
@@ -392,7 +392,7 @@ class AmplifyPipeline:
             "issues": issues,
             "all_passed": all_passed,
             "ready_to_render": all_passed and not issues,
-            "validated_at": datetime.utcnow().isoformat(),
+            "validated_at": datetime.now(timezone.utc).isoformat(),
         }
 
     # ── Quality Score ─────────────────────────────────────────────────

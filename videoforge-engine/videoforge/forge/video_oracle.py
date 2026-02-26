@@ -1,6 +1,6 @@
 """VideoOracle — Posting time optimization, seasonal angles, content calendar."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from ..models import OracleRecommendation
 from ..knowledge.niche_profiles import NICHE_PROFILES
 from ..knowledge.trending_formats import get_trending_formats
@@ -87,7 +87,7 @@ class VideoOracle:
                   dt: datetime = None) -> OracleRecommendation:
         """Full recommendation for a niche + platform combo."""
         if dt is None:
-            dt = datetime.utcnow()
+            dt = datetime.now(timezone.utc)
 
         day_name = dt.strftime("%A")
         month = dt.month
@@ -139,7 +139,7 @@ class VideoOracle:
     def get_seasonal_angle(self, month: int = None) -> dict:
         """Get seasonal angle for a month."""
         if month is None:
-            month = datetime.utcnow().month
+            month = datetime.now(timezone.utc).month
         return _SEASONAL_ANGLES.get(month, {"season": "unknown", "angles": []})
 
     def _generate_calendar(self, niche: str, platform: str, start: datetime) -> list:

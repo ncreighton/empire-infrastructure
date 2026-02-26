@@ -5,7 +5,7 @@ import os
 from dataclasses import asdict, fields
 from enum import Enum
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -115,7 +115,7 @@ def health():
     return {
         "status": "ok",
         "service": "videoforge",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 

@@ -9,7 +9,7 @@ Layers:
 6. Personalization from VideoCodex (what's worked before)
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from ..models import EnhancedQuery
 from ..knowledge.niche_profiles import get_niche_profile, get_visual_dna
 from ..knowledge.platform_specs import get_platform_spec
@@ -192,7 +192,7 @@ class PromptEnhancer:
 
     def _inject_seasonal_context(self, query: str, niche: str) -> str:
         """Layer 3: Current season, trending angles, relevant events."""
-        month = datetime.utcnow().month
+        month = datetime.now(timezone.utc).month
         seasonal = _SEASONAL_CONTEXT.get(month, "")
         profile = get_niche_profile(niche)
         category = profile.get("category", "tech")
