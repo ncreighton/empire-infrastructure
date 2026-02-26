@@ -1,0 +1,328 @@
+{
+  "name": "ForgeFiles Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Check for New STLs",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "forgefiles/run",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [220, 520],
+      "webhookId": "forgefiles-pipeline"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Scan models directory for unprocessed STLs\nconst modelsDir = '/opt/empire/forgefiles-pipeline/models';\nconst outputDir = '/opt/empire/forgefiles-pipeline/output';\n\n// When triggered by webhook, use the provided STL path\nif ($input.first()?.json?.body?.stl) {\n  return [{\n    json: {\n      stl: $input.first().json.body.stl,\n      platforms: $input.first().json.body.platforms || ['tiktok', 'reels', 'youtube', 'pinterest', 'reddit'],\n      preset: $input.first().json.body.preset || 'portfolio',\n      fast: $input.first().json.body.fast || false,\n      mode: $input.first().json.body.mode || 'turntable',\n      source: 'webhook'\n    }\n  }];\n}\n\n// For scheduled runs, scan directory\nreturn [{\n  json: {\n    directory: modelsDir,\n    platforms: ['tiktok', 'reels', 'youtube', 'pinterest', 'reddit'],\n    preset: 'portfolio',\n    fast: false,\n    source: 'schedule'\n  }\n}];"
+      },
+      "id": "prepare-request",
+      "name": "Prepare Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-single",
+              "leftValue": "={{ $json.source }}",
+              "rightValue": "webhook",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "route-by-source",
+      "name": "Single or Batch?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [700, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8090/pipeline/run",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ stl: $json.stl, platforms: $json.platforms, preset: $json.preset, fast: $json.fast, mode: $json.mode }) }}",
+        "options": {
+          "timeout": 3600000
+        }
+      },
+      "id": "run-single",
+      "name": "Run Single Pipeline",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [940, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8090/pipeline/batch",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ directory: $json.directory, platforms: $json.platforms, preset: $json.preset, fast: $json.fast }) }}",
+        "options": {
+          "timeout": 7200000
+        }
+      },
+      "id": "run-batch",
+      "name": "Run Batch Pipeline",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [940, 500]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://localhost:8090/pipeline/status/{{ $json.job_id }}",
+        "options": {}
+      },
+      "id": "poll-status",
+      "name": "Poll Job Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1180, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-done",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "completed",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-complete",
+      "name": "Completed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1400, 400]
+    },
+    {
+      "parameters": {
+        "amount": 30,
+        "unit": "seconds"
+      },
+      "id": "wait-retry",
+      "name": "Wait 30s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1400, 600]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract results for downstream nodes\nconst result = $json.result || {};\nconst videos = result.video_outputs || {};\nconst captions = result.captions_file || '';\nconst manifest = result.pipeline_dir ? `${result.pipeline_dir}/pipeline_manifest.json` : '';\n\nreturn [{\n  json: {\n    model: result.model || result.display_name || 'unknown',\n    display_name: result.display_name || '',\n    videos: videos,\n    video_count: Object.keys(videos).length,\n    thumbnails: result.thumbnails || {},\n    captions_file: captions,\n    manifest: manifest,\n    schedule: result.schedule || {},\n    tracking: result.tracking || {},\n    platforms: result.platforms || [],\n    completed_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "extract-results",
+      "name": "Extract Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1640, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'completed', model: $json.model, videos: $json.video_count, platforms: $json.platforms }) }}"
+      },
+      "id": "webhook-response",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1880, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log failed job\nconst error = $json.error || 'Unknown error';\nconst model = $json.model || 'unknown';\n\nconsole.error(`ForgeFiles Pipeline Failed: ${model} — ${error}`);\n\nreturn [{\n  json: {\n    status: 'failed',\n    model: model,\n    error: error,\n    failed_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "handle-error",
+      "name": "Handle Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1640, 500]
+    }
+  ],
+  "connections": {
+    "Check for New STLs": {
+      "main": [
+        [
+          {
+            "node": "Prepare Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Request": {
+      "main": [
+        [
+          {
+            "node": "Single or Batch?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Single or Batch?": {
+      "main": [
+        [
+          {
+            "node": "Run Single Pipeline",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Run Batch Pipeline",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Single Pipeline": {
+      "main": [
+        [
+          {
+            "node": "Poll Job Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Batch Pipeline": {
+      "main": [
+        [
+          {
+            "node": "Poll Job Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Poll Job Status": {
+      "main": [
+        [
+          {
+            "node": "Completed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Completed?": {
+      "main": [
+        [
+          {
+            "node": "Extract Results",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait 30s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 30s": {
+      "main": [
+        [
+          {
+            "node": "Poll Job Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Results": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "ForgeFiles",
+      "id": "forgefiles"
+    }
+  ]
+}

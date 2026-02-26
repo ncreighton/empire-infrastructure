@@ -1,0 +1,57 @@
+{
+  "models": {
+    "articulated_gear": {
+      "path": "D:\\Claude Code Projects\\forgefiles-pipeline\\models\\articulated_gear.stl",
+      "hash": "57048f914e3b908f",
+      "size_bytes": 28084,
+      "triangles": 560,
+      "dimensions": {},
+      "shape": "wide",
+      "added": "2026-02-26T14:26:57.058122",
+      "processed": false,
+      "processed_at": null,
+      "platforms_completed": [],
+      "output_dir": null
+    },
+    "dragon_guardian": {
+      "path": "D:\\Claude Code Projects\\forgefiles-pipeline\\models\\dragon_guardian.stl",
+      "hash": "aac2885ece6733a5",
+      "size_bytes": 108284,
+      "triangles": 2164,
+      "dimensions": {},
+      "shape": "cubic",
+      "added": "2026-02-26T14:26:57.078573",
+      "processed": false,
+      "processed_at": null,
+      "platforms_completed": [],
+      "output_dir": null
+    },
+    "geometric_vase": {
+      "path": "D:\\Claude Code Projects\\forgefiles-pipeline\\models\\geometric_vase.stl",
+      "hash": "6cf1d16c1602e337",
+      "size_bytes": 100884,
+      "triangles": 2016,
+      "dimensions": {},
+      "shape": "standard",
+      "added": "2026-02-26T14:26:57.089585",
+      "processed": false,
+      "processed_at": null,
+      "platforms_completed": [],
+      "output_dir": null
+    },
+    "test_cube": {
+      "path": "D:\\Claude Code Projects\\forgefiles-pipeline\\models\\test_cube.stl",
+      "hash": "1d75775363fb2f7b",
+      "size_bytes": 684,
+      "triangles": 12,
+      "dimensions": {},
+      "shape": "cubic",
+      "added": "2026-02-26T14:26:57.091503",
+      "processed": false,
+      "processed_at": null,
+      "platforms_completed": [],
+      "output_dir": null
+    }
+  },
+  "last_scan": "2026-02-26T14:26:57.092228"
+}
