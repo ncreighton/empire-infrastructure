@@ -93,7 +93,7 @@ Register-ScheduledTask `
     -Action $action2 `
     -Trigger $trigger2 `
     -Settings $settings2 `
-    -Description "Reddit ForgeFiles engagement — runs due session from daily plan (browse/comment/post)" `
+    -Description "Reddit ForgeFiles engagement - runs due session from daily plan" `
     -RunLevel Limited | Out-Null
 
 Write-Host "  Created: Every 45 min, 8 AM - 11 PM" -ForegroundColor Green
@@ -127,7 +127,7 @@ Register-ScheduledTask `
     -Action $action3 `
     -Trigger $trigger3 `
     -Settings $settings3 `
-    -Description "Reddit state database cleanup — removes data older than 90 days" `
+    -Description "Reddit state database cleanup - removes data older than 90 days" `
     -RunLevel Limited | Out-Null
 
 Write-Host "  Created: Daily at 2:00 AM" -ForegroundColor Green
