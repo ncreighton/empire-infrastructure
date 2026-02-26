@@ -1,0 +1,140 @@
+{
+  "channels": {
+    "witchcraft_youtube": {
+      "niche": "witchcraftforbeginners",
+      "platform": "youtube_shorts",
+      "format": "short",
+      "voice_id": "en-US-AriaNeural",
+      "subtitle_style": "hormozi",
+      "color_grade": "witchcraft_dark",
+      "music_mood": "witchcraft_ambient",
+      "publishing": {
+        "frequency": "daily",
+        "best_times_utc": ["14:00", "18:00", "22:00"],
+        "max_per_day": 2
+      },
+      "hashtags": ["#witchcraft", "#witchtok", "#babywitch", "#spellwork", "#moonritual"],
+      "cta": "Follow for daily witchcraft tips"
+    },
+    "witchcraft_tiktok": {
+      "niche": "witchcraftforbeginners",
+      "platform": "tiktok",
+      "format": "short",
+      "voice_id": "en-US-AriaNeural",
+      "subtitle_style": "kinetic",
+      "color_grade": "witchcraft_dark",
+      "music_mood": "witchcraft_ambient",
+      "publishing": {
+        "frequency": "daily",
+        "best_times_utc": ["15:00", "19:00", "23:00"],
+        "max_per_day": 3
+      },
+      "hashtags": ["#witchtok", "#spellwork", "#babywitch", "#moonritual"],
+      "cta": "Follow for witchcraft tips"
+    },
+    "mythology_youtube": {
+      "niche": "mythicalarchives",
+      "platform": "youtube_shorts",
+      "format": "short",
+      "voice_id": "en-US-DavisNeural",
+      "subtitle_style": "clean",
+      "color_grade": "mythology_epic",
+      "music_mood": "mythology_epic",
+      "publishing": {
+        "frequency": "daily",
+        "best_times_utc": ["15:00", "19:00"],
+        "max_per_day": 2
+      },
+      "hashtags": ["#mythology", "#greekmythology", "#myths", "#ancienthistory"],
+      "cta": "Subscribe for mythological stories"
+    },
+    "mythology_landscape": {
+      "niche": "mythicalarchives",
+      "platform": "youtube",
+      "format": "standard",
+      "voice_id": "en-US-DavisNeural",
+      "subtitle_style": "ali_abdaal",
+      "color_grade": "mythology_ancient",
+      "music_mood": "epic_orchestral",
+      "publishing": {
+        "frequency": "3x_week",
+        "best_times_utc": ["16:00"],
+        "max_per_day": 1
+      },
+      "hashtags": ["#mythology", "#documentary", "#ancienthistory", "#legends"],
+      "cta": "Subscribe for epic mythology"
+    },
+    "smarthome_youtube": {
+      "niche": "smarthomewizards",
+      "platform": "youtube_shorts",
+      "format": "short",
+      "voice_id": "en-US-GuyNeural",
+      "subtitle_style": "hormozi",
+      "color_grade": "tech_clean",
+      "music_mood": "smart_home_tech",
+      "publishing": {
+        "frequency": "daily",
+        "best_times_utc": ["13:00", "17:00"],
+        "max_per_day": 2
+      },
+      "hashtags": ["#smarthome", "#homeautomation", "#alexatips", "#googlehome"],
+      "cta": "Follow for smart home tips"
+    },
+    "ai_discovery_youtube": {
+      "niche": "aidiscoverydigest",
+      "platform": "youtube_shorts",
+      "format": "short",
+      "voice_id": "en-US-JasonNeural",
+      "subtitle_style": "hormozi",
+      "color_grade": "ai_futuristic",
+      "music_mood": "futuristic",
+      "publishing": {
+        "frequency": "daily",
+        "best_times_utc": ["14:00", "18:00"],
+        "max_per_day": 2
+      },
+      "hashtags": ["#ainews", "#artificialintelligence", "#aitools", "#chatgpt"],
+      "cta": "Follow for daily AI updates"
+    },
+    "wealthfromai_youtube": {
+      "niche": "wealthfromai",
+      "platform": "youtube_shorts",
+      "format": "short",
+      "voice_id": "en-US-TonyNeural",
+      "subtitle_style": "kinetic",
+      "color_grade": "money_green",
+      "music_mood": "motivational",
+      "publishing": {
+        "frequency": "daily",
+        "best_times_utc": ["12:00", "17:00", "20:00"],
+        "max_per_day": 2
+      },
+      "hashtags": ["#aitools", "#makemoneyonline", "#aimoney", "#sidehustle"],
+      "cta": "Follow for AI money tips"
+    },
+    "manifest_tiktok": {
+      "niche": "manifestandalign",
+      "platform": "tiktok",
+      "format": "short",
+      "voice_id": "en-US-AmberNeural",
+      "subtitle_style": "karaoke",
+      "color_grade": "manifestation_glow",
+      "music_mood": "ethereal",
+      "publishing": {
+        "frequency": "daily",
+        "best_times_utc": ["06:00", "14:00", "21:00"],
+        "max_per_day": 2
+      },
+      "hashtags": ["#manifestation", "#lawofattraction", "#affirmations", "#abundance"],
+      "cta": "Type YES to claim this energy"
+    }
+  },
+  "defaults": {
+    "format": "short",
+    "subtitle_style": "hormozi",
+    "music_volume": 0.15,
+    "max_retries": 2,
+    "cost_budget_per_video": 0.50,
+    "quality_threshold": 70
+  }
+}

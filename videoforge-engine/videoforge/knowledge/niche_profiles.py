@@ -1,0 +1,458 @@
+"""16 niche profiles with visual DNA, content pillars, and brand voice."""
+
+NICHE_PROFILES = {
+    "witchcraftforbeginners": {
+        "name": "Witchcraft for Beginners",
+        "brand": "Witchcraft for Beginners",
+        "category": "witchcraft",
+        "content_pillars": ["spells", "herbs", "moon_rituals", "divination", "sabbats"],
+        "visual_dna": {
+            "aesthetic": "dark mystical",
+            "key_visuals": ["candles", "herbs", "crystals", "moon", "cauldron", "smoke", "altar"],
+            "color_palette": ["#1A0A2E", "#C084FC", "#4A1D8E", "#F5F0FF"],
+            "textures": ["candlelight glow", "smoke wisps", "starfield"],
+            "avoid": ["cartoon witch hats", "halloween clichés", "bright neon"],
+        },
+        "voice": {
+            "tone": "mystical, warm, inviting",
+            "personality": "wise guide, gentle teacher",
+            "vocab": ["intention", "correspondences", "manifest", "sacred", "ritual"],
+            "avoid": ["scary", "hex", "curse", "dark magic"],
+        },
+        "hashtags": ["#witchcraft", "#witchtok", "#babywitch", "#spellwork", "#moonritual",
+                      "#witchesofinstagram", "#crystalmagic", "#herbalism", "#divination"],
+        "cta_templates": [
+            "Follow for daily witchcraft tips",
+            "Save this spell for later",
+            "Comment your moon sign below",
+        ],
+        "best_formats": ["tutorial", "listicle", "story"],
+    },
+    "smarthomewizards": {
+        "name": "Smart Home Wizards",
+        "brand": "Smart Home Wizards",
+        "category": "tech",
+        "content_pillars": ["smart_home", "automation", "reviews", "diy", "comparison"],
+        "visual_dna": {
+            "aesthetic": "clean tech",
+            "key_visuals": ["smart devices", "app interfaces", "modern home", "LED lights"],
+            "color_palette": ["#0F172A", "#38BDF8", "#1E40AF", "#F8FAFC"],
+            "textures": ["glass", "brushed metal", "soft glow"],
+            "avoid": ["cluttered rooms", "tangled wires", "outdated tech"],
+        },
+        "voice": {
+            "tone": "enthusiastic, clear, helpful",
+            "personality": "tech-savvy neighbor",
+            "vocab": ["automation", "smart", "integrate", "ecosystem", "setup"],
+            "avoid": ["jargon overload", "elitist", "gatekeeping"],
+        },
+        "hashtags": ["#smarthome", "#homeautomation", "#alexatips", "#googlehome",
+                      "#smarthometech", "#iot", "#techreview"],
+        "cta_templates": [
+            "Follow for smart home tips",
+            "Save this setup guide",
+            "Comment your favorite smart device",
+        ],
+        "best_formats": ["review", "tutorial", "comparison"],
+    },
+    "mythicalarchives": {
+        "name": "Mythical Archives",
+        "brand": "Mythical Archives",
+        "category": "mythology",
+        "content_pillars": ["mythology", "legends", "ancient_history", "folklore", "deities"],
+        "visual_dna": {
+            "aesthetic": "epic cinematic",
+            "key_visuals": ["ancient temples", "gods", "battles", "artifacts", "dragons"],
+            "color_palette": ["#0A1628", "#FFD700", "#8B0000", "#FFFFFF"],
+            "textures": ["marble", "gold leaf", "storm clouds", "fire"],
+            "avoid": ["cartoon style", "modern elements", "low quality"],
+        },
+        "voice": {
+            "tone": "epic, dramatic, authoritative",
+            "personality": "master storyteller",
+            "vocab": ["ancient", "legendary", "mythic", "divine", "eternal"],
+            "avoid": ["casual slang", "modern references", "simplistic"],
+        },
+        "hashtags": ["#mythology", "#greekmythology", "#myths", "#ancienthistory",
+                      "#folklore", "#legends", "#mythicalcreatures"],
+        "cta_templates": [
+            "Subscribe for mythological stories",
+            "Which mythology should we explore next?",
+            "Follow for daily mythology",
+        ],
+        "best_formats": ["story", "listicle", "educational"],
+    },
+    "bulletjournals": {
+        "name": "Bullet Journals",
+        "brand": "Bullet Journals",
+        "category": "lifestyle",
+        "content_pillars": ["journal_setup", "spreads", "organization", "creative", "planning"],
+        "visual_dna": {
+            "aesthetic": "cozy creative",
+            "key_visuals": ["notebooks", "washi tape", "pens", "desk setup", "hands drawing"],
+            "color_palette": ["#FFFBEB", "#92400E", "#F59E0B", "#1C1917"],
+            "textures": ["paper grain", "watercolor", "ink splatter"],
+            "avoid": ["digital only", "messy", "clinical"],
+        },
+        "voice": {
+            "tone": "gentle, encouraging, creative",
+            "personality": "creative friend",
+            "vocab": ["spread", "layout", "tracker", "creative", "organize"],
+            "avoid": ["perfectionist pressure", "complicated", "overwhelming"],
+        },
+        "hashtags": ["#bujo", "#bulletjournal", "#journaling", "#planner",
+                      "#bulletjournaling", "#bujoideas", "#journalspread"],
+        "cta_templates": [
+            "Save this spread idea",
+            "Show me your journal!",
+            "Follow for bujo inspo",
+        ],
+        "best_formats": ["tutorial", "listicle", "behind_the_scenes"],
+    },
+    "wealthfromai": {
+        "name": "Wealth from AI",
+        "brand": "Wealth from AI",
+        "category": "business",
+        "content_pillars": ["ai_income", "tools", "automation", "side_hustle", "productivity"],
+        "visual_dna": {
+            "aesthetic": "money tech",
+            "key_visuals": ["charts", "AI interfaces", "money", "laptops", "dashboards"],
+            "color_palette": ["#042F2E", "#34D399", "#10B981", "#F0FDF4"],
+            "textures": ["matrix code", "holographic", "clean gradient"],
+            "avoid": ["get rich quick", "lambos", "fake luxury"],
+        },
+        "voice": {
+            "tone": "confident, actionable, fast-paced",
+            "personality": "AI hustler, results-focused",
+            "vocab": ["leverage", "scale", "automate", "monetize", "passive income"],
+            "avoid": ["hype", "guaranteed", "overnight"],
+        },
+        "hashtags": ["#aitools", "#makemoneyonline", "#aimoney", "#sidehustle",
+                      "#passiveincome", "#aiautomation", "#chatgpt"],
+        "cta_templates": [
+            "Follow for AI money tips",
+            "Comment 'AI' for the full guide",
+            "Save this before it blows up",
+        ],
+        "best_formats": ["tutorial", "listicle", "review"],
+    },
+    "aidiscoverydigest": {
+        "name": "AI Discovery Digest",
+        "brand": "AI Discovery Digest",
+        "category": "ai_news",
+        "content_pillars": ["ai_news", "tools", "breakthroughs", "tutorials", "analysis"],
+        "visual_dna": {
+            "aesthetic": "futuristic",
+            "key_visuals": ["AI visuals", "neural networks", "robots", "data", "screens"],
+            "color_palette": ["#0D0221", "#7C3AED", "#A78BFA", "#E0E7FF"],
+            "textures": ["digital grid", "particle effects", "hologram"],
+            "avoid": ["Terminator clichés", "fear-mongering", "dated tech"],
+        },
+        "voice": {
+            "tone": "informed, exciting, accessible",
+            "personality": "AI-savvy journalist",
+            "vocab": ["breakthrough", "disrupting", "model", "benchmark", "intelligence"],
+            "avoid": ["doom", "replace all jobs", "too technical"],
+        },
+        "hashtags": ["#ainews", "#artificialintelligence", "#aitools", "#machinelearning",
+                      "#chatgpt", "#aiupdate", "#techinnovation"],
+        "cta_templates": [
+            "Follow for daily AI updates",
+            "Save this AI breakdown",
+            "Which AI tool surprised you most?",
+        ],
+        "best_formats": ["news", "listicle", "comparison"],
+    },
+    "aiinactionhub": {
+        "name": "AI in Action Hub",
+        "brand": "AI in Action Hub",
+        "category": "tech",
+        "content_pillars": ["tutorials", "workflows", "tools", "automation", "integration"],
+        "visual_dna": {
+            "aesthetic": "clean tutorial",
+            "key_visuals": ["screen recordings", "workflow diagrams", "before/after"],
+            "color_palette": ["#0F172A", "#38BDF8", "#06B6D4", "#F8FAFC"],
+            "textures": ["flat design", "gradient", "clean lines"],
+            "avoid": ["cluttered UI", "too fast", "no context"],
+        },
+        "voice": {
+            "tone": "practical, step-by-step, encouraging",
+            "personality": "helpful tutor",
+            "vocab": ["implement", "step", "workflow", "integrate", "prompt"],
+            "avoid": ["gatekeeping", "assuming knowledge", "rush"],
+        },
+        "hashtags": ["#aitutorial", "#aiworkflow", "#chatgpt", "#aitools",
+                      "#productivity", "#automation"],
+        "cta_templates": [
+            "Follow for AI tutorials",
+            "Save this workflow",
+            "Try this and share your results",
+        ],
+        "best_formats": ["tutorial", "comparison", "review"],
+    },
+    "pulsegearreviews": {
+        "name": "Pulse Gear Reviews",
+        "brand": "Pulse Gear Reviews",
+        "category": "fitness",
+        "content_pillars": ["fitness_tech", "wearables", "workout_gear", "reviews", "comparison"],
+        "visual_dna": {
+            "aesthetic": "fitness intense",
+            "key_visuals": ["workout", "gym", "devices on wrist", "data screens"],
+            "color_palette": ["#0F0F0F", "#EF4444", "#F97316", "#FFFFFF"],
+            "textures": ["sweat", "rubber", "gym floor"],
+            "avoid": ["sedentary", "boring", "static"],
+        },
+        "voice": {
+            "tone": "energetic, honest, data-driven",
+            "personality": "fitness tech reviewer",
+            "vocab": ["performance", "accuracy", "battery", "comfort", "tracking"],
+            "avoid": ["lazy", "fake hype", "biased"],
+        },
+        "hashtags": ["#fitnesstech", "#fitnessgadgets", "#gearreview",
+                      "#fitnesstracker", "#workout", "#healthtech"],
+        "cta_templates": [
+            "Follow for honest gear reviews",
+            "Comment your favorite fitness tracker",
+            "Save this comparison",
+        ],
+        "best_formats": ["review", "comparison", "listicle"],
+    },
+    "wearablegearreviews": {
+        "name": "Wearable Gear Reviews",
+        "brand": "Wearable Gear Reviews",
+        "category": "tech",
+        "content_pillars": ["wearables", "smartwatches", "earbuds", "reviews", "comparison"],
+        "visual_dna": {
+            "aesthetic": "neon tech",
+            "key_visuals": ["wearable devices", "close-ups", "lifestyle shots", "UI"],
+            "color_palette": ["#0A0A0A", "#00FF88", "#3B82F6", "#FFFFFF"],
+            "textures": ["glass", "silicon", "LED glow"],
+            "avoid": ["cheap feel", "outdated products"],
+        },
+        "voice": {
+            "tone": "balanced, thorough, tech-savvy",
+            "personality": "trusted tech reviewer",
+            "vocab": ["specs", "build quality", "value", "ecosystem", "upgrade"],
+            "avoid": ["fanboy", "clickbait", "rushing"],
+        },
+        "hashtags": ["#wearabletech", "#smartwatch", "#techreview",
+                      "#gadgets", "#wearables", "#techgear"],
+        "cta_templates": [
+            "Follow for wearable reviews",
+            "Which do you prefer? Comment below",
+            "Save for your next purchase",
+        ],
+        "best_formats": ["review", "comparison", "listicle"],
+    },
+    "smarthomegearreviews": {
+        "name": "Smart Home Gear Reviews",
+        "brand": "Smart Home Gear Reviews",
+        "category": "tech",
+        "content_pillars": ["smart_home", "product_reviews", "setup_guides", "comparison"],
+        "visual_dna": {
+            "aesthetic": "clean tech",
+            "key_visuals": ["smart home devices", "app interfaces", "installations"],
+            "color_palette": ["#0F172A", "#38BDF8", "#1E40AF", "#F8FAFC"],
+            "textures": ["clean surfaces", "ambient light", "modern interiors"],
+            "avoid": ["messy wiring", "outdated tech", "dark rooms"],
+        },
+        "voice": {
+            "tone": "expert, detailed, helpful",
+            "personality": "hands-on tech expert",
+            "vocab": ["integration", "compatibility", "setup", "value", "smart"],
+            "avoid": ["too technical", "overwhelming", "boring"],
+        },
+        "hashtags": ["#smarthomegear", "#smarthomereview", "#hometech",
+                      "#smartdevice", "#techreview"],
+        "cta_templates": [
+            "Follow for smart home reviews",
+            "Save this buying guide",
+            "Comment your smart home setup",
+        ],
+        "best_formats": ["review", "tutorial", "comparison"],
+    },
+    "clearainews": {
+        "name": "Clear AI News",
+        "brand": "Clear AI News",
+        "category": "ai_news",
+        "content_pillars": ["ai_news", "explainers", "industry", "predictions", "ethics"],
+        "visual_dna": {
+            "aesthetic": "news urgent",
+            "key_visuals": ["news graphics", "AI visuals", "data charts", "headlines"],
+            "color_palette": ["#1A1A2E", "#E63946", "#457B9D", "#FFFFFF"],
+            "textures": ["news ticker", "glass panel", "digital overlay"],
+            "avoid": ["boring", "text-only", "fear-mongering"],
+        },
+        "voice": {
+            "tone": "authoritative, clear, fast-paced",
+            "personality": "AI news anchor",
+            "vocab": ["breaking", "developing", "impact", "industry", "regulation"],
+            "avoid": ["sensational", "doom", "too casual"],
+        },
+        "hashtags": ["#ainews", "#artificialintelligence", "#techbreaking",
+                      "#aiindustry", "#ainewsupdate"],
+        "cta_templates": [
+            "Follow for AI news daily",
+            "What do you think about this?",
+            "Share this update",
+        ],
+        "best_formats": ["news", "educational", "listicle"],
+    },
+    "theconnectedhaven": {
+        "name": "The Connected Haven",
+        "brand": "The Connected Haven",
+        "category": "lifestyle",
+        "content_pillars": ["family_tech", "productivity", "home", "balance", "tips"],
+        "visual_dna": {
+            "aesthetic": "warm lifestyle",
+            "key_visuals": ["family", "cozy home", "laptops", "organization"],
+            "color_palette": ["#FFF7ED", "#F97316", "#EA580C", "#1C1917"],
+            "textures": ["wood grain", "soft fabric", "warm light"],
+            "avoid": ["cold", "sterile", "chaotic"],
+        },
+        "voice": {
+            "tone": "warm, relatable, supportive",
+            "personality": "helpful friend",
+            "vocab": ["connect", "balance", "simplify", "family", "together"],
+            "avoid": ["preachy", "guilt-tripping", "judgmental"],
+        },
+        "hashtags": ["#familylife", "#productivity", "#homeorganization",
+                      "#techmom", "#worklifebalance"],
+        "cta_templates": [
+            "Follow for family-friendly tips",
+            "Tag a parent who needs this",
+            "Save for your morning routine",
+        ],
+        "best_formats": ["tutorial", "listicle", "story"],
+    },
+    "manifestandalign": {
+        "name": "Manifest & Align",
+        "brand": "Manifest & Align",
+        "category": "witchcraft",
+        "content_pillars": ["manifestation", "law_of_attraction", "meditation", "affirmations", "moon"],
+        "visual_dna": {
+            "aesthetic": "golden glow",
+            "key_visuals": ["golden light", "cosmos", "crystals", "journal", "moon"],
+            "color_palette": ["#0C0A1A", "#F59E0B", "#D97706", "#FEF3C7"],
+            "textures": ["golden sparkles", "soft glow", "celestial"],
+            "avoid": ["dark", "scary", "negative imagery"],
+        },
+        "voice": {
+            "tone": "soothing, affirming, empowering",
+            "personality": "manifestation guide",
+            "vocab": ["manifest", "align", "abundance", "attract", "frequency"],
+            "avoid": ["demanding", "aggressive", "doubtful"],
+        },
+        "hashtags": ["#manifestation", "#lawofattraction", "#manifest",
+                      "#affirmations", "#abundance", "#spiritualawakening"],
+        "cta_templates": [
+            "Follow for daily manifestation",
+            "Type 'YES' to claim this energy",
+            "Save this affirmation",
+        ],
+        "best_formats": ["inspirational", "listicle", "tutorial"],
+    },
+    "familyflourish": {
+        "name": "Family Flourish",
+        "brand": "Family Flourish",
+        "category": "lifestyle",
+        "content_pillars": ["parenting", "activities", "education", "health", "budgeting"],
+        "visual_dna": {
+            "aesthetic": "bright pastel",
+            "key_visuals": ["families", "kids", "activities", "meals", "outdoors"],
+            "color_palette": ["#FDF2F8", "#EC4899", "#F472B6", "#1F2937"],
+            "textures": ["soft pastels", "playful patterns", "clean"],
+            "avoid": ["dark", "intense", "overly clinical"],
+        },
+        "voice": {
+            "tone": "friendly, practical, empathetic",
+            "personality": "experienced parent friend",
+            "vocab": ["family", "kids", "easy", "fun", "budget-friendly"],
+            "avoid": ["shaming", "elitist", "unrealistic"],
+        },
+        "hashtags": ["#parenting", "#familylife", "#momlife",
+                      "#kidsactivities", "#parentingtips"],
+        "cta_templates": [
+            "Follow for family tips",
+            "Tag a parent who needs this",
+            "Save for the weekend",
+        ],
+        "best_formats": ["tutorial", "listicle", "story"],
+    },
+    "moonrituallibrary": {
+        "name": "Moon Ritual Library",
+        "brand": "Moon Ritual Library",
+        "category": "witchcraft",
+        "content_pillars": ["moon_rituals", "lunar_phases", "meditation", "intention", "ceremonies"],
+        "visual_dna": {
+            "aesthetic": "dark celestial",
+            "key_visuals": ["moon", "stars", "night sky", "candles", "water reflection"],
+            "color_palette": ["#0A0A2E", "#818CF8", "#312E81", "#E0E7FF"],
+            "textures": ["starfield", "moonlight", "water ripple"],
+            "avoid": ["daylight", "bright colors", "busy"],
+        },
+        "voice": {
+            "tone": "meditative, deep, ritualistic",
+            "personality": "lunar priestess",
+            "vocab": ["lunar", "phase", "ceremony", "intention", "release"],
+            "avoid": ["rushed", "casual", "disrespectful"],
+        },
+        "hashtags": ["#moonritual", "#fullmoon", "#newmoon", "#lunarphases",
+                      "#moonmagic", "#moonwitch"],
+        "cta_templates": [
+            "Follow for moon rituals",
+            "Save for the next full moon",
+            "What's your moon sign?",
+        ],
+        "best_formats": ["tutorial", "story", "inspirational"],
+    },
+    "celebrationseason": {
+        "name": "Celebration Season",
+        "brand": "Celebration Season",
+        "category": "lifestyle",
+        "content_pillars": ["holidays", "parties", "decorations", "recipes", "gifts"],
+        "visual_dna": {
+            "aesthetic": "festive bright",
+            "key_visuals": ["decorations", "food", "gifts", "parties", "sparkle"],
+            "color_palette": ["#1A0505", "#DC2626", "#FFD700", "#FFFFFF"],
+            "textures": ["glitter", "ribbon", "confetti", "bokeh lights"],
+            "avoid": ["plain", "boring", "generic"],
+        },
+        "voice": {
+            "tone": "excited, festive, helpful",
+            "personality": "party planner friend",
+            "vocab": ["celebrate", "festive", "easy", "DIY", "stunning"],
+            "avoid": ["stressful", "expensive", "complicated"],
+        },
+        "hashtags": ["#celebration", "#partyideas", "#holidaydecor",
+                      "#diyparty", "#festivedecor"],
+        "cta_templates": [
+            "Follow for holiday inspo",
+            "Save this party idea",
+            "Tag someone who loves to celebrate",
+        ],
+        "best_formats": ["tutorial", "listicle", "behind_the_scenes"],
+    },
+}
+
+
+def get_niche_profile(niche: str) -> dict:
+    """Get full niche profile by ID."""
+    return NICHE_PROFILES.get(niche, {})
+
+
+def get_visual_dna(niche: str) -> dict:
+    """Get just the visual DNA for a niche."""
+    profile = NICHE_PROFILES.get(niche, {})
+    return profile.get("visual_dna", {})
+
+
+def get_content_pillars(niche: str) -> list:
+    """Get content pillars for a niche."""
+    profile = NICHE_PROFILES.get(niche, {})
+    return profile.get("content_pillars", [])
+
+
+def get_all_niche_ids() -> list:
+    """Return all niche IDs."""
+    return list(NICHE_PROFILES.keys())

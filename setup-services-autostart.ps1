@@ -22,6 +22,11 @@ $services = @(
         Name = "Grimoire API"
         Description = "Starts Grimoire Intelligence API at login (port 8080)"
         VbsPath = "D:\Claude Code Projects\launchers\launch-grimoire-api.vbs"
+    },
+    @{
+        Name = "VideoForge API"
+        Description = "Starts VideoForge Intelligence API at login (port 8090)"
+        VbsPath = "D:\Claude Code Projects\launchers\launch-videoforge.vbs"
     }
 )
 
@@ -78,11 +83,12 @@ Write-Host "  - Screenpipe        -> http://localhost:3030" -ForegroundColor Whi
 Write-Host "  - Vision Service    -> http://localhost:8002" -ForegroundColor White
 Write-Host "  - Empire Dashboard  -> http://localhost:8000" -ForegroundColor White
 Write-Host "  - Grimoire API      -> http://localhost:8080" -ForegroundColor White
+Write-Host "  - VideoForge API    -> http://localhost:8090" -ForegroundColor White
 Write-Host ""
 Write-Host "Logs at: $env:LOCALAPPDATA\EmpireArchitect\" -ForegroundColor Gray
 Write-Host ""
 
 # Show task status
-Get-ScheduledTask -TaskName "Screenpipe", "Vision Service", "Empire Dashboard", "Grimoire API" -ErrorAction SilentlyContinue |
+Get-ScheduledTask -TaskName "Screenpipe", "Vision Service", "Empire Dashboard", "Grimoire API", "VideoForge API" -ErrorAction SilentlyContinue |
     Select-Object TaskName, State |
     Format-Table -AutoSize
