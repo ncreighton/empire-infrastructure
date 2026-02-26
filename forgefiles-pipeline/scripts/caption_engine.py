@@ -483,12 +483,108 @@ def generate_shorts_captions(model_name, mode="turntable", specs_short="", varia
 # VOICEOVER SCRIPT GENERATION
 # ============================================================================
 
-def generate_voiceover_script(model_name, print_specs="", duration_seconds=15):
+def generate_voiceover_script(model_name, print_specs="", duration_seconds=15,
+                               sequence_name=None):
     """Generate a natural-sounding narration script for YouTube videos.
     Output as text ready to feed into ElevenLabs or similar TTS.
+
+    When sequence_name is provided, the script is timed to match the
+    shot sequence for cinematic videos.
     """
     display = _display_name(model_name)
 
+    # Sequence-aware scripts that match cinematic shot timings
+    if sequence_name == "showcase_short":
+        # 15-20s: dramatic reveal → turntable → close-up → hero spin
+        scripts = [
+            f"Check out the {display}. "
+            f"Designed for home 3D printers, every detail optimized for clean prints. "
+            f"Look at that surface quality. "
+            f"Grab the STL — link in bio.",
+
+            f"Introducing the {display}. "
+            f"Let's take a closer look at this print-ready design. "
+            f"The detail speaks for itself. "
+            f"Download link below.",
+
+            f"The {display} — our latest drop. "
+            f"Watch how the light catches every surface. "
+            f"This one prints beautifully in PLA or resin. "
+            f"STL available now.",
+        ]
+        return random.choice(scripts)
+
+    if sequence_name == "showcase_full":
+        # 30-45s: reveal → orbital → wireframe → close-ups → pedestal → hero
+        scripts = [
+            f"Welcome to ForgeFiles. This is the {display}. "
+            f"Let's start with the full design, rotating around to see every angle. "
+            f"Notice the geometry — optimized for both form and printability. "
+            f"Here's how the wireframe translates to the finished surface. "
+            f"Up close, you can see the level of detail in every curve. "
+            f"{print_specs or _default_print_specs_spoken()} "
+            f"The STL file is ready for download — link in the description.",
+
+            f"Today we're showcasing the {display}. "
+            f"As we orbit around, pay attention to how the surfaces catch the light. "
+            f"From wireframe to solid — every polygon serves a purpose. "
+            f"The detail holds up even at this close range. "
+            f"Print settings: {print_specs or _default_print_specs_spoken()} "
+            f"Grab the file from the link below. Happy printing.",
+        ]
+        return random.choice(scripts)
+
+    if sequence_name == "hero_video":
+        # 60-90s: reveal → slow turntable → close-ups → wireframe → material carousel → orbital → hero
+        scripts = [
+            f"Welcome to ForgeFiles. Today we're diving deep into the {display}. "
+            f"Let's take a slow 360 to appreciate the full design. "
+            f"Every surface has been carefully sculpted and tested for printing. "
+            f"\n\n"
+            f"Now let's get up close. Notice the fine detail work here — "
+            f"the ridges, the curves, the texture. All designed to print cleanly "
+            f"with minimal supports. "
+            f"\n\n"
+            f"Watch how the wireframe reveals the underlying geometry. "
+            f"This is what makes a good print — clean topology and intentional edges. "
+            f"\n\n"
+            f"And here's one of our favorite parts — the material showcase. "
+            f"See how this design looks in different finishes. "
+            f"Standard PLA, silk silver, and crystal clear resin. "
+            f"Each one brings out different aspects of the design. "
+            f"\n\n"
+            f"Print specifications: {print_specs or _default_print_specs_spoken()} "
+            f"\n\n"
+            f"The STL file is available for download right now. "
+            f"Link is in the description below. "
+            f"If you print this, tag us — we'd love to see your results. "
+            f"Subscribe for new designs every week.",
+
+            f"This is the {display} from ForgeFiles. "
+            f"Let me walk you through every detail of this design. "
+            f"Starting with the overall form — you can see the proportions "
+            f"are balanced for both aesthetics and printability. "
+            f"\n\n"
+            f"Zooming in now — the surface detail is something we're really proud of. "
+            f"It's designed to look great at any layer height. "
+            f"\n\n"
+            f"The wireframe view shows the clean topology underneath. "
+            f"No wasted geometry, no problematic overhangs. "
+            f"\n\n"
+            f"Let's see the material options. "
+            f"Gray PLA gives you the classic maker look. "
+            f"Silk silver adds that premium metallic finish. "
+            f"And clear resin really makes the details pop. "
+            f"\n\n"
+            f"Here are the recommended settings: "
+            f"{print_specs or _default_print_specs_spoken()} "
+            f"\n\n"
+            f"Download the STL from the link in the description. "
+            f"Happy printing!",
+        ]
+        return random.choice(scripts)
+
+    # Non-sequence scripts (original behavior)
     short_scripts = [
         f"Take a look at the {display}. "
         f"Every detail is designed with printing in mind. "
@@ -616,9 +712,14 @@ def generate_schedule_metadata():
 # ============================================================================
 
 def generate_all_captions(model_name, mode="turntable", print_specs="",
-                          print_specs_short="", platforms=None, variant_count=3):
+                          print_specs_short="", platforms=None, variant_count=3,
+                          sequence_name=None):
     """Master function: generate all caption variants for all platforms.
     Returns a structured dict ready for the pipeline manifest.
+
+    Args:
+        sequence_name: If provided, generates sequence-aware voiceover scripts
+                       matching the shot sequence timing.
     """
     if platforms is None:
         platforms = ["tiktok", "reels", "youtube", "shorts", "pinterest", "reddit"]
@@ -630,11 +731,15 @@ def generate_all_captions(model_name, mode="turntable", print_specs="",
         "platforms": {},
         "tracking": generate_tracking_links(model_name, platforms=platforms),
         "voiceover": {
-            "script": generate_voiceover_script(model_name, print_specs),
+            "script": generate_voiceover_script(
+                model_name, print_specs, sequence_name=sequence_name
+            ),
             "voice_recommendations": {
-                "elevenlabs": {"voice": "Adam", "stability": 0.5, "clarity": 0.75},
+                "elevenlabs": {"voice": "George", "voice_id": "JBFqnCBsd6RMkjVDRZzb",
+                               "stability": 0.5, "similarity_boost": 0.75},
                 "style": "conversational, warm, confident — not salesy",
             },
+            "sequence": sequence_name,
         },
         "schedule": generate_schedule_metadata(),
     }

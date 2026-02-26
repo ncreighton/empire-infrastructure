@@ -82,6 +82,7 @@ class RenderConfig:
     FPS = 30
     TURNTABLE_DURATION = 6
     TURNTABLE_FRAMES = 180  # 6s @ 30fps
+    SPEED_MULTIPLIER = 1.0  # 1.0 = normal, 0.3 = slow elegant
 
     # Physically-based material presets
     # PLA: semi-glossy, slight SSS at thin walls, IOR ~1.45
@@ -167,6 +168,9 @@ def load_config_file():
                     RenderConfig.TURNTABLE_FRAMES = cfg["turntable_duration_seconds"] * RenderConfig.FPS
                 if "default_material" in cfg:
                     RenderConfig.DEFAULT_MATERIAL = cfg["default_material"]
+                cinematic = cfg.get("cinematic_defaults", {})
+                if cinematic.get("turntable_speed"):
+                    RenderConfig.SPEED_MULTIPLIER = cinematic["turntable_speed"]
                 return True
             except (json.JSONDecodeError, KeyError):
                 pass
@@ -888,8 +892,13 @@ def frames_to_video(frame_pattern, output_path, fps=None):
 
 def render_turntable(obj, output_dir, model_name, platform="wide",
                      material_name=None, preset=None, camera_style="standard",
-                     color_grade="cinematic"):
-    """Render a 360 turntable with easing and camera style variations."""
+                     color_grade="cinematic", duration_seconds=None, speed=None):
+    """Render a 360 turntable with easing and camera style variations.
+
+    Args:
+        duration_seconds: Override duration (default: from config, typically 6s)
+        speed: Rotation speed multiplier (0.3=slow elegant, 1.0=full 360)
+    """
     print(f"[Render] Turntable: {model_name} ({platform}, {camera_style})")
 
     configure_render(platform, preset, color_grade=color_grade)
@@ -903,10 +912,18 @@ def render_turntable(obj, output_dir, model_name, platform="wide",
     distance = auto_frame_camera(camera, obj)
     look_at_z = obj.dimensions.z / 2
 
+    # Parameterized duration and speed
+    dur = duration_seconds or RenderConfig.TURNTABLE_DURATION
+    spd = speed or RenderConfig.SPEED_MULTIPLIER
+    fps = RenderConfig.FPS
+
     scene = bpy.context.scene
-    frames = RenderConfig.TURNTABLE_FRAMES
+    frames = int(dur * fps)
     scene.frame_start = 1
     scene.frame_end = frames
+
+    # Rotation degrees based on speed (1.0 = full 360, 0.5 = 180)
+    rotation_deg = 360 * spd
 
     # Create rotation empty
     bpy.ops.object.empty_add(type='PLAIN_AXES', location=(0, 0, 0))
@@ -920,7 +937,7 @@ def render_turntable(obj, output_dir, model_name, platform="wide",
 
         empty.rotation_euler = (0, 0, 0)
         empty.keyframe_insert(data_path="rotation_euler", frame=1)
-        empty.rotation_euler = (0, 0, math.radians(360))
+        empty.rotation_euler = (0, 0, math.radians(rotation_deg))
         empty.keyframe_insert(data_path="rotation_euler", frame=frames + 1)
         apply_easing(empty, "ease_in_out")
 
@@ -931,7 +948,7 @@ def render_turntable(obj, output_dir, model_name, platform="wide",
         # Keyframe model rotation
         empty.rotation_euler = (0, 0, 0)
         empty.keyframe_insert(data_path="rotation_euler", frame=1)
-        empty.rotation_euler = (0, 0, math.radians(360))
+        empty.rotation_euler = (0, 0, math.radians(rotation_deg))
         empty.keyframe_insert(data_path="rotation_euler", frame=frames + 1)
         apply_easing(empty, "ease_in_out")
 
@@ -957,7 +974,7 @@ def render_turntable(obj, output_dir, model_name, platform="wide",
 
         empty.rotation_euler = (0, 0, 0)
         empty.keyframe_insert(data_path="rotation_euler", frame=1)
-        empty.rotation_euler = (0, 0, math.radians(360))
+        empty.rotation_euler = (0, 0, math.radians(rotation_deg))
         empty.keyframe_insert(data_path="rotation_euler", frame=frames + 1)
         apply_easing(empty, "ease_in_out")
 
@@ -974,7 +991,7 @@ def render_turntable(obj, output_dir, model_name, platform="wide",
 
         empty.rotation_euler = (0, 0, 0)
         empty.keyframe_insert(data_path="rotation_euler", frame=1)
-        empty.rotation_euler = (0, 0, math.radians(360))
+        empty.rotation_euler = (0, 0, math.radians(rotation_deg))
         empty.keyframe_insert(data_path="rotation_euler", frame=frames + 1)
         apply_easing(empty, "ease_in_out")
 
@@ -991,7 +1008,7 @@ def render_turntable(obj, output_dir, model_name, platform="wide",
 
         empty.rotation_euler = (0, 0, 0)
         empty.keyframe_insert(data_path="rotation_euler", frame=1)
-        empty.rotation_euler = (0, 0, math.radians(360))
+        empty.rotation_euler = (0, 0, math.radians(rotation_deg))
         empty.keyframe_insert(data_path="rotation_euler", frame=frames + 1)
         apply_easing(empty, "ease_in_out")
 
@@ -1054,7 +1071,7 @@ def render_beauty_shots(obj, output_dir, model_name, platform="wide",
 
 
 def render_wireframe_reveal(obj, output_dir, model_name, platform="wide",
-                            preset=None):
+                            preset=None, duration_seconds=None):
     """Render wireframe-to-solid transition as a COMPLETE composited video.
     Uses material animation with mix factor keyframes — single render pass.
     """
@@ -1127,19 +1144,22 @@ def render_wireframe_reveal(obj, output_dir, model_name, platform="wide",
     obj.data.materials.clear()
     obj.data.materials.append(mat)
 
-    # Animation: 90 frames total
+    # Animation frames based on duration
     scene = bpy.context.scene
-    total_frames = 90
+    dur = duration_seconds or (90 / RenderConfig.FPS)  # Default ~3s
+    total_frames = int(dur * RenderConfig.FPS)
     scene.frame_start = 1
     scene.frame_end = total_frames
 
-    # Keyframe transition: wireframe (0-30), crossfade (30-60), solid (60-90)
+    # Keyframe transition: wireframe (first third), crossfade (middle), solid (last third)
+    wire_end = int(total_frames * 0.28)
+    cross_end = int(total_frames * 0.62)
     transition.outputs[0].default_value = 0.0
     transition.outputs[0].keyframe_insert(data_path="default_value", frame=1)
     transition.outputs[0].default_value = 0.0
-    transition.outputs[0].keyframe_insert(data_path="default_value", frame=25)
+    transition.outputs[0].keyframe_insert(data_path="default_value", frame=wire_end)
     transition.outputs[0].default_value = 1.0
-    transition.outputs[0].keyframe_insert(data_path="default_value", frame=55)
+    transition.outputs[0].keyframe_insert(data_path="default_value", frame=cross_end)
     transition.outputs[0].default_value = 1.0
     transition.outputs[0].keyframe_insert(data_path="default_value", frame=total_frames)
 
@@ -1168,7 +1188,7 @@ def render_wireframe_reveal(obj, output_dir, model_name, platform="wide",
     wire_emission.inputs['Strength'].default_value = 3.0
     wire_emission.inputs['Strength'].keyframe_insert(data_path="default_value", frame=1)
     wire_emission.inputs['Strength'].default_value = 0.0
-    wire_emission.inputs['Strength'].keyframe_insert(data_path="default_value", frame=55)
+    wire_emission.inputs['Strength'].keyframe_insert(data_path="default_value", frame=cross_end)
 
     output_path = os.path.join(output_dir, f"{model_name}_wireframe_reveal_{platform}")
     scene.render.filepath = output_path
@@ -1222,7 +1242,7 @@ def render_material_variants(obj, output_dir, model_name, platform="wide",
 
 
 def render_dramatic_reveal(obj, output_dir, model_name, platform="wide",
-                           material_name=None, preset=None):
+                           material_name=None, preset=None, duration_seconds=None):
     """Cinematic dark-background reveal with camera motion."""
     print(f"[Render] Dramatic reveal: {model_name}")
 
@@ -1238,7 +1258,8 @@ def render_dramatic_reveal(obj, output_dir, model_name, platform="wide",
     look_at_z = obj.dimensions.z / 2
 
     scene = bpy.context.scene
-    total_frames = 120
+    dur = duration_seconds or (120 / RenderConfig.FPS)  # Default ~4s
+    total_frames = int(dur * RenderConfig.FPS)
     scene.frame_start = 1
     scene.frame_end = total_frames
 
@@ -1269,6 +1290,368 @@ def render_dramatic_reveal(obj, output_dir, model_name, platform="wide",
 
     print(f"[Render] Dramatic reveal saved: {output_path}")
     return output_path
+
+
+def render_close_up(obj, output_dir, model_name, platform="wide",
+                    material_name=None, preset=None, color_grade="cinematic",
+                    duration_seconds=3, angles=None):
+    """Render close-up beauty shots as a video clip.
+    Camera orbits through specified beauty angles with shallow DOF.
+    Each angle gets equal time in the clip.
+    """
+    if angles is None:
+        angles = ["hero", "detail"]
+
+    print(f"[Render] Close-up: {model_name} ({', '.join(angles)})")
+
+    configure_render(platform, preset, color_grade=color_grade)
+    apply_material(obj, material_name)
+
+    setup_gradient_background()
+    setup_studio_lighting()
+    ground = create_ground_plane(material="reflective")
+    camera = create_camera()
+
+    distance = auto_frame_camera(camera, obj)
+    look_at_z = obj.dimensions.z / 2
+    fps = RenderConfig.FPS
+
+    # Close-up angle definitions (tight framing with DOF)
+    angle_defs = {
+        "hero":   {"azimuth": 35,  "elevation": 30, "dist_mult": 0.6},
+        "detail": {"azimuth": 90,  "elevation": 15, "dist_mult": 0.5},
+        "top":    {"azimuth": 0,   "elevation": 65, "dist_mult": 0.7},
+        "low":    {"azimuth": 20,  "elevation": 5,  "dist_mult": 0.55},
+        "back":   {"azimuth": 180, "elevation": 20, "dist_mult": 0.6},
+    }
+
+    scene = bpy.context.scene
+    total_frames = int(duration_seconds * fps)
+    scene.frame_start = 1
+    scene.frame_end = total_frames
+
+    # Shallow DOF for close-ups
+    setup_depth_of_field(camera, obj, f_stop=2.0)
+
+    # Keyframe camera moving through angles
+    n_angles = len(angles)
+    frames_per_angle = max(1, total_frames // n_angles)
+
+    for i, angle_name in enumerate(angles):
+        angle = angle_defs.get(angle_name, angle_defs["hero"])
+        frame = 1 + i * frames_per_angle
+
+        close_dist = distance * angle["dist_mult"]
+        position_camera_spherical(camera, angle["azimuth"], angle["elevation"],
+                                  close_dist, look_at=(0, 0, look_at_z))
+        camera.keyframe_insert(data_path="location", frame=frame)
+        camera.keyframe_insert(data_path="rotation_euler", frame=frame)
+
+    # Hold last angle to end
+    camera.keyframe_insert(data_path="location", frame=total_frames)
+    camera.keyframe_insert(data_path="rotation_euler", frame=total_frames)
+    apply_easing(camera, "ease_in_out")
+
+    output_path = os.path.join(output_dir, f"{model_name}_close_up_{platform}")
+    scene.render.filepath = output_path
+    bpy.ops.render.render(animation=True)
+
+    if bpy.app.version >= (5, 0, 0):
+        video_path = frames_to_video(output_path, output_path + ".mp4")
+        if video_path:
+            output_path = video_path
+
+    print(f"[Render] Close-up saved: {output_path}")
+    return output_path
+
+
+def render_material_carousel(obj, output_dir, model_name, platform="wide",
+                              materials=None, preset=None, color_grade="neutral",
+                              duration_seconds=12):
+    """Render animated material transition carousel as a video clip.
+    Uses mix shader keyframes to smoothly cycle through materials during rotation.
+    """
+    if materials is None:
+        materials = ["gray_pla", "silk_silver_pla", "resin_clear"]
+
+    print(f"[Render] Material carousel: {model_name} ({', '.join(materials)})")
+
+    configure_render(platform, preset, color_grade=color_grade)
+    setup_gradient_background()
+    setup_product_lighting()
+    ground = create_ground_plane(material="reflective")
+    camera = create_camera()
+
+    distance = auto_frame_camera(camera, obj)
+    look_at_z = obj.dimensions.z / 2
+    position_camera_spherical(camera, 35, 25, distance, look_at=(0, 0, look_at_z))
+    fps = RenderConfig.FPS
+
+    scene = bpy.context.scene
+    total_frames = int(duration_seconds * fps)
+    scene.frame_start = 1
+    scene.frame_end = total_frames
+
+    # Create a mix shader that transitions between materials
+    n_mats = len(materials)
+    frames_per_material = total_frames // n_mats
+
+    # Build animated material using mix shaders
+    mat = bpy.data.materials.new(name="carousel_material")
+    mat.use_nodes = True
+    nodes = mat.node_tree.nodes
+    links = mat.node_tree.links
+    nodes.clear()
+
+    output_node = nodes.new('ShaderNodeOutputMaterial')
+    output_node.location = (600, 0)
+
+    # Create BSDF nodes for each material
+    bsdf_nodes = []
+    for i, mat_name in enumerate(materials):
+        preset_data = RenderConfig.MATERIALS.get(mat_name, RenderConfig.MATERIALS["gray_pla"])
+        bsdf = nodes.new('ShaderNodeBsdfPrincipled')
+        bsdf.inputs['Base Color'].default_value = preset_data["color"]
+        bsdf.inputs['Roughness'].default_value = preset_data["roughness"]
+        bsdf.inputs['Metallic'].default_value = preset_data["metallic"]
+        bsdf.inputs['IOR'].default_value = preset_data["ior"]
+        bsdf.location = (-400, 300 - i * 200)
+        bsdf_nodes.append(bsdf)
+
+    # Chain mix shaders if more than 1 material
+    if n_mats == 1:
+        links.new(bsdf_nodes[0].outputs['BSDF'], output_node.inputs['Surface'])
+    else:
+        # Build a chain of MixShader nodes
+        current_output = bsdf_nodes[0].outputs['BSDF']
+        for i in range(1, n_mats):
+            mix = nodes.new('ShaderNodeMixShader')
+            mix.location = (200 * i - 200, 200 - i * 100)
+
+            # Animated factor: transitions from 0 to 1 during this material's segment
+            factor = nodes.new('ShaderNodeValue')
+            factor.location = (200 * i - 400, 400 - i * 100)
+            factor.outputs[0].default_value = 0.0
+
+            # Keyframe: hold previous material, then transition to this one
+            transition_start = (i - 1) * frames_per_material + int(frames_per_material * 0.6)
+            transition_end = i * frames_per_material
+
+            factor.outputs[0].default_value = 0.0
+            factor.outputs[0].keyframe_insert(data_path="default_value", frame=1)
+            factor.outputs[0].default_value = 0.0
+            factor.outputs[0].keyframe_insert(data_path="default_value", frame=max(1, transition_start))
+            factor.outputs[0].default_value = 1.0
+            factor.outputs[0].keyframe_insert(data_path="default_value", frame=transition_end)
+            factor.outputs[0].default_value = 1.0
+            factor.outputs[0].keyframe_insert(data_path="default_value", frame=total_frames)
+
+            links.new(factor.outputs[0], mix.inputs['Fac'])
+            links.new(current_output, mix.inputs[1])
+            links.new(bsdf_nodes[i].outputs['BSDF'], mix.inputs[2])
+            current_output = mix.outputs['Shader']
+
+        links.new(current_output, output_node.inputs['Surface'])
+
+    # Apply easing to all transition keyframes
+    for action in bpy.data.actions:
+        for fcurve in action.fcurves:
+            if "default_value" in fcurve.data_path:
+                for kfp in fcurve.keyframe_points:
+                    kfp.interpolation = 'BEZIER'
+                    kfp.handle_left_type = 'AUTO_CLAMPED'
+                    kfp.handle_right_type = 'AUTO_CLAMPED'
+
+    # Assign material
+    obj.data.materials.clear()
+    obj.data.materials.append(mat)
+
+    # Slow rotation during carousel
+    bpy.ops.object.empty_add(type='PLAIN_AXES', location=(0, 0, 0))
+    empty = bpy.context.active_object
+    empty.name = "CarouselCenter"
+    obj.parent = empty
+
+    empty.rotation_euler = (0, 0, 0)
+    empty.keyframe_insert(data_path="rotation_euler", frame=1)
+    empty.rotation_euler = (0, 0, math.radians(180))  # Half rotation during carousel
+    empty.keyframe_insert(data_path="rotation_euler", frame=total_frames)
+    apply_easing(empty, "ease_in_out")
+
+    output_path = os.path.join(output_dir, f"{model_name}_material_carousel_{platform}")
+    scene.render.filepath = output_path
+    bpy.ops.render.render(animation=True)
+
+    if bpy.app.version >= (5, 0, 0):
+        video_path = frames_to_video(output_path, output_path + ".mp4")
+        if video_path:
+            output_path = video_path
+
+    obj.parent = None
+    bpy.data.objects.remove(empty)
+
+    print(f"[Render] Material carousel saved: {output_path}")
+    return output_path
+
+
+def render_beauty_hero(obj, output_dir, model_name, platform="wide",
+                       material_name=None, preset=None, color_grade="cinematic",
+                       duration_seconds=3):
+    """Render a final beauty hero shot as a short video clip.
+    Static hero angle with subtle breathing camera motion and shallow DOF.
+    """
+    print(f"[Render] Beauty hero: {model_name}")
+
+    configure_render(platform, preset, color_grade=color_grade)
+    apply_material(obj, material_name)
+
+    setup_gradient_background()
+    setup_studio_lighting()
+    ground = create_ground_plane(material="reflective")
+    camera = create_camera()
+
+    distance = auto_frame_camera(camera, obj)
+    look_at_z = obj.dimensions.z / 2
+    fps = RenderConfig.FPS
+
+    scene = bpy.context.scene
+    total_frames = int(duration_seconds * fps)
+    scene.frame_start = 1
+    scene.frame_end = total_frames
+
+    # Shallow DOF for beauty
+    setup_depth_of_field(camera, obj, f_stop=2.8)
+
+    # Hero angle with subtle breathing motion (very small dolly)
+    position_camera_spherical(camera, 35, 28, distance * 0.95, look_at=(0, 0, look_at_z))
+    camera.keyframe_insert(data_path="location", frame=1)
+    camera.keyframe_insert(data_path="rotation_euler", frame=1)
+
+    # Subtle push-in (breathing effect)
+    position_camera_spherical(camera, 35, 30, distance * 0.9, look_at=(0, 0, look_at_z))
+    camera.keyframe_insert(data_path="location", frame=total_frames)
+    camera.keyframe_insert(data_path="rotation_euler", frame=total_frames)
+    apply_easing(camera, "ease_in_out")
+
+    output_path = os.path.join(output_dir, f"{model_name}_beauty_hero_{platform}")
+    scene.render.filepath = output_path
+    bpy.ops.render.render(animation=True)
+
+    if bpy.app.version >= (5, 0, 0):
+        video_path = frames_to_video(output_path, output_path + ".mp4")
+        if video_path:
+            output_path = video_path
+
+    print(f"[Render] Beauty hero saved: {output_path}")
+    return output_path
+
+
+def render_shot_sequence(stl_path, output_dir, sequence_name, model_name=None,
+                         platform="wide", material=None, preset=None,
+                         color_grade="cinematic"):
+    """Render a complete shot sequence as numbered clips.
+
+    Iterates through each shot in the sequence, rendering a separate
+    video clip for each one. Clips are numbered for assembly.
+
+    Returns:
+        List of (shot_index, shot_type, output_path) tuples
+    """
+    # Import shot_sequence module (avoid circular import at module level)
+    scripts_dir = Path(__file__).resolve().parent
+    sys.path.insert(0, str(scripts_dir))
+    from shot_sequence import get_sequence, get_shot_render_params, shot_to_filename
+
+    seq = get_sequence(sequence_name)
+    if not seq:
+        print(f"[Render] ERROR: Unknown sequence '{sequence_name}'")
+        return []
+
+    stl_path = Path(stl_path)
+    model_name = model_name or stl_path.stem
+
+    print(f"[Render] Shot sequence: {seq['name']} ({len(seq['shots'])} shots)")
+    os.makedirs(output_dir, exist_ok=True)
+
+    results = []
+
+    for i, shot in enumerate(seq["shots"]):
+        print(f"\n[Render] === Shot {i + 1}/{len(seq['shots'])}: {shot['type']} ({shot['duration']}s) ===")
+
+        # Clean scene and re-import for each shot
+        clean_scene()
+        obj = import_stl(str(stl_path))
+        if obj is None:
+            print(f"[Render] ERROR: Could not import {stl_path} for shot {i + 1}")
+            continue
+        obj = center_and_normalize(obj)
+
+        filename = shot_to_filename(i, shot)
+        shot_dir = os.path.join(output_dir, "shots")
+        os.makedirs(shot_dir, exist_ok=True)
+
+        output_path = None
+
+        if shot["type"] == "dramatic_reveal":
+            output_path = render_dramatic_reveal(
+                obj, shot_dir, filename, platform,
+                material_name=material, preset=preset,
+                duration_seconds=shot["duration"],
+            )
+
+        elif shot["type"] == "turntable":
+            output_path = render_turntable(
+                obj, shot_dir, filename, platform,
+                material_name=material, preset=preset,
+                camera_style=shot.get("camera", "standard"),
+                color_grade=color_grade,
+                duration_seconds=shot["duration"],
+                speed=shot.get("speed", 1.0),
+            )
+
+        elif shot["type"] == "close_up":
+            output_path = render_close_up(
+                obj, shot_dir, filename, platform,
+                material_name=material, preset=preset,
+                color_grade=color_grade,
+                duration_seconds=shot["duration"],
+                angles=shot.get("angles", ["hero", "detail"]),
+            )
+
+        elif shot["type"] == "wireframe_reveal":
+            output_path = render_wireframe_reveal(
+                obj, shot_dir, filename, platform,
+                preset=preset,
+                duration_seconds=shot["duration"],
+            )
+
+        elif shot["type"] == "material_carousel":
+            output_path = render_material_carousel(
+                obj, shot_dir, filename, platform,
+                materials=shot.get("materials"),
+                preset=preset,
+                color_grade=color_grade,
+                duration_seconds=shot["duration"],
+            )
+
+        elif shot["type"] == "beauty_hero":
+            output_path = render_beauty_hero(
+                obj, shot_dir, filename, platform,
+                material_name=material, preset=preset,
+                color_grade=color_grade,
+                duration_seconds=shot["duration"],
+            )
+
+        else:
+            print(f"[Render] WARNING: Unknown shot type '{shot['type']}', skipping")
+            continue
+
+        if output_path:
+            results.append((i, shot["type"], output_path))
+            print(f"[Render] Shot {i + 1} saved: {output_path}")
+
+    print(f"\n[Render] Sequence complete: {len(results)}/{len(seq['shots'])} shots rendered")
+    return results
 
 
 def render_technical_views(obj, output_dir, model_name, platform="square",
@@ -1508,6 +1891,13 @@ def parse_args():
     parser.add_argument("--samples", type=int, default=None)
     parser.add_argument("--fast", action="store_true",
                        help="Use social preset (EEVEE, fast)")
+    parser.add_argument("--sequence", default=None,
+                       choices=["showcase_short", "showcase_full", "hero_video"],
+                       help="Render a cinematic shot sequence")
+    parser.add_argument("--speed", type=float, default=None,
+                       help="Rotation speed multiplier (0.3=slow, 1.0=normal)")
+    parser.add_argument("--duration", type=float, default=None,
+                       help="Override turntable duration in seconds")
 
     return parser.parse_args(argv)
 
@@ -1533,10 +1923,29 @@ def main():
         for preset in RenderConfig.QUALITY_PRESETS.values():
             preset["samples"] = args.samples
 
+    # Apply speed/duration overrides to config
+    if args.speed is not None:
+        RenderConfig.SPEED_MULTIPLIER = args.speed
+    if args.duration is not None:
+        RenderConfig.TURNTABLE_DURATION = args.duration
+        RenderConfig.TURNTABLE_FRAMES = int(args.duration * RenderConfig.FPS)
+
     os.makedirs(args.output, exist_ok=True)
     input_path = Path(args.input)
 
-    if input_path.is_dir() or args.mode == "batch":
+    if args.sequence:
+        # Cinematic shot sequence mode
+        if not input_path.is_file():
+            print(f"[Render] ERROR: Sequence mode requires a single STL file: {args.input}")
+            sys.exit(1)
+        results = render_shot_sequence(
+            input_path, args.output, args.sequence,
+            platform=args.platform[0] if args.platform else "wide",
+            material=args.material, preset=args.preset,
+            color_grade=args.color_grade,
+        )
+        print(f"\n[Render] Shot sequence '{args.sequence}': {len(results)} clips rendered")
+    elif input_path.is_dir() or args.mode == "batch":
         batch_process(input_path, args.output,
                      args.mode if args.mode != "batch" else "turntable",
                      args.platform, args.material, args.preset,

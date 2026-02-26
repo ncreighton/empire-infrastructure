@@ -30,6 +30,9 @@ from stl_analyzer import analyze_stl, format_print_specs_caption, format_print_s
 from caption_engine import generate_all_captions, detect_collections
 from brand_generator import ensure_brand_assets, match_music_to_mood
 from thumbnail_gen import generate_thumbnail_variants, select_hero_image, generate_instagram_carousel
+from shot_sequence import get_sequence, calculate_total_duration, get_shot_timeline
+from elevenlabs_tts import generate_voiceover, upload_to_catbox, load_config as load_elevenlabs_config
+from creatomate_compose import compose_multi_platform, load_config as load_creatomate_config
 
 
 # ============================================================================
@@ -468,6 +471,327 @@ def _execute_pipeline(stl_path, model_name, display_name, title, output_base,
 
 
 # ============================================================================
+# CINEMATIC PIPELINE (V2 — multi-shot + voiceover + cloud compositing)
+# ============================================================================
+
+def run_cinematic_pipeline(stl_path, output_base=None, sequence_name="showcase_short",
+                           platforms=None, material=None, preset=None,
+                           camera_style="standard", color_grade="cinematic",
+                           skip_existing=True, variant_count=3, title=None):
+    """Run the cinematic V2 pipeline for a single STL file.
+
+    This is the upgraded pipeline that produces multi-shot, voiceover-narrated,
+    professionally composited videos via:
+    1. STL analysis (existing)
+    2. Voiceover script generation (sequence-aware)
+    3. ElevenLabs TTS voiceover
+    4. Blender shot sequence rendering (multiple clips)
+    5. Upload clips to temporary hosting
+    6. Creatomate cloud composition per platform
+    7. Caption generation
+    8. Manifest
+    """
+    stl_path = Path(stl_path)
+    model_name = stl_path.stem
+    display_name = model_name.replace("_", " ").replace("-", " ").title()
+    title = title or display_name
+
+    if platforms is None:
+        platforms = ["youtube", "tiktok"]
+
+    output_base = Path(output_base or DEFAULT_OUTPUT)
+
+    # Idempotency check
+    stl_hash = compute_stl_hash(stl_path)
+    if skip_existing:
+        existing = check_existing_output(model_name, output_base, stl_hash, platforms)
+        if existing and existing.get("cinematic"):
+            log_stage(logger, "pipeline", f"Skipping {model_name} — cinematic output exists (hash {stl_hash})")
+            return existing
+
+    # Lock
+    lock = acquire_lock(model_name)
+    if lock is None:
+        log_stage(logger, "pipeline", f"Skipping {model_name} — already being processed", level=30)
+        return None
+
+    try:
+        return _execute_cinematic_pipeline(
+            stl_path, model_name, display_name, title, output_base,
+            stl_hash, sequence_name, platforms, material, preset,
+            camera_style, color_grade, variant_count
+        )
+    finally:
+        release_lock(model_name)
+
+
+def _execute_cinematic_pipeline(stl_path, model_name, display_name, title,
+                                 output_base, stl_hash, sequence_name,
+                                 platforms, material, preset,
+                                 camera_style, color_grade, variant_count):
+    """Internal: execute the cinematic pipeline stages."""
+
+    config = load_pipeline_config()
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    pipeline_dir = output_base / model_name / timestamp
+    renders_dir = pipeline_dir / "renders"
+    shots_dir = renders_dir / "shots"
+    final_dir = pipeline_dir / "final"
+    captions_dir = pipeline_dir / "captions"
+    thumbs_dir = pipeline_dir / "thumbnails"
+
+    for d in [renders_dir, shots_dir, final_dir, captions_dir, thumbs_dir]:
+        d.mkdir(parents=True, exist_ok=True)
+
+    total_duration = calculate_total_duration(sequence_name)
+    seq = get_sequence(sequence_name)
+
+    log_stage(logger, "pipeline", "=" * 60)
+    log_stage(logger, "pipeline", f"FORGEFILES CINEMATIC PIPELINE: {display_name}")
+    log_stage(logger, "pipeline", f"Sequence: {seq['name']} ({total_duration}s, {len(seq['shots'])} shots)")
+    log_stage(logger, "pipeline", f"Platforms: {', '.join(platforms)}")
+    log_stage(logger, "pipeline", f"Preset: {preset or 'default'} | Output: {pipeline_dir}")
+    log_stage(logger, "pipeline", "=" * 60)
+
+    # STEP 0: Analyze STL
+    log_stage(logger, "analyze", "Analyzing STL geometry...")
+    analysis = analyze_stl(stl_path)
+    print_specs = format_print_specs_caption(analysis)
+    print_specs_short = format_print_specs_short(analysis)
+    log_stage(logger, "analyze", f"Shape: {analysis.get('shape_classification', 'unknown')} | "
+              f"Triangles: {analysis.get('triangle_count', 0):,}")
+
+    # STEP 0.5: Brand assets
+    log_stage(logger, "brand", "Checking brand assets...")
+    brand_assets = ensure_brand_assets()
+
+    # STEP 1: Generate voiceover script (sequence-aware)
+    log_stage(logger, "caption", "STEP 1: Generating voiceover script")
+    captions = generate_all_captions(
+        model_name, "turntable", print_specs, print_specs_short,
+        platforms, variant_count, sequence_name=sequence_name
+    )
+    voiceover_script = captions.get("voiceover", {}).get("script", "")
+    log_stage(logger, "caption", f"Voiceover script: {len(voiceover_script)} chars")
+
+    # Save captions
+    caption_file = captions_dir / f"{model_name}_captions.json"
+    with open(caption_file, 'w', encoding='utf-8') as f:
+        json.dump(captions, f, indent=2, ensure_ascii=False)
+
+    # Save per-platform text files
+    for platform, data in captions.get("platforms", {}).items():
+        txt_file = captions_dir / f"{model_name}_{platform}_caption.txt"
+        with open(txt_file, 'w', encoding='utf-8') as f:
+            variants = data.get("variants", [])
+            for i, variant in enumerate(variants):
+                f.write(f"=== Variant {i + 1} ===\n")
+                if isinstance(variant, str):
+                    f.write(variant + "\n\n")
+                elif isinstance(variant, dict):
+                    for k, v in variant.items():
+                        if isinstance(v, list):
+                            f.write(f"{k}:\n" + "\n".join(f"  - {item}" for item in v) + "\n")
+                        else:
+                            f.write(f"{k}: {v}\n")
+                    f.write("\n")
+
+    # Save voiceover script
+    vo_file = captions_dir / f"{model_name}_voiceover.txt"
+    with open(vo_file, 'w', encoding='utf-8') as f:
+        f.write(voiceover_script)
+
+    # STEP 2: Generate voiceover audio via ElevenLabs
+    voiceover_url = None
+    voiceover_path = captions_dir / f"{model_name}_voiceover.mp3"
+    elevenlabs_cfg = load_elevenlabs_config()
+
+    if elevenlabs_cfg.get("api_key") and voiceover_script:
+        log_stage(logger, "pipeline", "STEP 2: ElevenLabs voiceover generation")
+        vo_result = generate_voiceover(voiceover_script, str(voiceover_path))
+        if vo_result:
+            log_stage(logger, "pipeline", f"Voiceover generated: {voiceover_path.name}")
+            # Upload to catbox.moe for Creatomate access
+            voiceover_url = upload_to_catbox(str(voiceover_path))
+            if voiceover_url:
+                log_stage(logger, "pipeline", f"Voiceover uploaded: {voiceover_url}")
+            else:
+                log_stage(logger, "pipeline", "Voiceover upload failed — Creatomate won't have audio", level=30)
+        else:
+            log_stage(logger, "pipeline", "ElevenLabs generation failed — continuing without voiceover", level=30)
+    else:
+        log_stage(logger, "pipeline", "STEP 2: Skipping voiceover (no API key or empty script)")
+
+    # STEP 3: Render shot sequence in Blender
+    log_stage(logger, "render", f"STEP 3: Blender shot sequence ({sequence_name})")
+    render_preset = preset or "portfolio"
+
+    # Deduce render format from first platform
+    platform_format = PLATFORM_RENDER_FORMATS.get(platforms[0], "wide")
+
+    cmd = [
+        BLENDER_PATH, "-b",
+        "--python", RENDER_SCRIPT,
+        "--",
+        "--input", str(stl_path),
+        "--output", str(renders_dir),
+        "--sequence", sequence_name,
+        "--platform", platform_format,
+        "--color-grade", color_grade,
+    ]
+
+    if material:
+        cmd.extend(["--material", material])
+    if render_preset:
+        cmd.extend(["--preset", render_preset])
+
+    log_stage(logger, "render", f"Blender: sequence={sequence_name} | format={platform_format}")
+
+    try:
+        result = subprocess.run(cmd, capture_output=False, timeout=7200)  # 2hr for multi-shot
+    except FileNotFoundError:
+        log_stage(logger, "render",
+                  f"Blender not found. Install from https://www.blender.org/download/", level=40)
+        return None
+    except subprocess.TimeoutExpired:
+        log_stage(logger, "render", "Blender render timed out (>2 hours)", level=40)
+        return None
+
+    if result.returncode != 0:
+        log_stage(logger, "render", f"Blender failed (exit {result.returncode})", level=40)
+        return None
+
+    # Collect rendered shot clips
+    shot_clips = sorted(shots_dir.glob("*.mp4"))
+    if not shot_clips:
+        # Also check for other video formats
+        shot_clips = sorted(shots_dir.glob("shot_*"))
+    log_stage(logger, "render", f"Rendered {len(shot_clips)} shot clips")
+
+    if not shot_clips:
+        log_stage(logger, "render", "No shot clips produced — pipeline aborted", level=40)
+        return None
+
+    # STEP 4: Upload clips + compose via Creatomate
+    creatomate_cfg = load_creatomate_config()
+    cinematic_results = {}
+
+    if creatomate_cfg.get("api_key") and shot_clips:
+        log_stage(logger, "pipeline", "STEP 4: Creatomate cloud composition")
+
+        # Upload shot clips to catbox.moe
+        clip_urls = []
+        for clip in shot_clips:
+            url = upload_to_catbox(str(clip))
+            if url:
+                clip_urls.append(url)
+                log_stage(logger, "pipeline", f"  Uploaded: {clip.name} -> {url}")
+            else:
+                log_stage(logger, "pipeline", f"  Upload failed: {clip.name}", level=30)
+
+        if clip_urls:
+            # Upload music if available
+            music_url = None
+            if brand_assets.get("music_tracks"):
+                music_path = match_music_to_mood(brand_assets["music_tracks"], "cinematic")
+                if music_path:
+                    music_url = upload_to_catbox(music_path)
+
+            # Compose per platform
+            cinematic_results = compose_multi_platform(
+                shot_clips=clip_urls,
+                voiceover_url=voiceover_url,
+                music_url=music_url,
+                platforms=platforms,
+                model_name=display_name,
+                print_specs=print_specs_short,
+                output_dir=str(final_dir),
+            )
+
+            for platform, res in cinematic_results.items():
+                log_stage(logger, "pipeline",
+                          f"  {platform}: {res.get('video_path') or res.get('url')}")
+        else:
+            log_stage(logger, "pipeline", "No clips uploaded — skipping Creatomate", level=30)
+    else:
+        log_stage(logger, "pipeline", "STEP 4: Skipping Creatomate (no API key or no clips)")
+
+    # STEP 5: Thumbnails
+    log_stage(logger, "thumbnail", "STEP 5: Thumbnail generation")
+    thumb_results = {}
+    hero_image = select_hero_image(str(renders_dir))
+    if hero_image:
+        for thumb_platform in ["youtube", "pinterest"]:
+            if thumb_platform in platforms:
+                variants = generate_thumbnail_variants(
+                    hero_image, str(thumbs_dir), display_name,
+                    subtitle="3D Printable STL",
+                    platform=thumb_platform,
+                    font_path=brand_assets.get("font"),
+                    variant_count=min(variant_count, 3)
+                )
+                thumb_results[thumb_platform] = variants
+
+    # STEP 6: Build manifest
+    video_outputs = {}
+    for platform, res in cinematic_results.items():
+        if res.get("video_path"):
+            video_outputs[platform] = res["video_path"]
+        elif res.get("url"):
+            video_outputs[platform] = res["url"]
+
+    manifest = {
+        "model": model_name,
+        "display_name": display_name,
+        "stl_path": str(stl_path),
+        "stl_hash": stl_hash,
+        "cinematic": True,
+        "sequence": sequence_name,
+        "sequence_info": {
+            "name": seq["name"],
+            "total_duration": total_duration,
+            "shot_count": len(seq["shots"]),
+            "timeline": get_shot_timeline(sequence_name),
+        },
+        "platforms": platforms,
+        "generated": datetime.now().isoformat(),
+        "pipeline_dir": str(pipeline_dir),
+        "stl_analysis": analysis,
+        "video_outputs": video_outputs,
+        "shot_clips": [str(c) for c in shot_clips],
+        "voiceover": {
+            "script": voiceover_script,
+            "audio_path": str(voiceover_path) if voiceover_path.exists() else None,
+            "audio_url": voiceover_url,
+        },
+        "thumbnails": {k: v if not isinstance(v, list) else [str(x) if isinstance(x, str) else x for x in v]
+                       for k, v in thumb_results.items()},
+        "captions_file": str(caption_file),
+        "tracking": captions.get("tracking", {}),
+        "schedule": captions.get("schedule", {}),
+    }
+
+    manifest_path = pipeline_dir / "pipeline_manifest.json"
+    with open(manifest_path, 'w') as f:
+        json.dump(manifest, f, indent=2, default=str)
+
+    # Summary
+    log_stage(logger, "pipeline", "=" * 60)
+    log_stage(logger, "pipeline", "CINEMATIC PIPELINE COMPLETE")
+    log_stage(logger, "pipeline", f"  Model: {display_name}")
+    log_stage(logger, "pipeline", f"  Sequence: {seq['name']} ({total_duration}s)")
+    log_stage(logger, "pipeline", f"  Shot clips: {len(shot_clips)}")
+    log_stage(logger, "pipeline", f"  Final videos: {len(video_outputs)}")
+    for p, path in video_outputs.items():
+        log_stage(logger, "pipeline", f"    {p}: {path}")
+    log_stage(logger, "pipeline", f"  Voiceover: {'yes' if voiceover_url else 'no'}")
+    log_stage(logger, "pipeline", f"  Manifest: {manifest_path}")
+    log_stage(logger, "pipeline", "=" * 60)
+
+    return manifest
+
+
+# ============================================================================
 # BATCH PIPELINE with progress tracking and resume
 # ============================================================================
 
@@ -554,6 +878,11 @@ Examples:
   python orchestrator.py --stl ./models/ --batch --all-platforms
   python orchestrator.py --stl dragon.stl --mode all --preset ultra --camera-style orbital
   python orchestrator.py --stl dragon.stl --all-platforms --no-skip  # force re-render
+
+Cinematic V2 pipeline:
+  python orchestrator.py --stl dragon.stl --cinematic --platforms youtube tiktok
+  python orchestrator.py --stl dragon.stl --cinematic --sequence showcase_full
+  python orchestrator.py --stl dragon.stl --cinematic --sequence hero_video --preset ultra
         """
     )
 
@@ -578,6 +907,11 @@ Examples:
                        choices=["neutral", "cinematic", "warm", "cool", "moody"])
     parser.add_argument("--variants", type=int, default=3, help="A/B caption variants per platform")
     parser.add_argument("--no-skip", action="store_true", help="Force re-render even if output exists")
+    parser.add_argument("--cinematic", action="store_true",
+                       help="Use V2 cinematic pipeline (multi-shot + voiceover + cloud compose)")
+    parser.add_argument("--sequence", default=None,
+                       choices=["showcase_short", "showcase_full", "hero_video"],
+                       help="Shot sequence for cinematic mode (default: showcase_short)")
 
     args = parser.parse_args()
 
@@ -589,7 +923,16 @@ Examples:
 
     stl_path = Path(args.stl)
 
-    if args.batch or stl_path.is_dir():
+    if args.cinematic:
+        # V2 Cinematic Pipeline
+        sequence = args.sequence or "showcase_short"
+        run_cinematic_pipeline(
+            stl_path, args.output, sequence, platforms,
+            args.material, args.preset, args.camera_style,
+            args.color_grade, not args.no_skip, args.variants,
+            args.title
+        )
+    elif args.batch or stl_path.is_dir():
         batch_pipeline(
             stl_path, args.output, args.mode, platforms,
             args.material, args.music, args.preset, args.fast,
