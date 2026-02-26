@@ -498,11 +498,14 @@ def orchestrate(req: OrchestrateReq, background_tasks: BackgroundTasks):
     """
     orch = Orchestrator(get_ctrl())
     for job in req.jobs:
+        domain = job.get("domain") or job.get("profile_name")
+        if not domain:
+            raise HTTPException(400, "Each job must have 'domain' or 'profile_name'")
         orch.add_job(
-            domain=job["domain"],
+            domain=domain,
             titles=job.get("titles"),
             csv_path=job.get("csv_path"),
-            profile_name=job.get("profile_name"),
+            profile_name=job.get("profile_name", domain),
             wait=job.get("wait", True),
         )
 
