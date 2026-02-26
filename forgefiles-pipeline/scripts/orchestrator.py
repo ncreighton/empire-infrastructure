@@ -36,12 +36,29 @@ from thumbnail_gen import generate_thumbnail_variants, select_hero_image, genera
 # CONFIGURATION
 # ============================================================================
 
-BLENDER_PATH = os.environ.get("BLENDER_PATH", "blender")
 RENDER_SCRIPT = str(SCRIPTS_DIR / "render_engine.py")
 COMPOSITOR_SCRIPT = str(SCRIPTS_DIR / "compositor.py")
 PIPELINE_ROOT = SCRIPTS_DIR.parent
 DEFAULT_OUTPUT = PIPELINE_ROOT / "output"
 CONFIG_PATH = PIPELINE_ROOT / "config" / "pipeline_config.json"
+
+
+def _resolve_blender_path():
+    """Resolve Blender path from env, config, or default."""
+    env_path = os.environ.get("BLENDER_PATH")
+    if env_path:
+        return env_path
+    if CONFIG_PATH.exists():
+        try:
+            with open(CONFIG_PATH, "r") as f:
+                cfg = json.load(f)
+                if cfg.get("blender_path") and cfg["blender_path"] != "blender":
+                    return cfg["blender_path"]
+        except (json.JSONDecodeError, IOError):
+            pass
+    return "blender"
+
+BLENDER_PATH = _resolve_blender_path()
 LOCK_DIR = PIPELINE_ROOT / ".locks"
 
 logger = get_logger("forgefiles")

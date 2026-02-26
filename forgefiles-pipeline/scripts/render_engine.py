@@ -45,12 +45,12 @@ class RenderConfig:
     # Quality presets: social (fast), portfolio (balanced), ultra (max)
     QUALITY_PRESETS = {
         "social": {
-            "engine": "BLENDER_EEVEE_NEXT",
-            "samples": 64,
-            "resolution_pct": 100,
+            "engine": "CYCLES",
+            "samples": 16,
+            "resolution_pct": 50,
             "denoiser": True,
             "use_dof": False,
-            "use_bloom": True,
+            "use_bloom": False,
             "use_ao": True,
             "motion_blur": False,
         },
@@ -685,9 +685,13 @@ def configure_render(platform="wide", preset=None, transparent_bg=False,
     render.resolution_percentage = quality["resolution_pct"]
 
     engine = quality["engine"]
-    # Validate engine exists
-    if engine == 'BLENDER_EEVEE_NEXT' and bpy.app.version < (4, 0, 0):
-        engine = 'BLENDER_EEVEE'
+    # Resolve EEVEE engine name across Blender versions:
+    # Blender 3.x: BLENDER_EEVEE, Blender 4.x: BLENDER_EEVEE_NEXT, Blender 5.x: BLENDER_EEVEE
+    if 'EEVEE' in engine:
+        if bpy.app.version >= (5, 0, 0) or bpy.app.version < (4, 0, 0):
+            engine = 'BLENDER_EEVEE'
+        else:
+            engine = 'BLENDER_EEVEE_NEXT'
     render.engine = engine
 
     if 'CYCLES' in engine:
@@ -745,12 +749,17 @@ def configure_render(platform="wide", preset=None, transparent_bg=False,
 
     render.fps = RenderConfig.FPS
 
-    # Video output
-    render.image_settings.file_format = 'FFMPEG'
-    render.ffmpeg.format = 'MPEG4'
-    render.ffmpeg.codec = 'H264'
-    render.ffmpeg.constant_rate_factor = 'MEDIUM'
-    render.ffmpeg.audio_codec = 'NONE'
+    # Video output: Blender 5.0 removed FFMPEG, render as PNG sequence
+    if bpy.app.version >= (5, 0, 0):
+        render.image_settings.file_format = 'PNG'
+        render.image_settings.color_mode = 'RGB'
+        render.image_settings.compression = 15
+    else:
+        render.image_settings.file_format = 'FFMPEG'
+        render.ffmpeg.format = 'MPEG4'
+        render.ffmpeg.codec = 'H264'
+        render.ffmpeg.constant_rate_factor = 'MEDIUM'
+        render.ffmpeg.audio_codec = 'NONE'
 
 
 def configure_render_image(platform="wide", preset=None, transparent_bg=False,
@@ -767,12 +776,27 @@ def configure_render_image(platform="wide", preset=None, transparent_bg=False,
 # EASING FUNCTIONS
 # ============================================================================
 
+def _get_fcurves(action):
+    """Get fcurves from an Action, handling Blender 5.0 slotted actions API."""
+    # Blender 4.x and earlier: action.fcurves
+    if hasattr(action, 'fcurves'):
+        return action.fcurves
+    # Blender 5.0+: action.layers[].strips[].channelbags[].fcurves
+    if hasattr(action, 'layers'):
+        for layer in action.layers:
+            for strip in layer.strips:
+                for bag in strip.channelbags:
+                    if hasattr(bag, 'fcurves'):
+                        return bag.fcurves
+    return []
+
+
 def apply_easing(obj, style="ease_in_out"):
     """Apply easing to all animation curves on an object."""
     if not obj.animation_data or not obj.animation_data.action:
         return
 
-    for fcurve in obj.animation_data.action.fcurves:
+    for fcurve in _get_fcurves(obj.animation_data.action):
         for kfp in fcurve.keyframe_points:
             if style == "linear":
                 kfp.interpolation = 'LINEAR'
@@ -788,6 +812,74 @@ def apply_easing(obj, style="ease_in_out"):
                 kfp.interpolation = 'BEZIER'
                 kfp.handle_left_type = 'VECTOR'
                 kfp.handle_right_type = 'AUTO'
+
+
+def frames_to_video(frame_pattern, output_path, fps=None):
+    """Assemble a PNG frame sequence into an MP4 video using FFmpeg.
+    Needed for Blender 5.0+ which removed FFMPEG render output.
+    frame_pattern: path like '/path/to/name0001.png' — we convert to ffmpeg glob pattern.
+    """
+    import subprocess as sp
+    import glob
+
+    if fps is None:
+        fps = RenderConfig.FPS
+
+    # Blender outputs frames as name0001.png, name0002.png, etc.
+    # Convert to ffmpeg input pattern
+    frame_dir = os.path.dirname(frame_pattern)
+    frame_base = os.path.basename(frame_pattern)
+
+    # Find actual frames
+    frames = sorted(glob.glob(frame_pattern + "*.png"))
+    if not frames:
+        # Try with frame numbers already in pattern
+        frames = sorted(glob.glob(os.path.join(frame_dir, "*.png")))
+    if not frames:
+        print(f"[Render] No frames found at {frame_pattern}")
+        return None
+
+    # Build ffmpeg input pattern from first frame
+    # Blender names: base0001.png, base0002.png — ffmpeg needs base%04d.png
+    first = os.path.basename(frames[0])
+    # Find the numeric suffix
+    import re
+    match = re.search(r'(\d+)\.png$', first)
+    if match:
+        digits = len(match.group(1))
+        prefix = first[:match.start(1)]
+        ffmpeg_pattern = os.path.join(frame_dir, f"{prefix}%0{digits}d.png")
+    else:
+        print(f"[Render] Cannot determine frame pattern from {first}")
+        return None
+
+    if not output_path.endswith('.mp4'):
+        output_path += '.mp4'
+
+    cmd = [
+        "ffmpeg", "-y",
+        "-framerate", str(fps),
+        "-i", ffmpeg_pattern,
+        "-c:v", "libx264", "-crf", "18",
+        "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
+        output_path
+    ]
+
+    result = sp.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"[Render] FFmpeg assembly failed: {result.stderr[:300]}")
+        return None
+
+    # Clean up frame PNGs
+    for f in frames:
+        try:
+            os.remove(f)
+        except OSError:
+            pass
+
+    print(f"[Render] Assembled {len(frames)} frames -> {output_path}")
+    return output_path
 
 
 # ============================================================================
@@ -911,6 +1003,12 @@ def render_turntable(obj, output_dir, model_name, platform="wide",
     output_path = os.path.join(output_dir, f"{model_name}_turntable_{camera_style}_{platform}")
     scene.render.filepath = output_path
     bpy.ops.render.render(animation=True)
+
+    # Blender 5.0+: assemble PNG frames into MP4
+    if bpy.app.version >= (5, 0, 0):
+        video_path = frames_to_video(output_path, output_path + ".mp4")
+        if video_path:
+            output_path = video_path
 
     # Cleanup
     obj.parent = None
@@ -1076,6 +1174,11 @@ def render_wireframe_reveal(obj, output_dir, model_name, platform="wide",
     scene.render.filepath = output_path
     bpy.ops.render.render(animation=True)
 
+    if bpy.app.version >= (5, 0, 0):
+        video_path = frames_to_video(output_path, output_path + ".mp4")
+        if video_path:
+            output_path = video_path
+
     obj.parent = None
     bpy.data.objects.remove(empty)
 
@@ -1158,6 +1261,11 @@ def render_dramatic_reveal(obj, output_dir, model_name, platform="wide",
     output_path = os.path.join(output_dir, f"{model_name}_dramatic_{platform}")
     scene.render.filepath = output_path
     bpy.ops.render.render(animation=True)
+
+    if bpy.app.version >= (5, 0, 0):
+        video_path = frames_to_video(output_path, output_path + ".mp4")
+        if video_path:
+            output_path = video_path
 
     print(f"[Render] Dramatic reveal saved: {output_path}")
     return output_path
@@ -1410,6 +1518,10 @@ def main():
 
     if args.fast:
         args.preset = "social"
+        # Fast mode: 2s @ 24fps = 48 frames (instead of 6s @ 30fps = 180)
+        RenderConfig.FPS = 24
+        RenderConfig.TURNTABLE_DURATION = 2
+        RenderConfig.TURNTABLE_FRAMES = 48
     if args.preset:
         RenderConfig.ACTIVE_PRESET = args.preset
 

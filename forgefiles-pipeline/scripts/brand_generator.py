@@ -145,8 +145,83 @@ def _get_bitmap_font():
 # STATIC ASSET GENERATORS (no external dependencies)
 # ============================================================================
 
+def _draw_anvil_icon(pixels, width, height, cx, cy, size, color):
+    """Draw a stylized anvil/forge icon using geometric shapes."""
+    # Anvil body — trapezoid shape
+    body_top = int(size * 0.3)
+    body_bot = int(size * 0.55)
+    body_h = int(size * 0.35)
+    body_y_start = cy - int(size * 0.05)
+    for dy in range(body_h):
+        t = dy / max(body_h - 1, 1)
+        half_w = int(body_top + (body_bot - body_top) * t)
+        for dx in range(-half_w, half_w + 1):
+            px, py = cx + dx, body_y_start + dy
+            if 0 <= px < width and 0 <= py < height:
+                pixels[py * width + px] = (*color, 255)
+
+    # Anvil horn — pointed left triangle
+    horn_w = int(size * 0.35)
+    horn_h = int(size * 0.12)
+    horn_y = body_y_start + int(body_h * 0.1)
+    for dx in range(horn_w):
+        t = 1.0 - dx / max(horn_w - 1, 1)
+        half_h = int(horn_h * t)
+        for dy in range(-half_h, half_h + 1):
+            px = cx - int(body_top * 0.8) - dx
+            py = horn_y + dy
+            if 0 <= px < width and 0 <= py < height:
+                pixels[py * width + px] = (*color, 255)
+
+    # Anvil base — wider rectangle
+    base_w = int(size * 0.45)
+    base_h = int(size * 0.08)
+    base_y = body_y_start + body_h
+    for dy in range(base_h):
+        for dx in range(-base_w, base_w + 1):
+            px, py = cx + dx, base_y + dy
+            if 0 <= px < width and 0 <= py < height:
+                pixels[py * width + px] = (*color, 255)
+
+    # Hammer spark — small diamond shapes above anvil
+    spark_color = BRAND["colors"]["accent"]
+    for sx, sy, ss in [(-size//4, -size//3, 4), (size//5, -size//2.5, 3),
+                        (0, -size//2, 5), (size//3, -size//3.5, 3)]:
+        scx, scy = cx + int(sx), cy + int(sy)
+        for d in range(int(ss)):
+            for dx in range(-d, d + 1):
+                for dy_off in [-d, d]:
+                    px, py = scx + dx, scy + dy_off
+                    if 0 <= px < width and 0 <= py < height:
+                        pixels[py * width + px] = (*spark_color, 255)
+                for dx_off in [-d, d]:
+                    px, py = scx + dx_off, scy + dx
+                    if 0 <= px < width and 0 <= py < height:
+                        pixels[py * width + px] = (*spark_color, 255)
+
+
+def _draw_rounded_rect(pixels, width, height, x1, y1, x2, y2, radius, color):
+    """Draw a filled rounded rectangle."""
+    for y in range(y1, y2):
+        for x in range(x1, x2):
+            inside = False
+            # Check corners
+            if x < x1 + radius and y < y1 + radius:
+                inside = (x - x1 - radius) ** 2 + (y - y1 - radius) ** 2 <= radius ** 2
+            elif x >= x2 - radius and y < y1 + radius:
+                inside = (x - x2 + radius) ** 2 + (y - y1 - radius) ** 2 <= radius ** 2
+            elif x < x1 + radius and y >= y2 - radius:
+                inside = (x - x1 - radius) ** 2 + (y - y2 + radius) ** 2 <= radius ** 2
+            elif x >= x2 - radius and y >= y2 - radius:
+                inside = (x - x2 + radius) ** 2 + (y - y2 + radius) ** 2 <= radius ** 2
+            else:
+                inside = True
+            if inside and 0 <= x < width and 0 <= y < height:
+                pixels[y * width + x] = (*color, 255)
+
+
 def generate_logo(width=512, height=512, output_path=None):
-    """Generate a text-based ForgeFiles logo PNG."""
+    """Generate a branded ForgeFiles logo PNG with anvil icon."""
     output_path = output_path or str(BRAND_DIR / "forgefiles_logo.png")
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
@@ -156,40 +231,42 @@ def generate_logo(width=512, height=512, output_path=None):
 
     pixels = [(*bg, 255)] * (width * height)
 
-    # Draw a border/frame
-    border = 8
-    for y in range(height):
-        for x in range(width):
-            if x < border or x >= width - border or y < border or y >= height - border:
-                pixels[y * width + x] = (*accent, 255)
+    # Rounded border
+    _draw_rounded_rect(pixels, width, height, 0, 0, width, height, 20, accent)
+    _draw_rounded_rect(pixels, width, height, 6, 6, width - 6, height - 6, 16, bg)
 
-    # Draw brand name centered
+    # Draw anvil icon centered above text
+    icon_size = width // 4
+    icon_cy = height // 2 - icon_size // 3
+    _draw_anvil_icon(pixels, width, height, width // 2, icon_cy, icon_size, accent)
+
+    # Draw brand name below icon
     text = "FORGEFILES"
     scale = width // (len(text) * 6 + 10)
     scale = max(scale, 2)
     text_w = len(text) * 6 * scale
     text_h = 7 * scale
     tx = (width - text_w) // 2
-    ty = (height - text_h) // 2 - 20
+    ty = icon_cy + icon_size // 2 + 10
 
     _draw_text_simple(pixels, width, height, text, tx, ty, white, scale)
 
-    # Draw tagline smaller
-    tagline = "3D PRINTABLE"
-    tscale = max(scale // 2, 1)
-    tag_w = len(tagline) * 6 * tscale
-    _draw_text_simple(pixels, width, height, tagline,
-                      (width - tag_w) // 2, ty + text_h + 15,
-                      accent, tscale)
-
-    # Draw accent line
-    line_y = ty + text_h + 8
+    # Draw accent line under text
+    line_y = ty + text_h + 6
     line_w = text_w // 2
     line_x = (width - line_w) // 2
     for x in range(line_x, line_x + line_w):
         for dy in range(3):
             if 0 <= line_y + dy < height:
                 pixels[(line_y + dy) * width + x] = (*accent, 255)
+
+    # Draw tagline below line
+    tagline = "3D PRINTABLE DESIGNS"
+    tscale = max(scale // 2, 1)
+    tag_w = len(tagline) * 6 * tscale
+    _draw_text_simple(pixels, width, height, tagline,
+                      (width - tag_w) // 2, line_y + 10,
+                      BRAND["colors"]["gray"], tscale)
 
     _create_png(width, height, pixels, output_path)
     return output_path
@@ -384,15 +461,40 @@ def generate_animated_intro_blender(output_path=None, width=1920, height=1080, f
     render.engine = 'CYCLES'
     scene.cycles.samples = 64
     scene.cycles.use_denoising = True
-    render.image_settings.file_format = 'FFMPEG'
-    render.ffmpeg.format = 'MPEG4'
-    render.ffmpeg.codec = 'H264'
-    render.ffmpeg.constant_rate_factor = 'HIGH'
-    render.ffmpeg.audio_codec = 'NONE'
+
+    # Blender 5.0 removed FFMPEG output — render as PNG sequence + assemble
+    if bpy.app.version >= (5, 0, 0):
+        render.image_settings.file_format = 'PNG'
+        render.image_settings.color_mode = 'RGB'
+    else:
+        render.image_settings.file_format = 'FFMPEG'
+        render.ffmpeg.format = 'MPEG4'
+        render.ffmpeg.codec = 'H264'
+        render.ffmpeg.constant_rate_factor = 'HIGH'
+        render.ffmpeg.audio_codec = 'NONE'
 
     # Render
     render.filepath = output_path
     bpy.ops.render.render(animation=True)
+
+    # Assemble frames for Blender 5.0+
+    if bpy.app.version >= (5, 0, 0):
+        import subprocess as sp, glob, re
+        frames = sorted(glob.glob(output_path + "*.png"))
+        if frames:
+            first = os.path.basename(frames[0])
+            m = re.search(r'(\d+)\.png$', first)
+            if m:
+                prefix = first[:m.start(1)]
+                pattern = os.path.join(os.path.dirname(frames[0]), f"{prefix}%0{len(m.group(1))}d.png")
+                if not output_path.endswith('.mp4'):
+                    output_path += '.mp4'
+                sp.run(["ffmpeg", "-y", "-framerate", str(fps), "-i", pattern,
+                        "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p",
+                        output_path], capture_output=True)
+                for f in frames:
+                    try: os.remove(f)
+                    except OSError: pass
 
     return output_path
 
@@ -481,14 +583,38 @@ def generate_animated_outro_blender(output_path=None, width=1920, height=1080, f
     render.engine = 'CYCLES'
     scene.cycles.samples = 64
     scene.cycles.use_denoising = True
-    render.image_settings.file_format = 'FFMPEG'
-    render.ffmpeg.format = 'MPEG4'
-    render.ffmpeg.codec = 'H264'
-    render.ffmpeg.constant_rate_factor = 'HIGH'
-    render.ffmpeg.audio_codec = 'NONE'
+
+    if bpy.app.version >= (5, 0, 0):
+        render.image_settings.file_format = 'PNG'
+        render.image_settings.color_mode = 'RGB'
+    else:
+        render.image_settings.file_format = 'FFMPEG'
+        render.ffmpeg.format = 'MPEG4'
+        render.ffmpeg.codec = 'H264'
+        render.ffmpeg.constant_rate_factor = 'HIGH'
+        render.ffmpeg.audio_codec = 'NONE'
     render.filepath = output_path
 
     bpy.ops.render.render(animation=True)
+
+    if bpy.app.version >= (5, 0, 0):
+        import subprocess as sp, glob, re
+        frames = sorted(glob.glob(output_path + "*.png"))
+        if frames:
+            first = os.path.basename(frames[0])
+            m = re.search(r'(\d+)\.png$', first)
+            if m:
+                prefix = first[:m.start(1)]
+                pattern = os.path.join(os.path.dirname(frames[0]), f"{prefix}%0{len(m.group(1))}d.png")
+                if not output_path.endswith('.mp4'):
+                    output_path += '.mp4'
+                sp.run(["ffmpeg", "-y", "-framerate", str(fps), "-i", pattern,
+                        "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p",
+                        output_path], capture_output=True)
+                for f in frames:
+                    try: os.remove(f)
+                    except OSError: pass
+
     return output_path
 
 
@@ -562,14 +688,27 @@ def ensure_brand_assets(config=None):
                 assets["font"] = sf
                 break
 
-    # Sound logo (can't generate without audio lib — note if missing)
+    # Sound logo
     sound_path = BRAND_DIR / "sound_logo.mp3"
-    assets["sound_logo"] = str(sound_path) if sound_path.exists() else None
+    if sound_path.exists():
+        assets["sound_logo"] = str(sound_path)
+    else:
+        result = generate_sound_logo()
+        if result:
+            assets["sound_logo"] = result
+            assets["sound_logo_generated"] = True
+        else:
+            assets["sound_logo"] = None
 
-    # Music directory
+    # Music directory — generate placeholder tracks if empty
     music_dir = BRAND_DIR / "music"
     music_dir.mkdir(exist_ok=True)
     music_files = list(music_dir.glob("*.mp3")) + list(music_dir.glob("*.wav"))
+    if not music_files:
+        generated = generate_music_tracks(str(music_dir))
+        music_files = [Path(p) for p in generated]
+        if generated:
+            assets["music_generated"] = True
     assets["music_tracks"] = [str(m) for m in sorted(music_files)]
 
     return assets
@@ -586,6 +725,118 @@ MOOD_KEYWORDS = {
     "tech": ["tech", "electronic", "digital", "minimal", "synth"],
     "dark": ["dark", "moody", "mysterious", "suspense"],
 }
+
+
+def generate_music_tracks(output_dir=None):
+    """Generate placeholder background music tracks using FFmpeg sine wave synthesis.
+    Creates short ambient loops in different moods for auto-selection.
+    """
+    import subprocess
+
+    output_dir = output_dir or str(BRAND_DIR / "music")
+    os.makedirs(output_dir, exist_ok=True)
+
+    tracks = {
+        "chill_ambient_loop": {
+            "duration": 15,
+            "filter": (
+                "sine=frequency=220:duration=15,volume=0.3[a1];"
+                "sine=frequency=330:duration=15,volume=0.2[a2];"
+                "sine=frequency=440:duration=15,volume=0.15[a3];"
+                "[a1][a2][a3]amix=inputs=3,afade=t=in:st=0:d=2,afade=t=out:st=13:d=2"
+            ),
+        },
+        "epic_cinematic_swell": {
+            "duration": 15,
+            "filter": (
+                "sine=frequency=110:duration=15,volume=0.4[a1];"
+                "sine=frequency=165:duration=15,volume=0.3[a2];"
+                "sine=frequency=220:duration=15,volume=0.2[a3];"
+                "[a1][a2][a3]amix=inputs=3,"
+                "afade=t=in:st=0:d=5,afade=t=out:st=12:d=3,"
+                "bass=g=6:f=120"
+            ),
+        },
+        "tech_electronic_pulse": {
+            "duration": 15,
+            "filter": (
+                "sine=frequency=440:duration=15,volume=0.2[a1];"
+                "sine=frequency=880:duration=15,volume=0.1[a2];"
+                "[a1][a2]amix=inputs=2,"
+                "tremolo=f=4:d=0.5,"
+                "afade=t=in:st=0:d=1,afade=t=out:st=13:d=2"
+            ),
+        },
+        "upbeat_positive_energy": {
+            "duration": 15,
+            "filter": (
+                "sine=frequency=523:duration=15,volume=0.25[a1];"
+                "sine=frequency=659:duration=15,volume=0.2[a2];"
+                "sine=frequency=784:duration=15,volume=0.15[a3];"
+                "[a1][a2][a3]amix=inputs=3,"
+                "tremolo=f=2:d=0.3,"
+                "afade=t=in:st=0:d=1,afade=t=out:st=13:d=2"
+            ),
+        },
+        "dark_moody_atmosphere": {
+            "duration": 15,
+            "filter": (
+                "sine=frequency=82:duration=15,volume=0.4[a1];"
+                "sine=frequency=110:duration=15,volume=0.3[a2];"
+                "[a1][a2]amix=inputs=2,"
+                "lowpass=f=400,"
+                "afade=t=in:st=0:d=3,afade=t=out:st=12:d=3"
+            ),
+        },
+    }
+
+    generated = []
+    for name, spec in tracks.items():
+        output_path = os.path.join(output_dir, f"{name}.mp3")
+        if os.path.exists(output_path):
+            generated.append(output_path)
+            continue
+
+        cmd = [
+            "ffmpeg", "-y",
+            "-f", "lavfi", "-i", spec["filter"],
+            "-t", str(spec["duration"]),
+            "-c:a", "libmp3lame", "-b:a", "128k",
+            output_path
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode == 0:
+            generated.append(output_path)
+        else:
+            print(f"[BrandGen] Warning: Failed to generate {name}")
+
+    return generated
+
+
+def generate_sound_logo(output_path=None):
+    """Generate a short 2-second sonic brand sting using FFmpeg."""
+    import subprocess
+
+    output_path = output_path or str(BRAND_DIR / "sound_logo.mp3")
+    if os.path.exists(output_path):
+        return output_path
+
+    # Rising 3-note chime: C5 → E5 → G5
+    filter_str = (
+        "sine=frequency=523:duration=0.5,volume=0.4,afade=t=out:st=0.3:d=0.2[n1];"
+        "sine=frequency=659:duration=0.5,volume=0.4,afade=t=out:st=0.3:d=0.2[n2];"
+        "sine=frequency=784:duration=0.8,volume=0.5,afade=t=out:st=0.4:d=0.4[n3];"
+        "[n1][n2][n3]concat=n=3:v=0:a=1,afade=t=in:st=0:d=0.1"
+    )
+
+    cmd = [
+        "ffmpeg", "-y",
+        "-f", "lavfi", "-i", filter_str,
+        "-c:a", "libmp3lame", "-b:a", "192k",
+        str(output_path)
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    return output_path if result.returncode == 0 else None
 
 
 def match_music_to_mood(music_tracks, render_mode="turntable"):

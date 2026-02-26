@@ -1,0 +1,91 @@
+{
+  "blender_path": "C:/Program Files/Blender Foundation/Blender 5.0/blender.exe",
+  "render_engine": "CYCLES",
+  "render_samples": 128,
+  "fast_samples": 64,
+  "use_gpu": true,
+  "default_material": "gray_pla",
+  "turntable_duration_seconds": 6,
+  "fps": 30,
+  "default_platforms": [
+    "tiktok",
+    "reels",
+    "youtube",
+    "pinterest",
+    "reddit"
+  ],
+  "default_preset": "portfolio",
+  "default_camera_style": "standard",
+  "default_color_grade": "cinematic",
+  "caption_variants": 3,
+  "watermark_opacity": 0.3,
+  "watermark_position": "bottom_right",
+  "skip_existing": true,
+  "brand": {
+    "name": "ForgeFiles",
+    "tagline": "Premium 3D Printable Designs",
+    "website": "forgefiles.com",
+    "colors": {
+      "primary": "#ffffff",
+      "secondary": "#00b4d8",
+      "accent": "#ff6b35"
+    }
+  },
+  "posting_schedule": {
+    "tiktok": {
+      "frequency": "daily",
+      "best_times": [
+        "09:00",
+        "12:00",
+        "17:00",
+        "21:00"
+      ]
+    },
+    "reels": {
+      "frequency": "daily",
+      "best_times": [
+        "08:00",
+        "12:00",
+        "17:00"
+      ]
+    },
+    "youtube": {
+      "frequency": "3x_weekly",
+      "best_times": [
+        "14:00",
+        "16:00"
+      ]
+    },
+    "pinterest": {
+      "frequency": "5-10_daily",
+      "best_times": [
+        "20:00",
+        "21:00"
+      ]
+    },
+    "reddit": {
+      "frequency": "3-5_weekly",
+      "best_times": [
+        "10:00",
+        "14:00"
+      ]
+    }
+  },
+  "quality_presets": {
+    "social": {
+      "engine": "CYCLES",
+      "samples": 32,
+      "description": "Fast Cycles renders for social media. Headless-compatible."
+    },
+    "portfolio": {
+      "engine": "CYCLES",
+      "samples": 128,
+      "description": "Balanced quality for portfolio and website use."
+    },
+    "ultra": {
+      "engine": "CYCLES",
+      "samples": 512,
+      "description": "Maximum quality for hero content and print marketing."
+    }
+  }
+}
