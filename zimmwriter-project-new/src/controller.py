@@ -2790,6 +2790,19 @@ class ZimmWriterController:
         self.bring_to_front()
         time.sleep(0.5)
 
+        # 0. Ensure we're on the Bulk Writer screen
+        title = self.get_window_title()
+        if "Bulk" not in title:
+            logger.info(f"Not on Bulk Writer (on '{title}'), navigating...")
+            if "Menu" in title:
+                self.open_bulk_writer()
+            else:
+                self.back_to_menu()
+                time.sleep(2)
+                self.connect()
+                self.open_bulk_writer()
+            time.sleep(1)
+
         # 1. Load profile
         if profile_name:
             self.load_profile(profile_name)
