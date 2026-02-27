@@ -1,0 +1,134 @@
+{
+  "bmc": {
+    "page_url": "https://buymeacoffee.com/witchcraftyou",
+    "display_name": "Witchcraft For Beginners",
+    "coffee_name": "potion",
+    "webhook_url": "http://localhost:8095/webhooks/bmc"
+  },
+  "brand": {
+    "site_id": "witchcraftforbeginners",
+    "domain": "witchcraftforbeginners.com",
+    "substack": "https://witchcraftb.substack.com",
+    "primary_color": "#4A1C6F",
+    "secondary_color": "#C9A962",
+    "accent_color": "#8b5cf6",
+    "text_color": "#FFFFFF",
+    "background_dark": "#0a0a0f",
+    "headline_font": "Cinzel",
+    "body_font": "Lora"
+  },
+  "tips": {
+    "suggested_amounts": [
+      {"potions": 1, "price": 3, "label": "A quick blessing"},
+      {"potions": 3, "price": 9, "label": "A moon offering"},
+      {"potions": 5, "price": 15, "label": "A sacred tribute"}
+    ]
+  },
+  "tiers": {
+    "candlelight": {
+      "name": "Candlelight Circle",
+      "price_monthly": 3,
+      "bmc_fee_pct": 5,
+      "net_revenue": 2.85,
+      "perks": [
+        "Early blog access (48h before public)",
+        "Monthly Full Moon ritual post",
+        "Monthly grimoire quick reference card",
+        "Members-only post archive"
+      ]
+    },
+    "moonlit": {
+      "name": "Moonlit Coven",
+      "price_monthly": 7,
+      "bmc_fee_pct": 5,
+      "net_revenue": 6.65,
+      "perks": [
+        "Everything in Candlelight Circle",
+        "Monthly exclusive spell kit PDF",
+        "Quarterly sabbat workbook",
+        "Monthly tarot pull with interpretation",
+        "Priority access to new VelvetVeil products",
+        "Exclusive crystal & herb pairing guides"
+      ]
+    },
+    "high_priestess": {
+      "name": "High Priestess Circle",
+      "price_monthly": 15,
+      "bmc_fee_pct": 5,
+      "net_revenue": 14.25,
+      "perks": [
+        "Everything in Moonlit Coven",
+        "Full VelvetVeil digital library (30+ PDFs)",
+        "Monthly Q&A thread",
+        "Personalized monthly spell recommendation",
+        "Birthday ritual",
+        "Name on Sacred Circle page",
+        "Vote on content topics",
+        "Direct message access"
+      ]
+    }
+  },
+  "products": [
+    {
+      "id": "spell_book_beginner",
+      "title": "Beginner's Spell Book: 8 Essential Spells for New Practitioners",
+      "price": 5.99,
+      "etsy_price": 4.99,
+      "bmc_fee": 0.30,
+      "net_revenue": 5.69,
+      "tags": ["spells", "beginner", "grimoire", "witchcraft", "digital download"]
+    },
+    {
+      "id": "moon_journal",
+      "title": "Moon Phase Journal — Monthly Lunar Tracker & Ritual Planner",
+      "price": 7.99,
+      "etsy_price": 6.99,
+      "bmc_fee": 0.40,
+      "net_revenue": 7.59,
+      "tags": ["moon journal", "lunar tracker", "planner", "witchcraft", "moon phases"]
+    },
+    {
+      "id": "grimoire_herbs_crystals",
+      "title": "Grimoire Collection: Herbs & Crystals Quick Reference Guide",
+      "price": 7.99,
+      "etsy_price": 6.99,
+      "bmc_fee": 0.40,
+      "net_revenue": 7.59,
+      "tags": ["grimoire", "herbs", "crystals", "correspondences", "reference guide"]
+    },
+    {
+      "id": "samhain_kit",
+      "title": "Samhain Complete Ritual Kit — Ancestor Honor & Veil Working",
+      "price": 9.99,
+      "etsy_price": 8.99,
+      "bmc_fee": 0.50,
+      "net_revenue": 9.49,
+      "tags": ["samhain", "ritual kit", "sabbat", "ancestor", "halloween", "witchcraft"]
+    },
+    {
+      "id": "wheel_of_year_bundle",
+      "title": "Wheel of the Year Complete Bundle — All 8 Sabbat Ritual Kits",
+      "price": 39.99,
+      "etsy_price": 34.99,
+      "bmc_fee": 2.00,
+      "net_revenue": 37.99,
+      "tags": ["wheel of the year", "sabbats", "ritual kit", "bundle", "pagan", "witchcraft"]
+    },
+    {
+      "id": "complete_library",
+      "title": "The Complete Digital Grimoire Library — 30+ Professional PDFs",
+      "price": 59.99,
+      "etsy_price": null,
+      "bmc_fee": 3.00,
+      "net_revenue": 56.99,
+      "bmc_exclusive": true,
+      "tags": ["grimoire library", "complete collection", "digital download", "witchcraft", "exclusive"]
+    }
+  ],
+  "automation": {
+    "webhook_port": 8095,
+    "dashboard_url": "http://localhost:8000",
+    "dashboard_alerts_endpoint": "http://localhost:8000/api/alerts",
+    "grimoire_api": "http://localhost:8080"
+  }
+}
