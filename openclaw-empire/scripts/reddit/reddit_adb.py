@@ -293,7 +293,7 @@ def adb_port_scan(host: str) -> int | None:
             pass
 
     open_ports = []
-    for port in range(37000, 45000):
+    for port in range(34000, 50000):
         try:
             sock = socket.create_connection((host, port), timeout=0.15)
             sock.close()

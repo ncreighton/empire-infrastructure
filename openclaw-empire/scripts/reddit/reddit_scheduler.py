@@ -74,14 +74,20 @@ def generate_daily_plan(state: RedditState, safety: SafetyEngine) -> dict:
     num_sessions = random.randint(max(1, max_sessions - 1), max_sessions)
     sessions = []
 
-    # Generate random times between 8 AM and 10 PM
+    # Generate random times between now+1h and 10 PM (avoid scheduling in the past)
+    now = datetime.now()
+    min_hour = max(8, now.hour + 1)
+    if min_hour > 21:
+        # Too late to schedule anything meaningful
+        logger.info("Too late in the day to generate new sessions")
+        min_hour = 8  # Will generate for tomorrow's plan if re-run at 6:45 AM
     used_hours = set()
     for i in range(num_sessions):
         session_type = random.choice(session_pool)
         # Avoid consecutive sessions too close together
-        hour = random.randint(8, 22)
+        hour = random.randint(min_hour, 22)
         while hour in used_hours or any(abs(hour - h) < 2 for h in used_hours):
-            hour = random.randint(8, 22)
+            hour = random.randint(min_hour, 22)
             if len(used_hours) >= 7:
                 break
         minute = random.randint(0, 45)

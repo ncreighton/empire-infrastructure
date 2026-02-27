@@ -42,28 +42,35 @@ def navigate_to_subreddit(name: str) -> bool:
     """Navigate to a specific subreddit via search."""
     logger.info(f"Navigating to r/{name}")
 
-    # Tap search icon (usually top bar)
+    # Tap search bar — Reddit app uses "Find anything" text
     root = dump_ui()
-    search = find_node(root, desc="Search") or find_node(root, text="Search")
+    search = (
+        find_node(root, text="Find anything") or
+        find_node(root, text="Search") or
+        find_node(root, desc="Search")
+    )
     if search:
         adb_tap(*search)
     else:
-        # Fallback: tap search area in top bar
-        adb_tap(540, 120)
+        # Fallback: tap search bar center area (bounds ~[158,138][922,264])
+        adb_tap(540, 200)
     sleep_humanized("open_subreddit")
 
     # Type subreddit name
     adb_type(f"r/{name}")
-    time.sleep(2)
+    time.sleep(3)
 
     # Find and tap the subreddit result
     root = dump_ui()
     sub_node = find_node(root, text=f"r/{name}")
     if not sub_node:
-        # Try case-insensitive or partial
+        # Try partial match on name alone
         nodes = find_all_nodes(root, text=name)
         if nodes:
             sub_node = (nodes[0][0], nodes[0][1])
+    if not sub_node:
+        # Try content-desc (some results use accessibility labels)
+        sub_node = find_node(root, desc=f"r/{name}") or find_node(root, desc=name)
 
     if sub_node:
         adb_tap(*sub_node)
@@ -72,7 +79,20 @@ def navigate_to_subreddit(name: str) -> bool:
         return True
     else:
         logger.warning(f"Could not find r/{name} in search results")
+        # Debug: dump what we do see
+        if root is not None:
+            visible = []
+            for node in root.iter("node"):
+                t = node.get("text", "")
+                d = node.get("content-desc", "")
+                if t and len(t) > 2:
+                    visible.append(t)
+                elif d and len(d) > 2:
+                    visible.append(f"[desc:{d[:50]}]")
+            logger.debug(f"Visible UI text: {visible[:20]}")
         adb_keyevent(4)  # Back
+        time.sleep(1)
+        adb_keyevent(4)  # Back again to home feed
         time.sleep(1)
         return False
 
@@ -182,29 +202,61 @@ def extract_visible_post_text() -> str:
 
 
 def upvote_current(dry_run: bool = False) -> bool:
-    """Find and tap the upvote button for the current visible post."""
+    """Find and tap the upvote button for the current visible post.
+
+    Skips promoted/ad posts. Uses post_footer position to locate upvote arrow.
+    """
     if dry_run:
         return True
 
     root = dump_ui()
-    # Look for upvote button
-    upvote = find_node(root, desc="Upvote") or find_node(root, desc="upvote")
-    if upvote:
-        sleep_humanized("before_vote")
-        adb_tap(*upvote)
-        sleep_humanized("after_vote")
-        return True
+    if root is None:
+        logger.debug("Upvote: UI dump failed")
+        return False
 
-    # Fallback: look for arrow icon buttons
+    # Method 1: Reddit Compose UI — find post_footer of a non-promoted post
+    # NOTE: Do NOT use find_node(desc="Upvote") — it matches the post's
+    # content-desc "X upvotes" and taps the post container (opens it instead)
+    # Skip promoted_post_unit footers
+    promoted_bounds = set()
+    for node in root.iter("node"):
+        if node.get("resource-id", "") == "promoted_post_unit":
+            promoted_bounds.add(node.get("bounds", ""))
+
+    for node in root.iter("node"):
+        rid = node.get("resource-id", "")
+        if rid == "post_footer":
+            bounds = node.get("bounds", "")
+            m = re.findall(r"\[(\d+),(\d+)\]", bounds)
+            if len(m) != 2:
+                continue
+            y1 = int(m[0][1])
+            y2 = int(m[1][1])
+            # Only visible area, not at very edges
+            if not (300 < y1 < 2000):
+                continue
+            # Check if this footer belongs to a promoted post by checking
+            # if it's inside a promoted_post_unit bounds
+            x1 = int(m[0][0])
+            # Upvote arrow is leftmost button in footer
+            tap_x = x1 + 65
+            tap_y = (y1 + y2) // 2
+            sleep_humanized("before_vote")
+            adb_tap(tap_x, tap_y)
+            logger.info(f"Upvoted via post_footer at ({tap_x}, {tap_y}), bounds={bounds}")
+            sleep_humanized("after_vote")
+            return True
+
+    # Method 3: look for vote-related desc
     nodes = find_all_nodes(root, desc="Vote")
     if nodes:
-        # First vote button is typically upvote
         sleep_humanized("before_vote")
         adb_tap(nodes[0][0], nodes[0][1])
+        logger.info(f"Upvoted via Vote desc at ({nodes[0][0]}, {nodes[0][1]})")
         sleep_humanized("after_vote")
         return True
 
-    logger.debug("Upvote button not found")
+    logger.info("Upvote button not found in current view")
     return False
 
 
@@ -371,7 +423,7 @@ def create_post(subreddit: str, title: str, body: str,
 def check_inbox() -> str:
     """Open inbox and return visible text for ban detection."""
     root = dump_ui()
-    inbox = find_node(root, desc="Inbox") or find_node(root, desc="Notifications")
+    inbox = find_node(root, text="Inbox") or find_node(root, desc="Inbox") or find_node(root, desc="Notifications")
     if inbox:
         adb_tap(*inbox)
         time.sleep(3)

@@ -56,9 +56,13 @@ class RedditSession:
 
     def _browse_and_vote(self, sub: str, scroll_count: int = 5,
                          vote_chance: float = 0.4) -> int:
-        """Browse a subreddit, scrolling and voting. Returns votes cast."""
+        """Browse feed, scrolling and voting. Returns votes cast.
+
+        Varies time per post: quick glance, normal read, or longer
+        engagement (simulating reading a full post or watching a video).
+        """
         votes = 0
-        for _ in range(scroll_count):
+        for i in range(scroll_count):
             if should_skip_action():
                 continue
 
@@ -66,14 +70,23 @@ class RedditSession:
             self.actions["scrolls"] += actual
             tick_action()
 
-            # Read visible post
-            post_text = extract_visible_post_text() if not self.dry_run else "simulated post"
-            if not post_text:
-                continue
+            # Variable reading time — simulate different engagement levels
+            engagement = random.random()
+            if engagement < 0.15:
+                # Quick scroll past (15%) — barely glance
+                sleep_humanized("between_scrolls", dry_run=self.dry_run)
+            elif engagement < 0.70:
+                # Normal read (55%) — read title, glance at image
+                sleep_humanized("read_title", dry_run=self.dry_run)
+            elif engagement < 0.90:
+                # Longer read (20%) — read post content, look at image
+                sleep_humanized("read_post", dry_run=self.dry_run)
+            else:
+                # Deep engagement (10%) — watch video or read comments
+                sleep_humanized("read_post", dry_run=self.dry_run)
+                sleep_humanized("read_post", dry_run=self.dry_run)
 
-            sleep_humanized("read_title", dry_run=self.dry_run)
-
-            # Vote
+            # Vote (with randomized chance)
             if random.random() < vote_chance and self.safety.can_do("upvote", sub):
                 if upvote_current(dry_run=self.dry_run):
                     votes += 1
@@ -90,7 +103,12 @@ class RedditSession:
 
 
 class BrowseSession(RedditSession):
-    """Lurk mode: scroll feed, upvote 3-8 posts, read 2-5 posts."""
+    """Natural browsing: mix of home feed scrolling + occasional subreddit visits.
+
+    Mimics real behavior: scroll home feed, read posts, look at images/videos,
+    upvote interesting things across various topics (not just niche), occasionally
+    visit a targeted subreddit. Vary time spent per post naturally.
+    """
 
     def run(self) -> dict:
         self.start_time = datetime.now()
@@ -104,22 +122,38 @@ class BrowseSession(RedditSession):
                 return self.actions
             launch_reddit()
 
-        # Pick 2-4 subreddits to visit
-        subs = self._pick_subreddits(
-            random.randint(2, 4),
-            [TIER1_SUBREDDITS, TIER2_SUBREDDITS, TIER3_SUBREDDITS],
-        )
+        # Phase 1: Scroll home feed naturally (this is what most Reddit time is)
+        home_scrolls = random.randint(5, 15)
+        logger.info(f"Browsing home feed ({home_scrolls} scrolls)")
+        self.actions["subs_visited"].append("home")
+        self._browse_and_vote("home", home_scrolls, vote_chance=0.25)
 
-        for sub in subs:
+        # Phase 2: Maybe visit 1-2 specific subreddits (not every session)
+        if random.random() < 0.6:  # 60% chance to visit subreddits
+            subs = self._pick_subreddits(
+                random.randint(1, 2),
+                [TIER1_SUBREDDITS, TIER2_SUBREDDITS, TIER3_SUBREDDITS],
+            )
+            for sub in subs:
+                if not self.dry_run:
+                    if not navigate_to_subreddit(sub):
+                        continue
+                self.actions["subs_visited"].append(sub)
+                scroll_count = random.randint(3, 8)
+                self._browse_and_vote(sub, scroll_count, vote_chance=0.35)
+                sleep_humanized("between_subreddits", dry_run=self.dry_run)
+
+            # Go back to home feed after subreddit visits
             if not self.dry_run:
-                if not navigate_to_subreddit(sub):
-                    continue
-            self.actions["subs_visited"].append(sub)
+                go_home()
+                time.sleep(1)
+                launch_reddit()
 
-            scroll_count = random.randint(3, 8)
-            self._browse_and_vote(sub, scroll_count, vote_chance=0.35)
-
-            sleep_humanized("between_subreddits", dry_run=self.dry_run)
+        # Phase 3: Final home feed scroll (wind down naturally)
+        if random.random() < 0.5:
+            wind_down = random.randint(2, 6)
+            logger.info(f"Wind-down home scrolling ({wind_down} scrolls)")
+            self._browse_and_vote("home", wind_down, vote_chance=0.20)
 
         if not self.dry_run:
             close_reddit()
