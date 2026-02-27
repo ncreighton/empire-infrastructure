@@ -8,25 +8,18 @@ from ..models import VisualAsset, Storyboard
 
 logger = logging.getLogger(__name__)
 
-# Try importing the shared ai_gen_client
+# Shared ai_gen_client disabled — module lacks generate_image attribute.
+# Use direct FAL.ai API calls instead.
 _ai_gen_client = None
-try:
-    scripts_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "scripts")
-    if os.path.isdir(scripts_path):
-        sys.path.insert(0, scripts_path)
-        import ai_gen_client as _ai_gen_client_mod
-        _ai_gen_client = _ai_gen_client_mod
-except ImportError:
-    pass
 
 
 PEXELS_BASE = "https://api.pexels.com/videos/search"
 
-# Cinematic prompt suffixes by format
+# Cinematic prompt suffixes by format — maximized for FLUX Pro quality
 _PROMPT_SUFFIX = {
-    "short": ", cinematic, high quality, 4K, vertical composition, dramatic lighting, depth of field, professional photography, color graded",
-    "standard": ", cinematic, high quality, 4K, widescreen composition, dramatic lighting, depth of field, professional photography, color graded",
-    "square": ", cinematic, high quality, 4K, centered composition, dramatic lighting, depth of field, professional photography, color graded",
+    "short": ", ultra realistic, cinematic film still, 8K UHD, sharp focus, dramatic volumetric lighting, depth of field, film grain, color graded, vertical composition, professional cinematography, photorealistic, award-winning photography",
+    "standard": ", ultra realistic, cinematic film still, 8K UHD, sharp focus, dramatic volumetric lighting, depth of field, film grain, color graded, widescreen composition, professional cinematography, photorealistic, award-winning photography",
+    "square": ", ultra realistic, cinematic film still, 8K UHD, sharp focus, dramatic volumetric lighting, depth of field, film grain, color graded, centered composition, professional cinematography, photorealistic, award-winning photography",
 }
 
 
@@ -134,47 +127,67 @@ class VisualEngine:
             except Exception as e:
                 logger.warning(f"ai_gen_client failed: {e}")
 
-        # Direct FAL.ai API call
-        try:
-            response = requests.post(
-                "https://fal.run/fal-ai/flux-2-pro",
-                headers={
-                    "Authorization": f"Key {fal_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "prompt": enhanced_prompt,
-                    "image_size": {
-                        "width": 1080 if storyboard.format == "short" else 1920,
-                        "height": 1920 if storyboard.format == "short" else 1080,
-                    },
-                    "num_images": 1,
-                },
-                timeout=60,
-            )
-            response.raise_for_status()
-            data = response.json()
-            image_url = data.get("images", [{}])[0].get("url", "")
+        # Direct FAL.ai API call with retry on 422
+        width = 1080 if storyboard.format == "short" else 1920
+        height = 1920 if storyboard.format == "short" else 1080
 
-            return VisualAsset(
-                scene_number=scene.scene_number,
-                asset_type="image",
-                source="fal_ai",
-                prompt=enhanced_prompt,
-                url=image_url,
-                cost=0.06,
-                duration=scene.duration_seconds,
-            )
-        except Exception as e:
-            logger.warning(f"FAL.ai generation failed: {e}")
-            return VisualAsset(
-                scene_number=scene.scene_number,
-                asset_type="image",
-                source="fal_ai_failed",
-                prompt=enhanced_prompt,
-                cost=0.0,
-                duration=scene.duration_seconds,
-            )
+        prompts_to_try = [enhanced_prompt]
+        # Simplified fallback prompt (shorter, fewer modifiers)
+        simple_prompt = scene.visual_prompt + ", cinematic, high quality, 4K"
+        prompts_to_try.append(simple_prompt)
+        # Generic fallback (strips topic to avoid content filters)
+        shot = scene.shot_type or "cinematic"
+        generic_prompt = f"{shot} shot, dramatic lighting, epic atmosphere, ancient mythology, 4K, cinematic, depth of field, professional photography"
+        prompts_to_try.append(generic_prompt)
+
+        for attempt, prompt in enumerate(prompts_to_try):
+            try:
+                response = requests.post(
+                    "https://fal.run/fal-ai/flux-pro/v1.1",
+                    headers={
+                        "Authorization": f"Key {fal_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "prompt": prompt,
+                        "image_size": {"width": width, "height": height},
+                        "num_images": 1,
+                        "num_inference_steps": 40,
+                        "guidance_scale": 3.5,
+                        "safety_tolerance": "5",
+                    },
+                    timeout=90,
+                )
+                response.raise_for_status()
+                data = response.json()
+                image_url = data.get("images", [{}])[0].get("url", "")
+
+                return VisualAsset(
+                    scene_number=scene.scene_number,
+                    asset_type="image",
+                    source="fal_ai",
+                    prompt=prompt,
+                    url=image_url,
+                    cost=0.06,
+                    duration=scene.duration_seconds,
+                )
+            except requests.exceptions.HTTPError as e:
+                if e.response is not None and e.response.status_code == 422 and attempt < len(prompts_to_try) - 1:
+                    logger.warning(f"FAL.ai 422 on scene {scene.scene_number} attempt {attempt+1}, retrying with simpler prompt")
+                    continue
+                logger.warning(f"FAL.ai generation failed: {e}")
+            except Exception as e:
+                logger.warning(f"FAL.ai generation failed: {e}")
+                break
+
+        return VisualAsset(
+            scene_number=scene.scene_number,
+            asset_type="image",
+            source="fal_ai_failed",
+            prompt=enhanced_prompt,
+            cost=0.0,
+            duration=scene.duration_seconds,
+        )
 
     def _search_pexels(self, scene, storyboard: Storyboard) -> VisualAsset:
         """Search Pexels for stock video clips (rare fallback only)."""

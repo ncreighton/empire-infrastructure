@@ -66,6 +66,18 @@ class TestVideoForgeEngine:
         assert result.plan.subtitle_track is not None
         assert len(result.plan.subtitle_track.segments) > 0
 
+    def test_create_video_has_visual_assets(self, engine):
+        """New pipeline step: visual assets should be generated."""
+        result = engine.create_video("moon phases", "witchcraftforbeginners", render=False)
+        assert result.plan.visual_assets is not None
+        assert len(result.plan.visual_assets) >= 5
+
+    def test_create_video_has_narration_audio_data(self, engine):
+        """New pipeline step: narration audio data should be populated."""
+        result = engine.create_video("smart home tips", "smarthomewizards", render=False)
+        assert result.plan.narration_audio_data is not None
+        assert len(result.plan.narration_audio_data) >= 3
+
     def test_create_video_amplified(self, engine):
         result = engine.create_video("meditation guide", "manifestandalign", render=False)
         assert result.plan.amplified is True
@@ -79,7 +91,12 @@ class TestVideoForgeEngine:
     def test_create_video_cost_estimated(self, engine):
         result = engine.create_video("smart home tips", "smarthomewizards", render=False)
         assert result.cost.total_cost > 0
-        assert result.cost.total_cost < 1.00  # Should be well under $1
+        assert result.cost.total_cost < 1.00
+
+    def test_create_video_cost_includes_audio(self, engine):
+        """Cost should include ElevenLabs audio estimation."""
+        result = engine.create_video("test topic", "witchcraftforbeginners", render=False)
+        assert result.cost.audio_cost >= 0  # Should have ElevenLabs cost estimate
 
     def test_create_video_logged_to_codex(self, engine):
         engine.create_video("test topic", "witchcraftforbeginners", render=False)
@@ -105,7 +122,12 @@ class TestVideoForgeEngine:
         cost = engine.estimate_cost("test topic", "smarthomewizards")
         assert "total_cost" in cost
         assert cost["total_cost"] > 0
-        assert cost["total_cost"] < 0.50
+        assert cost["total_cost"] < 1.00
+
+    def test_estimate_cost_includes_audio(self, engine):
+        cost = engine.estimate_cost("test topic", "smarthomewizards")
+        assert "audio_cost" in cost
+        assert cost["audio_cost"] >= 0
 
     def test_create_video_standard_format(self, engine):
         result = engine.create_video(
@@ -130,3 +152,12 @@ class TestVideoForgeEngine:
             result = engine.create_video(topic, niche, render=False)
             assert result.status == "success", f"Failed for {niche}: {result.errors}"
             assert result.plan.storyboard is not None
+
+    def test_audio_plan_has_elevenlabs(self, engine):
+        """Audio plan should be configured for ElevenLabs."""
+        result = engine.create_video("test", "witchcraftforbeginners", render=False)
+        audio_plan = result.plan.audio_plan
+        assert audio_plan.tts_provider == "elevenlabs"
+        assert audio_plan.elevenlabs_voice_id
+        assert audio_plan.elevenlabs_model == "eleven_turbo_v2_5"
+        assert "stability" in audio_plan.voice_settings

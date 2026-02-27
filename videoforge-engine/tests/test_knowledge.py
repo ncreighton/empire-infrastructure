@@ -15,7 +15,8 @@ from videoforge.knowledge import (
     TRENDING_FORMATS, get_trending_formats,
     AUDIO_SOURCES, get_music_source,
 )
-from videoforge.voice import VOICE_PROFILES, get_voice, get_voice_id, get_all_niches
+from videoforge.voice import VOICE_PROFILES, get_voice, get_voice_id, get_all_niches, get_elevenlabs_voice
+from videoforge.knowledge.audio_library import get_music_url, MUSIC_TRACKS
 
 
 # ── Shot Types ──
@@ -80,9 +81,15 @@ class TestPacing:
         result = get_pacing(platform="tiktok")
         assert result["name"] == "TikTok"
 
-    def test_get_pacing_niche_overrides_platform(self):
+    def test_get_pacing_niche_merges_with_platform(self):
+        """Niche merges voice/energy into platform timing constraints."""
         result = get_pacing(platform="youtube_shorts", niche="witchcraftforbeginners")
-        assert result["name"] == "Witchcraft / Spiritual"
+        # Platform timing preserved (youtube_shorts)
+        assert result["ideal_total_duration"] == (30, 60)
+        assert result["max_scene_duration"] == 5
+        # Niche voice/energy merged in
+        assert result["word_rate_wpm"] == 140
+        assert result["energy_curve"] == "ritual_arc"
 
     def test_word_rate_wpm_present(self):
         for key, p in PACING_PROFILES.items():
@@ -253,9 +260,28 @@ class TestAudioLibrary:
     def test_edge_tts_is_free(self):
         assert AUDIO_SOURCES["edge_tts"]["cost"] == 0.0
 
+    def test_elevenlabs_source_exists(self):
+        assert "elevenlabs" in AUDIO_SOURCES
+        assert AUDIO_SOURCES["elevenlabs"]["quality"] == "premium"
+
     def test_get_music_source(self):
         result = get_music_source("witchcraft_ambient")
         assert "search_terms" in result
+
+    def test_music_tracks_have_urls(self):
+        assert len(MUSIC_TRACKS) >= 8
+        for mood, tracks in MUSIC_TRACKS.items():
+            assert len(tracks) >= 2, f"{mood} needs at least 2 tracks"
+            for url in tracks:
+                assert url.startswith("https://"), f"{mood} has invalid URL"
+
+    def test_get_music_url(self):
+        url = get_music_url("witchcraft_ambient")
+        assert url.startswith("https://")
+
+    def test_get_music_url_fallback(self):
+        url = get_music_url("nonexistent_mood")
+        assert url.startswith("https://")  # Falls back to lo_fi
 
 
 # ── Voice Profiles ──
@@ -267,6 +293,31 @@ class TestVoiceProfiles:
     def test_each_has_voice_id(self):
         for key, v in VOICE_PROFILES.items():
             assert v["voice_id"].startswith("en-"), f"{key} bad voice_id"
+
+    def test_each_has_elevenlabs_voice_id(self):
+        for key, v in VOICE_PROFILES.items():
+            assert "elevenlabs_voice_id" in v, f"{key} missing elevenlabs_voice_id"
+            assert len(v["elevenlabs_voice_id"]) > 10, f"{key} has invalid elevenlabs_voice_id"
+
+    def test_each_has_elevenlabs_settings(self):
+        for key, v in VOICE_PROFILES.items():
+            assert "elevenlabs_stability" in v, f"{key} missing elevenlabs_stability"
+            assert "elevenlabs_similarity" in v, f"{key} missing elevenlabs_similarity"
+            assert "elevenlabs_style" in v, f"{key} missing elevenlabs_style"
+            assert 0.0 <= v["elevenlabs_stability"] <= 1.0, f"{key} stability out of range"
+            assert 0.0 <= v["elevenlabs_similarity"] <= 1.0, f"{key} similarity out of range"
+            assert 0.0 <= v["elevenlabs_style"] <= 1.0, f"{key} style out of range"
+
+    def test_get_elevenlabs_voice(self):
+        el = get_elevenlabs_voice("witchcraftforbeginners")
+        assert el["voice_id"] == "29vD33N1CtxCmqQRPOHJ"
+        assert el["voice_name"] == "Drew"
+        assert el["stability"] == 0.55
+        assert "similarity_boost" in el
+
+    def test_get_elevenlabs_voice_fallback(self):
+        el = get_elevenlabs_voice("nonexistent")
+        assert el["voice_id"]  # Should fall back to default (aidiscoverydigest)
 
     def test_get_voice_fallback(self):
         v = get_voice("nonexistent")

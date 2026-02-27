@@ -1,6 +1,7 @@
-"""ScriptEngine — AI-powered narration script generation via OpenRouter.
+"""ScriptEngine — AI-powered narration script generation.
 
-Uses DeepSeek V3 for cheap bulk ($0.002/script) and Claude Sonnet for quality ($0.02/script).
+Supports OpenRouter (DeepSeek/Claude) and direct Anthropic API (Haiku fallback).
+Structured around HOOK-COMMITMENT-VALUE-CTA with retention anchors.
 """
 
 import os
@@ -8,10 +9,12 @@ import json
 import logging
 import requests
 from ..models import VideoScript, Storyboard
+from ..knowledge.niche_profiles import get_niche_profile
 
 logger = logging.getLogger(__name__)
 
 OPENROUTER_BASE = "https://openrouter.ai/api/v1/chat/completions"
+ANTHROPIC_BASE = "https://api.anthropic.com/v1/messages"
 
 # Model routing
 MODELS = {
@@ -34,7 +37,6 @@ def _get_api_key() -> str:
     """Get OpenRouter API key from environment."""
     key = os.environ.get("OPENROUTER_API_KEY", "")
     if not key:
-        # Try loading from config
         env_path = os.path.join(
             os.path.dirname(__file__), "..", "..", "configs", "api_keys.env"
         )
@@ -44,6 +46,11 @@ def _get_api_key() -> str:
                     if line.startswith("OPENROUTER_API_KEY="):
                         key = line.strip().split("=", 1)[1]
     return key
+
+
+def _get_anthropic_key() -> str:
+    """Get Anthropic API key from environment."""
+    return os.environ.get("ANTHROPIC_API_KEY", "")
 
 
 class ScriptEngine:
@@ -57,17 +64,31 @@ class ScriptEngine:
                         model_tier: str = None) -> VideoScript:
         """Generate a narration script from a storyboard.
 
-        Falls back to storyboard narration if API is unavailable.
+        Priority: OpenRouter → Anthropic Haiku → storyboard fallback.
         """
         model = MODELS.get(model_tier or self.model_tier, self.model)
-        api_key = _get_api_key()
-
-        if not api_key:
-            logger.info("No OpenRouter API key — using storyboard narration as script")
-            return self._fallback_script(storyboard)
-
         prompt = self._build_prompt(storyboard)
+        system = self._system_prompt(storyboard)
 
+        # Try OpenRouter first
+        api_key = _get_api_key()
+        if api_key:
+            result = self._call_openrouter(api_key, model, system, prompt, storyboard)
+            if result:
+                return result
+
+        # Try Anthropic Haiku as fallback
+        anthropic_key = _get_anthropic_key()
+        if anthropic_key:
+            result = self._call_anthropic(anthropic_key, system, prompt, storyboard)
+            if result:
+                return result
+
+        logger.info("No API keys available — using storyboard narration as script")
+        return self._fallback_script(storyboard)
+
+    def _call_openrouter(self, api_key, model, system, prompt, storyboard):
+        """Call OpenRouter API for script generation."""
         try:
             response = requests.post(
                 OPENROUTER_BASE,
@@ -78,7 +99,7 @@ class ScriptEngine:
                 json={
                     "model": model["id"],
                     "messages": [
-                        {"role": "system", "content": self._system_prompt(storyboard)},
+                        {"role": "system", "content": system},
                         {"role": "user", "content": prompt},
                     ],
                     "max_tokens": 1000,
@@ -92,7 +113,6 @@ class ScriptEngine:
             content = data["choices"][0]["message"]["content"]
             usage = data.get("usage", {})
 
-            # Calculate cost
             input_tokens = usage.get("prompt_tokens", 0)
             output_tokens = usage.get("completion_tokens", 0)
             cost = (input_tokens / 1000 * model["cost_per_1k_input"] +
@@ -101,8 +121,47 @@ class ScriptEngine:
             return self._parse_script(content, storyboard, model["name"], cost)
 
         except Exception as e:
-            logger.warning(f"Script generation failed: {e} — using fallback")
-            return self._fallback_script(storyboard)
+            logger.warning(f"OpenRouter script generation failed: {e}")
+            return None
+
+    def _call_anthropic(self, api_key, system, prompt, storyboard):
+        """Call Anthropic API directly using Haiku for cheap script generation."""
+        try:
+            response = requests.post(
+                ANTHROPIC_BASE,
+                headers={
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "claude-haiku-4-5-20251001",
+                    "max_tokens": 1000,
+                    "system": system,
+                    "messages": [
+                        {"role": "user", "content": prompt},
+                    ],
+                },
+                timeout=30,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            content = data["content"][0]["text"]
+            usage = data.get("usage", {})
+
+            input_tokens = usage.get("input_tokens", 0)
+            output_tokens = usage.get("output_tokens", 0)
+            # Haiku pricing: $0.80/M input, $4.00/M output
+            cost = (input_tokens / 1_000_000 * 0.80 +
+                    output_tokens / 1_000_000 * 4.00)
+
+            logger.info(f"Anthropic Haiku script: {output_tokens} tokens, ${cost:.4f}")
+            return self._parse_script(content, storyboard, "Claude Haiku", cost)
+
+        except Exception as e:
+            logger.warning(f"Anthropic script generation failed: {e}")
+            return None
 
     def generate_topics(self, niche: str, count: int = 10,
                         content_type: str = "educational") -> list:
@@ -138,7 +197,6 @@ class ScriptEngine:
             content = response.json()["choices"][0]["message"]["content"]
 
             # Parse JSON array from response
-            # Handle potential markdown code blocks
             content = content.strip()
             if content.startswith("```"):
                 content = content.split("\n", 1)[1].rsplit("```", 1)[0].strip()
@@ -149,14 +207,36 @@ class ScriptEngine:
             return [f"{niche} topic idea {i+1}" for i in range(count)]
 
     def _system_prompt(self, storyboard: Storyboard) -> str:
-        """Build system prompt for script generation."""
+        """Build system prompt for script generation with HOOK-COMMITMENT-VALUE-CTA structure."""
+        profile = get_niche_profile(storyboard.niche)
+        voice = profile.get("voice", {})
+        tone = voice.get("tone", "engaging, clear")
+        vocab = voice.get("vocab", [])
+        avoid = voice.get("avoid", [])
+        vocab_str = ", ".join(vocab[:5]) if vocab else ""
+        avoid_str = ", ".join(avoid[:3]) if avoid else ""
+
         return (
-            f"You are a viral video scriptwriter for the '{storyboard.niche}' niche. "
+            f"You are a viral short-form video scriptwriter for the '{storyboard.niche}' niche.\n"
             f"Platform: {storyboard.platform}. Format: {storyboard.format}. "
-            f"Target duration: {storyboard.total_duration:.0f} seconds. "
-            f"Write conversational, engaging narration that hooks in the first 2 seconds. "
-            f"Each segment should be 1-3 sentences. Use simple, punchy language. "
-            f"NEVER start with 'Welcome to' or 'In this video'. Jump straight into the hook."
+            f"Target duration: {storyboard.total_duration:.0f} seconds.\n\n"
+            f"VOICE: {tone}\n"
+            f"KEY VOCABULARY: {vocab_str}\n"
+            f"NEVER USE: {avoid_str}\n\n"
+            f"STRUCTURE: HOOK → COMMITMENT → VALUE → CTA\n"
+            f"- HOOK (first 2 seconds): Pattern interrupt. Make them stop scrolling.\n"
+            f"- COMMITMENT (next 3 seconds): Tell them what they'll learn and why it matters.\n"
+            f"- VALUE (body): Deliver 3 punchy insights. Each one lands in 1-2 short sentences.\n"
+            f"- CTA (last 3 seconds): Clear, direct call to action.\n\n"
+            f"RULES:\n"
+            f"- NEVER start with 'Welcome to' or 'In this video'\n"
+            f"- NEVER say 'Let me explain' or 'As you can see'\n"
+            f"- Short punchy sentences. 8-12 words max per sentence.\n"
+            f"- Add a retention anchor every 5 seconds ('But here's the thing...', "
+            f"'And it gets better...', 'Watch this...')\n"
+            f"- Use pattern interrupts to reset attention\n"
+            f"- Conversational tone — like talking to a friend\n"
+            f"- Every sentence must earn the next second of watch time"
         )
 
     def _build_prompt(self, storyboard: Storyboard) -> str:
@@ -165,18 +245,24 @@ class ScriptEngine:
         for scene in storyboard.scenes:
             scenes_desc.append(
                 f"Scene {scene.scene_number} ({scene.duration_seconds}s, {scene.shot_type}): "
-                f"Role: {scene.narration[:50] if scene.narration else 'visual only'}"
+                f"{scene.narration[:80] if scene.narration else 'visual only'}"
             )
+
+        target_words = int(storyboard.total_duration * 2.5)
 
         return (
             f"Topic: {storyboard.title}\n"
             f"Hook formula: {storyboard.hook_formula}\n"
             f"CTA: {storyboard.cta_text}\n\n"
             f"Storyboard scenes:\n" + "\n".join(scenes_desc) + "\n\n"
-            f"Write a complete narration script. Return each scene's narration "
-            f"on a separate line, prefixed with 'Scene N: '. "
-            f"Total word count should be approximately "
-            f"{int(storyboard.total_duration * 2.5)} words."
+            f"Write the complete narration. Rules:\n"
+            f"- One line per scene, prefixed with 'Scene N: '\n"
+            f"- Target ~{target_words} words total\n"
+            f"- Scene 1 must be an immediate hook — no setup, no intro\n"
+            f"- Use short, punchy sentences (8-12 words)\n"
+            f"- Include at least 2 retention anchors ('But here's the thing...', etc.)\n"
+            f"- End with a specific, actionable CTA\n"
+            f"- Make every word count. Cut any filler."
         )
 
     def _parse_script(self, content: str, storyboard: Storyboard,
@@ -191,6 +277,8 @@ class ScriptEngine:
                 # Remove "Scene N: " prefix if present
                 if ":" in line[:20]:
                     line = line.split(":", 1)[1].strip()
+                # Strip markdown formatting (bold, italic markers)
+                line = line.strip("*_").strip()
                 if line:
                     segments.append(line)
 

@@ -1,7 +1,7 @@
-"""Voice profiles for 16 niches — Edge TTS voice IDs and speaking style."""
+"""Voice profiles for 16 niches — ElevenLabs primary, Edge TTS fallback."""
 
-# Edge TTS voice map: niche -> {voice_id, name, rate, pitch, style_note}
-# See: https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support
+# Each niche gets a curated ElevenLabs voice with tuned settings,
+# plus an Edge TTS fallback voice for when ElevenLabs is unavailable.
 
 VOICE_PROFILES = {
     "witchcraftforbeginners": {
@@ -11,6 +11,11 @@ VOICE_PROFILES = {
         "pitch": "-2st",
         "style": "calm",
         "style_note": "Mystical, warm, inviting — guides viewers into ritual space",
+        "elevenlabs_voice_id": "29vD33N1CtxCmqQRPOHJ",
+        "elevenlabs_voice_name": "Drew",
+        "elevenlabs_stability": 0.55,
+        "elevenlabs_similarity": 0.70,
+        "elevenlabs_style": 0.05,
     },
     "smarthomewizards": {
         "voice_id": "en-US-GuyNeural",
@@ -19,6 +24,11 @@ VOICE_PROFILES = {
         "pitch": "0st",
         "style": "friendly",
         "style_note": "Enthusiastic tech reviewer, clear and upbeat",
+        "elevenlabs_voice_id": "nPczCjzI2devNBz1zQrb",
+        "elevenlabs_voice_name": "Brian",
+        "elevenlabs_stability": 0.50,
+        "elevenlabs_similarity": 0.75,
+        "elevenlabs_style": 0.00,
     },
     "mythicalarchives": {
         "voice_id": "en-US-DavisNeural",
@@ -27,6 +37,11 @@ VOICE_PROFILES = {
         "pitch": "-3st",
         "style": "documentary",
         "style_note": "Deep, cinematic narrator — epic mythology storytelling",
+        "elevenlabs_voice_id": "CYw3kZ02Hs0563khs1Fj",
+        "elevenlabs_voice_name": "Dave",
+        "elevenlabs_stability": 0.35,
+        "elevenlabs_similarity": 0.75,
+        "elevenlabs_style": 0.15,
     },
     "bulletjournals": {
         "voice_id": "en-US-JennyNeural",
@@ -35,6 +50,11 @@ VOICE_PROFILES = {
         "pitch": "+1st",
         "style": "gentle",
         "style_note": "Soft, creative, encouraging — artistic community vibe",
+        "elevenlabs_voice_id": "Xb7hH8MSUJpSbSDYk0k2",
+        "elevenlabs_voice_name": "Alice",
+        "elevenlabs_stability": 0.55,
+        "elevenlabs_similarity": 0.70,
+        "elevenlabs_style": 0.00,
     },
     "wealthfromai": {
         "voice_id": "en-US-TonyNeural",
@@ -43,6 +63,11 @@ VOICE_PROFILES = {
         "pitch": "0st",
         "style": "confident",
         "style_note": "Fast-paced hustle energy, authoritative on AI money topics",
+        "elevenlabs_voice_id": "zcAOhNBS3c14rBihAFp1",
+        "elevenlabs_voice_name": "Giovanni",
+        "elevenlabs_stability": 0.60,
+        "elevenlabs_similarity": 0.80,
+        "elevenlabs_style": 0.00,
     },
     "aidiscoverydigest": {
         "voice_id": "en-US-JasonNeural",
@@ -51,6 +76,11 @@ VOICE_PROFILES = {
         "pitch": "0st",
         "style": "newscast",
         "style_note": "News anchor delivery — breaking AI developments",
+        "elevenlabs_voice_id": "991lF4hc0xxfec4Y6B0i",
+        "elevenlabs_voice_name": "Henry",
+        "elevenlabs_stability": 0.65,
+        "elevenlabs_similarity": 0.80,
+        "elevenlabs_style": 0.00,
     },
     "aiinactionhub": {
         "voice_id": "en-US-BrandonNeural",
@@ -59,6 +89,11 @@ VOICE_PROFILES = {
         "pitch": "+1st",
         "style": "tutorial",
         "style_note": "Practical, step-by-step tutorial energy",
+        "elevenlabs_voice_id": "onwK4e9ZLuTAKqWW03F9",
+        "elevenlabs_voice_name": "Daniel",
+        "elevenlabs_stability": 0.65,
+        "elevenlabs_similarity": 0.80,
+        "elevenlabs_style": 0.00,
     },
     "pulsegearreviews": {
         "voice_id": "en-US-AndrewNeural",
@@ -67,6 +102,11 @@ VOICE_PROFILES = {
         "pitch": "-1st",
         "style": "review",
         "style_note": "Honest reviewer, fitness-forward, data-driven",
+        "elevenlabs_voice_id": "pNInz6obpgDQGcFmaJgB",
+        "elevenlabs_voice_name": "Adam",
+        "elevenlabs_stability": 0.40,
+        "elevenlabs_similarity": 0.75,
+        "elevenlabs_style": 0.10,
     },
     "wearablegearreviews": {
         "voice_id": "en-US-EricNeural",
@@ -75,6 +115,11 @@ VOICE_PROFILES = {
         "pitch": "0st",
         "style": "review",
         "style_note": "Tech reviewer, balanced and thorough",
+        "elevenlabs_voice_id": "ODq5zmih8GrVes37Dizd",
+        "elevenlabs_voice_name": "Patrick",
+        "elevenlabs_stability": 0.40,
+        "elevenlabs_similarity": 0.75,
+        "elevenlabs_style": 0.10,
     },
     "smarthomegearreviews": {
         "voice_id": "en-US-RogerNeural",
@@ -83,6 +128,11 @@ VOICE_PROFILES = {
         "pitch": "-1st",
         "style": "expert",
         "style_note": "Hands-on expert, trustworthy product breakdown",
+        "elevenlabs_voice_id": "SOYHLrjzK2X1ezoPC6cr",
+        "elevenlabs_voice_name": "Harry",
+        "elevenlabs_stability": 0.50,
+        "elevenlabs_similarity": 0.75,
+        "elevenlabs_style": 0.00,
     },
     "clearainews": {
         "voice_id": "en-US-SteffanNeural",
@@ -91,6 +141,11 @@ VOICE_PROFILES = {
         "pitch": "0st",
         "style": "newscast",
         "style_note": "Fast news delivery, clear AI explanations",
+        "elevenlabs_voice_id": "991lF4hc0xxfec4Y6B0i",
+        "elevenlabs_voice_name": "Henry",
+        "elevenlabs_stability": 0.65,
+        "elevenlabs_similarity": 0.80,
+        "elevenlabs_style": 0.00,
     },
     "theconnectedhaven": {
         "voice_id": "en-US-SaraNeural",
@@ -99,6 +154,11 @@ VOICE_PROFILES = {
         "pitch": "+2st",
         "style": "warm",
         "style_note": "Warm family voice, relatable and supportive",
+        "elevenlabs_voice_id": "21m00Tcm4TlvDq8ikWAM",
+        "elevenlabs_voice_name": "Rachel",
+        "elevenlabs_stability": 0.50,
+        "elevenlabs_similarity": 0.75,
+        "elevenlabs_style": 0.00,
     },
     "manifestandalign": {
         "voice_id": "en-US-AmberNeural",
@@ -107,6 +167,11 @@ VOICE_PROFILES = {
         "pitch": "+1st",
         "style": "meditation",
         "style_note": "Soothing manifestation guide, positive affirmations",
+        "elevenlabs_voice_id": "z9fAnlkpzviPz146aGWa",
+        "elevenlabs_voice_name": "Glinda",
+        "elevenlabs_stability": 0.55,
+        "elevenlabs_similarity": 0.70,
+        "elevenlabs_style": 0.05,
     },
     "familyflourish": {
         "voice_id": "en-US-MichelleNeural",
@@ -115,6 +180,11 @@ VOICE_PROFILES = {
         "pitch": "+1st",
         "style": "conversational",
         "style_note": "Friendly mom energy, practical parenting tips",
+        "elevenlabs_voice_id": "oWAxZDx7w5VEj9dCyTzz",
+        "elevenlabs_voice_name": "Grace",
+        "elevenlabs_stability": 0.50,
+        "elevenlabs_similarity": 0.75,
+        "elevenlabs_style": 0.00,
     },
     "moonrituallibrary": {
         "voice_id": "en-US-AriaNeural",
@@ -123,6 +193,11 @@ VOICE_PROFILES = {
         "pitch": "-2st",
         "style": "meditative",
         "style_note": "Deep ritual guide, slow and intentional",
+        "elevenlabs_voice_id": "29vD33N1CtxCmqQRPOHJ",
+        "elevenlabs_voice_name": "Drew",
+        "elevenlabs_stability": 0.55,
+        "elevenlabs_similarity": 0.70,
+        "elevenlabs_style": 0.05,
     },
     "celebrationseason": {
         "voice_id": "en-US-JennyNeural",
@@ -131,6 +206,11 @@ VOICE_PROFILES = {
         "pitch": "+2st",
         "style": "excited",
         "style_note": "Festive, high-energy party planning voice",
+        "elevenlabs_voice_id": "nPczCjzI2devNBz1zQrb",
+        "elevenlabs_voice_name": "Brian",
+        "elevenlabs_stability": 0.45,
+        "elevenlabs_similarity": 0.75,
+        "elevenlabs_style": 0.10,
     },
 }
 
@@ -143,6 +223,18 @@ def get_voice(niche: str) -> dict:
 def get_voice_id(niche: str) -> str:
     """Get just the Edge TTS voice ID string."""
     return get_voice(niche)["voice_id"]
+
+
+def get_elevenlabs_voice(niche: str) -> dict:
+    """Get ElevenLabs-specific voice config for a niche."""
+    profile = get_voice(niche)
+    return {
+        "voice_id": profile.get("elevenlabs_voice_id", ""),
+        "voice_name": profile.get("elevenlabs_voice_name", ""),
+        "stability": profile.get("elevenlabs_stability", 0.5),
+        "similarity_boost": profile.get("elevenlabs_similarity", 0.75),
+        "style": profile.get("elevenlabs_style", 0.0),
+    }
 
 
 def get_all_niches() -> list:

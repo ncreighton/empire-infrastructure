@@ -87,14 +87,14 @@ ENRICH → EXPAND → FORTIFY → ANTICIPATE → OPTIMIZE → VALIDATE
 - Track 1: Background music (royalty-free, looped, 15% volume, fade in/out)
 - Track 2: Scene compositions in sequence
   - ALL scenes get real images (no text_card black screens)
-  - Each composition: image (Ken Burns + color grade) + gradient overlay + text/subtitle + narration audio
-  - Hook/CTA scenes: large centered text overlay (8 vmin, text-fly animation) ON TOP of image
-  - Other scenes: bottom subtitle (82%, stroke + shadow + rounded bg, word-fly animation)
-  - 12 Ken Burns variants with easing: zoom_in_dramatic, zoom_out_reveal, pan_left_sweep, pan_right_sweep, drift_up_zoom, drift_down_reveal, corner_focus_ul, corner_focus_lr, push_in_documentary, wide_reveal, diagonal_sweep, subtle_breathe
-  - Dark gradient overlay on every scene (transparent top → 75% black bottom)
+  - Each composition: image (Ken Burns + entrance/exit anims + color grade) + text/subtitle + narration audio
+  - NO full-screen gradient overlay — text readability via heavy stroke + shadow + background pill
+  - Hook/CTA scenes: large centered text overlay (8 vmin, varied animations: text-fly/text-spin/text-scale/text-slide)
+  - Other scenes: bottom subtitle (82%, stroke + shadow + rounded bg, varied animations: text-fly/text-slide/text-scale/text-reveal/text-wave)
+  - 12 Ken Burns variants with easing + 6 entrance animations (fade/scale/slide/circular-wipe/wipe) + 2 exit animations
   - Color grading per niche (accent overlay 8% + contrast filter)
-  - Scene transitions with easing: crossfade, slide, fade, flash, whip_pan, circular_wipe, spin
-  - Voice-driven scene durations (word count / WPM + buffer)
+  - Scene transitions with easing: crossfade, slide, fade, flash, whip_pan, circular_wipe, spin, color_wipe, film_roll
+  - Voice-driven scene durations (word count / WPM, no buffer)
 
 ## Voice Profiles (16 niches)
 

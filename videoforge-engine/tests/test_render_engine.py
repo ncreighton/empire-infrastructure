@@ -1,7 +1,11 @@
 """Tests for RenderEngine — composition-based RenderScript building and cost estimation."""
 
 import pytest
-from videoforge.assembly.render_engine import RenderEngine, KEN_BURNS_VARIANTS, TRANSITION_MAP
+from videoforge.assembly.render_engine import (
+    RenderEngine, KEN_BURNS_VARIANTS, TRANSITION_MAP,
+    IMAGE_ENTRANCE_ANIMATIONS, IMAGE_EXIT_ANIMATIONS,
+    SUBTITLE_ANIMATION_STYLES, OVERLAY_ANIMATION_STYLES,
+)
 from videoforge.forge.video_smith import VideoSmith
 from videoforge.models import CostBreakdown, VisualAsset
 
@@ -262,9 +266,9 @@ class TestKenBurns:
         assert len(names) == len(set(names)), "All Ken Burns variants must have unique names"
 
 
-class TestGradientOverlay:
-    def test_gradient_overlay_on_all_scenes(self):
-        """Every scene composition must have a gradient overlay shape."""
+class TestNoGradientOverlay:
+    def test_no_fullscreen_gradient_on_image_scenes(self):
+        """Image scenes must NOT have a full-screen gradient overlay shape."""
         smith = VideoSmith(db_path=":memory:")
         plan = smith.to_video_plan("test topic", "witchcraftforbeginners")
         plan.optimizations = {"asset_routing": []}
@@ -282,7 +286,81 @@ class TestGradientOverlay:
         for comp in compositions:
             shapes = [el for el in comp["elements"] if el.get("type") == "shape"]
             gradient_shapes = [s for s in shapes if isinstance(s.get("fill_color"), list)]
-            assert len(gradient_shapes) >= 1, "Every scene must have a gradient overlay"
+            assert len(gradient_shapes) == 0, "No full-screen gradient overlay on image scenes"
+
+    def test_subtitles_have_strong_readability(self):
+        """Subtitles must have heavy stroke + shadow + background for readability without gradient."""
+        smith = VideoSmith(db_path=":memory:")
+        plan = smith.to_video_plan("test topic", "witchcraftforbeginners")
+        plan.optimizations = {"asset_routing": []}
+        engine = RenderEngine()
+        rs = engine.build_renderscript(plan)
+        compositions = [e for e in rs["elements"] if e.get("type") == "composition"]
+        for comp in compositions:
+            texts = [el for el in comp.get("elements", []) if el.get("type") == "text"]
+            for text_el in texts:
+                if text_el.get("y") == "82%":
+                    assert "0.9" in text_el.get("stroke_color", ""), "Need heavy stroke"
+                    assert text_el.get("shadow_blur", 0) >= 10, "Need strong shadow"
+                    assert text_el.get("background_color"), "Need background pill"
+
+
+class TestDynamicAnimations:
+    def test_image_entrance_animations_defined(self):
+        assert len(IMAGE_ENTRANCE_ANIMATIONS) >= 4
+
+    def test_image_exit_animations_defined(self):
+        assert len(IMAGE_EXIT_ANIMATIONS) >= 2
+
+    def test_subtitle_animation_variety(self):
+        assert len(SUBTITLE_ANIMATION_STYLES) >= 4
+
+    def test_overlay_animation_variety(self):
+        assert len(OVERLAY_ANIMATION_STYLES) >= 3
+
+    def test_images_have_entrance_and_exit_animations(self):
+        """Image elements should have Ken Burns + entrance + exit animations."""
+        smith = VideoSmith(db_path=":memory:")
+        plan = smith.to_video_plan("test topic", "witchcraftforbeginners")
+        plan.optimizations = {"asset_routing": []}
+        plan.visual_assets = [
+            VisualAsset(
+                scene_number=i + 1, asset_type="image", source="fal_ai",
+                prompt="test", url=f"https://example.com/{i+1}.png",
+                cost=0.05, duration=s.duration_seconds,
+            )
+            for i, s in enumerate(plan.storyboard.scenes)
+        ]
+        engine = RenderEngine()
+        rs = engine.build_renderscript(plan)
+        compositions = [e for e in rs["elements"] if e.get("type") == "composition"]
+        for comp in compositions:
+            images = [el for el in comp["elements"] if el.get("type") == "image"]
+            for img in images:
+                anims = img.get("animations", [])
+                # Should have at least 3 animations: Ken Burns + entrance + exit
+                assert len(anims) >= 3, f"Image should have KB + entrance + exit, got {len(anims)}"
+                # Check for at least one animation at "end" time (exit)
+                has_exit = any(a.get("time") == "end" for a in anims)
+                assert has_exit, "Image should have an exit animation"
+
+    def test_subtitle_animations_vary_across_scenes(self):
+        """Different scenes should get different subtitle animation styles."""
+        smith = VideoSmith(db_path=":memory:")
+        plan = smith.to_video_plan("test topic", "witchcraftforbeginners")
+        plan.optimizations = {"asset_routing": []}
+        engine = RenderEngine()
+        rs = engine.build_renderscript(plan)
+        compositions = [e for e in rs["elements"] if e.get("type") == "composition"]
+        anim_types = set()
+        for comp in compositions:
+            texts = [el for el in comp.get("elements", []) if el.get("type") == "text"]
+            for text_el in texts:
+                if text_el.get("y") == "82%":
+                    first_anim = text_el.get("animations", [{}])[0]
+                    anim_types.add(first_anim.get("type", ""))
+        # Should have at least 2 different animation types across scenes
+        assert len(anim_types) >= 2, f"Subtitles should have varied animations, got: {anim_types}"
 
 
 class TestColorGrading:
@@ -317,7 +395,7 @@ class TestTransitionMap:
 
     def test_crossfade_is_fade(self):
         assert TRANSITION_MAP["crossfade"]["type"] == "fade"
-        assert TRANSITION_MAP["crossfade"]["duration"] == 1
+        assert TRANSITION_MAP["crossfade"]["duration"] == 0.8
 
     def test_slide_left(self):
         assert TRANSITION_MAP["slide_left"]["type"] == "slide"

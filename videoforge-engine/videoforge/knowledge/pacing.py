@@ -137,11 +137,21 @@ NICHE_PACING_MAP = {
 
 
 def get_pacing(platform: str = None, niche: str = None) -> dict:
-    """Get pacing profile. Niche override takes priority over platform."""
+    """Get pacing profile. Merges platform timing with niche voice/energy.
+
+    Platform controls: ideal_total_duration, max/min_scene_duration, cuts_per_minute.
+    Niche controls: word_rate_wpm, energy_curve, hook_window_seconds.
+    """
+    base = PACING_PROFILES.get(platform, PACING_PROFILES["youtube_shorts"])
+
     if niche and niche in NICHE_PACING_MAP:
         niche_key = NICHE_PACING_MAP[niche]
-        if niche_key in PACING_PROFILES:
-            return PACING_PROFILES[niche_key]
-    if platform and platform in PACING_PROFILES:
-        return PACING_PROFILES[platform]
-    return PACING_PROFILES["youtube_shorts"]
+        niche_profile = PACING_PROFILES.get(niche_key)
+        if niche_profile:
+            merged = dict(base)
+            merged["word_rate_wpm"] = niche_profile.get("word_rate_wpm", base["word_rate_wpm"])
+            merged["energy_curve"] = niche_profile.get("energy_curve", base["energy_curve"])
+            merged["hook_window_seconds"] = niche_profile.get("hook_window_seconds", base["hook_window_seconds"])
+            return merged
+
+    return base

@@ -137,11 +137,15 @@ class AudioPlan:
     """Audio configuration for a video."""
     voice_id: str
     voice_name: str
-    tts_provider: str = "edge_tts"
+    tts_provider: str = "elevenlabs"
     music_track: str = ""
     music_source: str = ""
     music_volume: float = 0.15
     sfx_cues: list = field(default_factory=list)
+    # ElevenLabs settings
+    elevenlabs_voice_id: str = ""
+    elevenlabs_model: str = "eleven_turbo_v2_5"
+    voice_settings: dict = field(default_factory=dict)  # {stability, similarity_boost, style}
 
 
 @dataclass
@@ -260,6 +264,7 @@ class VideoPlan:
     audio_plan: Optional[AudioPlan] = None
     subtitle_track: Optional[SubtitleTrack] = None
     visual_assets: list = field(default_factory=list)
+    narration_audio_data: list = field(default_factory=list)  # Per-scene {scene_number, base64, duration}
     cost: Optional[CostBreakdown] = None
     # AMPLIFY stage data
     enrichments: dict = field(default_factory=dict)

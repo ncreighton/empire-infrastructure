@@ -81,73 +81,113 @@ class VideoForgeEngine:
                      format: str = "short",
                      render: bool = True,
                      publish: bool = False) -> VideoForgeResult:
-        """Full video creation pipeline: enhance → forge → amplify → assemble → render.
+        """Full video creation pipeline.
 
-        Args:
-            topic: Video topic
-            niche: Niche ID (e.g., 'witchcraftforbeginners')
-            platform: Target platform
-            format: 'short' or 'standard'
-            render: Whether to send to Creatomate for rendering
-            publish: Whether to publish after rendering
-
-        Returns:
-            VideoForgeResult with complete pipeline data
+        Steps:
+        [1] Enhance query
+        [2] Scout analysis
+        [3] Craft storyboard (VideoSmith)
+        [4] AMPLIFY pipeline
+        [5] Score + enhance (Sentinel)
+        [6] Generate AI script (ScriptEngine)
+        [7] Generate visual assets (VisualEngine) — FAL.ai per scene
+        [8] Generate narration audio (AudioEngine) — ElevenLabs per scene
+        [9] Generate subtitles (SubtitleEngine)
+        [10] Build RenderScript with real assets, audio, animations
+        [11] Submit to Creatomate → render URL
+        [12] Log to VideoCodex
         """
         errors = []
 
-        # 1. Enhance the query
-        logger.info(f"[1/7] Enhancing query: {topic}")
+        # [1] Enhance the query
+        logger.info(f"[1/12] Enhancing query: {topic}")
         enhanced = self.enhancer.enhance(topic, niche, platform)
 
-        # 2. Scout analysis
-        logger.info("[2/7] Scouting topic...")
+        # [2] Scout analysis
+        logger.info("[2/12] Scouting topic...")
         scout_result = self.scout.analyze(topic, niche, platform)
 
-        # 3. Generate storyboard via VideoSmith
-        logger.info("[3/7] Crafting storyboard...")
+        # [3] Generate storyboard via VideoSmith
+        logger.info("[3/12] Crafting storyboard...")
         plan = self.smith.to_video_plan(topic, niche, platform, format)
 
-        # 4. AMPLIFY the plan
-        logger.info("[4/7] Amplifying plan...")
+        # [4] AMPLIFY the plan
+        logger.info("[4/12] Amplifying plan...")
         amplify_result = self.amplify.amplify(plan)
         plan = amplify_result.plan
 
-        # 5. Score with Sentinel
-        logger.info("[5/7] Scoring quality...")
+        # [5] Score with Sentinel
+        logger.info("[5/12] Scoring quality...")
         plan, sentinel_score = self.sentinel.score_and_enhance(plan, threshold=70)
 
-        # 6. Generate AI script (optional — enhances storyboard narration)
-        logger.info("[6/7] Generating script...")
+        # [6] Generate AI script (enhances storyboard narration)
+        logger.info("[6/12] Generating script...")
         script = self.script_engine.generate_script(plan.storyboard)
         plan.script = script
 
-        # Update storyboard narration with AI script if better
+        # Write AI script back to scene narration (replaces template filler)
         if script.word_count > 0 and script.model_used != "fallback_storyboard":
-            # Keep AI-generated script
+            all_segments = [script.hook] + script.body_segments + [script.cta]
+            for i, scene in enumerate(plan.storyboard.scenes):
+                if i < len(all_segments) and all_segments[i]:
+                    scene.narration = all_segments[i]
+                    scene.subtitle_text = all_segments[i]
+            # Recalculate scene durations with new narration
+            from .knowledge.pacing import get_pacing
+            pacing = get_pacing(platform=platform, niche=niche)
+            self.smith._calculate_scene_durations(plan.storyboard.scenes, pacing)
+            plan.storyboard.total_duration = sum(
+                s.duration_seconds for s in plan.storyboard.scenes
+            )
             plan.status = "scripted"
+            logger.info(f"AI script applied: {script.model_used}, {script.word_count} words")
 
-        # Generate subtitles
+        # [7] Generate visual assets (FAL.ai for each scene)
+        logger.info("[7/12] Generating visual assets...")
+        routing = plan.optimizations.get("asset_routing", [])
+        visual_assets = self.visual_engine.generate_assets(plan.storyboard, routing)
+        plan.visual_assets = visual_assets
+
+        # [8] Generate narration audio (ElevenLabs per scene)
+        logger.info("[8/12] Generating narration audio...")
+        narration_data = self.audio_engine.generate_full_narration(
+            plan.storyboard, niche
+        )
+        plan.narration_audio_data = narration_data
+
+        # [9] Generate subtitles
+        logger.info("[9/12] Generating subtitles...")
         subtitle_track = self.subtitle_engine.generate(plan.storyboard)
         plan.subtitle_track = subtitle_track
 
-        # 7. Render (if requested)
+        # [10-11] Render (if requested)
         render_result = None
         if render:
-            logger.info("[7/7] Rendering video...")
+            logger.info("[10/12] Building RenderScript...")
+            logger.info("[11/12] Rendering video...")
             render_result = self.render_engine.render(plan, wait=True)
             plan.render_id = render_result.get("render_id", "")
             plan.render_url = render_result.get("url", "")
             plan.status = "rendered" if render_result.get("url") else "render_failed"
         else:
-            logger.info("[7/7] Skipping render (dry run)")
+            logger.info("[10-11/12] Skipping render (dry run)")
             plan.status = "assembled"
 
-        # Calculate cost
+        # [12] Calculate cost + log
+        logger.info("[12/12] Logging to codex...")
         cost = self.render_engine.estimate_cost(plan)
         if script.cost > 0:
             cost.script_cost = script.cost
-            cost.total_cost = cost.script_cost + cost.visual_cost + cost.render_cost
+
+        # Add actual ElevenLabs cost
+        audio_cost = 0.0
+        for aud in narration_data:
+            audio_cost += self.audio_engine.estimate_elevenlabs_cost(aud.get("text", ""))
+        cost.audio_cost = round(audio_cost, 4)
+
+        cost.total_cost = round(
+            cost.script_cost + cost.visual_cost + cost.audio_cost + cost.render_cost, 4
+        )
         plan.cost = cost
 
         # Log to codex
@@ -168,6 +208,8 @@ class VideoForgeEngine:
             self.codex.log_cost("script", cost.script_cost, provider=script.model_used, video_id=video_id)
         if cost.visual_cost > 0:
             self.codex.log_cost("visual", cost.visual_cost, video_id=video_id)
+        if cost.audio_cost > 0:
+            self.codex.log_cost("audio", cost.audio_cost, provider="elevenlabs", video_id=video_id)
         if cost.render_cost > 0:
             self.codex.log_cost("render", cost.render_cost, provider="creatomate", video_id=video_id)
 
