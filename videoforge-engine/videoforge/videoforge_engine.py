@@ -142,6 +142,16 @@ class VideoForgeEngine:
             plan.status = "scripted"
             logger.info(f"AI script applied: {script.model_used}, {script.word_count} words")
 
+        # [6.5] Update visual prompts from AI visual directions
+        if script.visual_directions:
+            updated_count = 0
+            for i, scene in enumerate(plan.storyboard.scenes):
+                if i < len(script.visual_directions) and script.visual_directions[i]:
+                    scene.visual_prompt = script.visual_directions[i]
+                    updated_count += 1
+            if updated_count > 0:
+                logger.info(f"Visual prompts updated from AI directions: {updated_count} scenes")
+
         # [7] Generate visual assets (FAL.ai for each scene)
         logger.info("[7/12] Generating visual assets...")
         routing = plan.optimizations.get("asset_routing", [])

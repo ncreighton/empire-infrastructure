@@ -5,6 +5,8 @@ import sys
 import logging
 import requests
 from ..models import VisualAsset, Storyboard
+from ..knowledge.niche_profiles import get_niche_profile
+from ..knowledge.domain_expertise import get_style_suffix
 
 logger = logging.getLogger(__name__)
 
@@ -15,12 +17,44 @@ _ai_gen_client = None
 
 PEXELS_BASE = "https://api.pexels.com/videos/search"
 
-# Cinematic prompt suffixes by format — maximized for FLUX Pro quality
+# Niche-category-based style suffixes — replaces one-size-fits-all cinematic
+_NICHE_STYLE_SUFFIXES = {
+    "tech": ", clean product photography, soft ambient lighting, modern minimalist interior, shallow depth of field, editorial style, sharp focus, 4K, professional",
+    "ai_news": ", futuristic digital environment, holographic displays, neon accents, clean tech aesthetic, sharp focus, 4K, professional photography",
+    "witchcraft": ", mystical atmosphere, candlelight, soft ethereal glow, dark moody background, sacred space aesthetic, shallow depth of field, fine art photography",
+    "mythology": ", epic oil painting style, dramatic chiaroscuro lighting, ancient grandeur, detailed textures, museum quality, masterwork illustration",
+    "lifestyle": ", bright natural lighting, cozy warm interior, lifestyle photography, inviting atmosphere, editorial style, shallow depth of field, 4K",
+    "fitness": ", dynamic action photography, high contrast, gym or outdoor setting, motivational energy, sharp focus, sports photography, 4K",
+    "business": ", professional corporate aesthetic, clean modern workspace, data visualization, confident atmosphere, editorial photography, 4K",
+}
+
+# Composition hint by format (appended after niche style suffix)
+_COMPOSITION_HINT = {
+    "short": ", vertical composition",
+    "standard": ", widescreen composition",
+    "square": ", centered composition",
+}
+
+# Legacy _PROMPT_SUFFIX kept for backwards compatibility with existing tests
 _PROMPT_SUFFIX = {
     "short": ", ultra realistic, cinematic film still, 8K UHD, sharp focus, dramatic volumetric lighting, depth of field, film grain, color graded, vertical composition, professional cinematography, photorealistic, award-winning photography",
     "standard": ", ultra realistic, cinematic film still, 8K UHD, sharp focus, dramatic volumetric lighting, depth of field, film grain, color graded, widescreen composition, professional cinematography, photorealistic, award-winning photography",
     "square": ", ultra realistic, cinematic film still, 8K UHD, sharp focus, dramatic volumetric lighting, depth of field, film grain, color graded, centered composition, professional cinematography, photorealistic, award-winning photography",
 }
+
+
+def _get_niche_suffix(niche: str, fmt: str) -> str:
+    """Get the niche-specific prompt suffix with composition hint.
+
+    Uses per-niche style from domain expertise if available,
+    falls back to category-level suffix, then generic cinematic.
+    """
+    # Try niche-specific suffix from domain expertise
+    suffix = get_style_suffix(niche)
+
+    # Add composition hint
+    composition = _COMPOSITION_HINT.get(fmt, _COMPOSITION_HINT["short"])
+    return suffix + composition
 
 
 def _get_pexels_key() -> str:
@@ -102,9 +136,10 @@ class VisualEngine:
                 duration=scene.duration_seconds,
             )
 
-        # Enhance prompt with cinematic quality suffix
-        fmt = storyboard.format if storyboard.format in _PROMPT_SUFFIX else "short"
-        enhanced_prompt = scene.visual_prompt + _PROMPT_SUFFIX[fmt]
+        # Enhance prompt with niche-specific quality suffix
+        fmt = storyboard.format if storyboard.format in _COMPOSITION_HINT else "short"
+        niche_suffix = _get_niche_suffix(storyboard.niche, fmt)
+        enhanced_prompt = scene.visual_prompt + niche_suffix
 
         # Use shared ai_gen_client if available
         if _ai_gen_client:

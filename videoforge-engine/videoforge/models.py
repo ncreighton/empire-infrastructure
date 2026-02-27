@@ -130,6 +130,7 @@ class VideoScript:
     estimated_duration: float = 0.0
     model_used: str = ""
     cost: float = 0.0
+    visual_directions: list = field(default_factory=list)  # Per-scene visual descriptions from AI
 
 
 @dataclass

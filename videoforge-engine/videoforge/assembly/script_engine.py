@@ -7,9 +7,11 @@ Structured around HOOK-COMMITMENT-VALUE-CTA with retention anchors.
 import os
 import json
 import logging
+import re
 import requests
 from ..models import VideoScript, Storyboard
 from ..knowledge.niche_profiles import get_niche_profile
+from ..knowledge.domain_expertise import get_domain_expertise
 
 logger = logging.getLogger(__name__)
 
@@ -216,25 +218,52 @@ class ScriptEngine:
         vocab_str = ", ".join(vocab[:5]) if vocab else ""
         avoid_str = ", ".join(avoid[:3]) if avoid else ""
 
+        # Inject domain expertise
+        expertise = get_domain_expertise(storyboard.niche, storyboard.title)
+        expertise_block = ""
+        if expertise:
+            products = expertise.get("key_products", [])
+            tips = expertise.get("expert_tips", [])
+            products_str = ", ".join(products[:8]) if products else "none available"
+            tips_str = "\n".join(f"- {t}" for t in tips[:5]) if tips else "- Use your expertise"
+
+            expertise_block = (
+                f"\nDOMAIN EXPERTISE — use these real facts in your script:\n"
+                f"Key products/tools: {products_str}\n"
+                f"Expert tips:\n{tips_str}\n"
+            )
+
+            # Add topic-matched talking point if available
+            matched = expertise.get("matched_talking_point")
+            if matched:
+                expertise_block += (
+                    f'\nTalking points for "{matched["topic"]}":\n'
+                    f'- {matched["content"]}\n'
+                )
+
         return (
-            f"You are a viral short-form video scriptwriter for the '{storyboard.niche}' niche.\n"
+            f"You are an expert {storyboard.niche} content creator making viral short-form videos.\n"
             f"Platform: {storyboard.platform}. Format: {storyboard.format}. "
             f"Target duration: {storyboard.total_duration:.0f} seconds.\n\n"
             f"VOICE: {tone}\n"
             f"KEY VOCABULARY: {vocab_str}\n"
-            f"NEVER USE: {avoid_str}\n\n"
+            f"NEVER USE: {avoid_str}\n"
+            f"{expertise_block}\n"
             f"STRUCTURE: HOOK → COMMITMENT → VALUE → CTA\n"
-            f"- HOOK (first 2 seconds): Pattern interrupt. Make them stop scrolling.\n"
-            f"- COMMITMENT (next 3 seconds): Tell them what they'll learn and why it matters.\n"
-            f"- VALUE (body): Deliver 3 punchy insights. Each one lands in 1-2 short sentences.\n"
+            f"- HOOK (first 2 seconds): Pattern interrupt using a specific fact or product name.\n"
+            f"- COMMITMENT (next 3 seconds): Tell them exactly what specific things they'll learn.\n"
+            f"- VALUE (body): 3 insights with REAL product names, numbers, or techniques. "
+            f"Each one lands in 1-2 short sentences.\n"
             f"- CTA (last 3 seconds): Clear, direct call to action.\n\n"
-            f"RULES:\n"
+            f"CRITICAL RULES:\n"
+            f"- Every insight MUST mention a specific product, technique, or fact\n"
+            f"- NEVER be vague — 'this one tool' is banned, name the actual tool\n"
+            f"- Include at least 2 specific product/tool names from the domain expertise\n"
             f"- NEVER start with 'Welcome to' or 'In this video'\n"
             f"- NEVER say 'Let me explain' or 'As you can see'\n"
             f"- Short punchy sentences. 8-12 words max per sentence.\n"
             f"- Add a retention anchor every 5 seconds ('But here's the thing...', "
             f"'And it gets better...', 'Watch this...')\n"
-            f"- Use pattern interrupts to reset attention\n"
             f"- Conversational tone — like talking to a friend\n"
             f"- Every sentence must earn the next second of watch time"
         )
@@ -255,9 +284,12 @@ class ScriptEngine:
             f"Hook formula: {storyboard.hook_formula}\n"
             f"CTA: {storyboard.cta_text}\n\n"
             f"Storyboard scenes:\n" + "\n".join(scenes_desc) + "\n\n"
-            f"Write the complete narration. Rules:\n"
-            f"- One line per scene, prefixed with 'Scene N: '\n"
-            f"- Target ~{target_words} words total\n"
+            f"Write the complete narration with visual directions. Rules:\n"
+            f"- One line per scene, format: 'Scene N: [narration] | VISUAL: [image description]'\n"
+            f"- The VISUAL must describe what should be shown during this narration\n"
+            f"- VISUAL descriptions should be specific subjects/objects, not camera directions\n"
+            f"- Example: 'Scene 3: The Echo Dot costs just thirty dollars. | VISUAL: Amazon Echo Dot smart speaker on a white countertop, blue LED ring glowing'\n"
+            f"- Target ~{target_words} words total (narration only, not counting VISUAL descriptions)\n"
             f"- Scene 1 must be an immediate hook — no setup, no intro\n"
             f"- Use short, punchy sentences (8-12 words)\n"
             f"- Include at least 2 retention anchors ('But here's the thing...', etc.)\n"
@@ -267,9 +299,14 @@ class ScriptEngine:
 
     def _parse_script(self, content: str, storyboard: Storyboard,
                       model_name: str, cost: float) -> VideoScript:
-        """Parse AI response into a VideoScript."""
+        """Parse AI response into a VideoScript.
+
+        Handles lines in format: 'Scene N: narration | VISUAL: description'
+        Splits narration from visual directions.
+        """
         lines = content.strip().split("\n")
         segments = []
+        visual_directions = []
 
         for line in lines:
             line = line.strip()
@@ -279,8 +316,21 @@ class ScriptEngine:
                     line = line.split(":", 1)[1].strip()
                 # Strip markdown formatting (bold, italic markers)
                 line = line.strip("*_").strip()
-                if line:
-                    segments.append(line)
+                if not line:
+                    continue
+
+                # Split narration from visual direction
+                visual = ""
+                # Try several delimiter patterns tolerantly
+                for delim in [" | VISUAL: ", " |VISUAL: ", " | VISUAL:", "|VISUAL:"]:
+                    if delim in line:
+                        narration_part, visual = line.split(delim, 1)
+                        line = narration_part.strip()
+                        visual = visual.strip()
+                        break
+
+                segments.append(line)
+                visual_directions.append(visual)
 
         full_text = " ".join(segments)
         word_count = len(full_text.split())
@@ -298,6 +348,7 @@ class ScriptEngine:
             estimated_duration=word_count / 2.5,  # ~2.5 words/sec
             model_used=model_name,
             cost=cost,
+            visual_directions=visual_directions,
         )
 
     def _fallback_script(self, storyboard: Storyboard) -> VideoScript:
@@ -316,4 +367,5 @@ class ScriptEngine:
             estimated_duration=word_count / 2.5,
             model_used="fallback_storyboard",
             cost=0.0,
+            visual_directions=[],
         )

@@ -12,6 +12,7 @@ from .retention_patterns import RETENTION_PATTERNS, get_retention_strategy
 from .niche_profiles import NICHE_PROFILES, get_niche_profile
 from .trending_formats import TRENDING_FORMATS, get_trending_formats
 from .audio_library import AUDIO_SOURCES, get_music_source
+from .domain_expertise import DOMAIN_EXPERTISE, get_domain_expertise, get_style_suffix
 
 __all__ = [
     "SHOT_TYPES", "get_shot_type", "get_shots_for_mood",
@@ -26,4 +27,5 @@ __all__ = [
     "NICHE_PROFILES", "get_niche_profile",
     "TRENDING_FORMATS", "get_trending_formats",
     "AUDIO_SOURCES", "get_music_source",
+    "DOMAIN_EXPERTISE", "get_domain_expertise", "get_style_suffix",
 ]

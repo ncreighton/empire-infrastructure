@@ -1,8 +1,10 @@
-"""Tests for VisualEngine — FAL.ai primary routing, Pexels rare fallback."""
+"""Tests for VisualEngine — FAL.ai primary routing, Pexels rare fallback, niche-specific suffixes."""
 
 import pytest
 from unittest.mock import patch, MagicMock
-from videoforge.assembly.visual_engine import VisualEngine, _PROMPT_SUFFIX
+from videoforge.assembly.visual_engine import (
+    VisualEngine, _PROMPT_SUFFIX, _NICHE_STYLE_SUFFIXES, _get_niche_suffix,
+)
 from videoforge.forge.video_smith import VideoSmith
 from videoforge.models import VisualAsset
 
@@ -20,6 +22,18 @@ def smith():
 @pytest.fixture
 def storyboard(smith):
     plan = smith.to_video_plan("moon rituals", "witchcraftforbeginners")
+    return plan.storyboard
+
+
+@pytest.fixture
+def tech_storyboard(smith):
+    plan = smith.to_video_plan("5 smart home gadgets", "smarthomewizards")
+    return plan.storyboard
+
+
+@pytest.fixture
+def mythology_storyboard(smith):
+    plan = smith.to_video_plan("Zeus vs Odin", "mythicalarchives")
     return plan.storyboard
 
 
@@ -128,6 +142,8 @@ class TestVisualEngine:
 
 
 class TestPromptSuffix:
+    """Legacy suffix tests — backwards compatibility."""
+
     def test_short_suffix_has_vertical(self):
         assert "vertical" in _PROMPT_SUFFIX["short"]
 
@@ -137,3 +153,74 @@ class TestPromptSuffix:
     def test_all_suffixes_have_cinematic(self):
         for fmt, suffix in _PROMPT_SUFFIX.items():
             assert "cinematic" in suffix
+
+
+class TestNicheSpecificSuffixes:
+    """Test that niches get appropriate style suffixes instead of one-size-fits-all."""
+
+    def test_niche_specific_suffix_tech(self):
+        """Tech niches should get 'product photography' style, NOT 'film grain'."""
+        suffix = _get_niche_suffix("smarthomewizards", "short")
+        assert "product photography" in suffix or "ambient lighting" in suffix
+        assert "film grain" not in suffix
+        assert "vertical" in suffix  # composition hint
+
+    def test_niche_specific_suffix_witchcraft(self):
+        """Witchcraft niches should get 'mystical atmosphere' style."""
+        suffix = _get_niche_suffix("witchcraftforbeginners", "short")
+        assert "mystical" in suffix or "candlelight" in suffix
+        assert "film grain" not in suffix
+
+    def test_niche_specific_suffix_mythology(self):
+        """Mythology should get 'epic oil painting' style."""
+        suffix = _get_niche_suffix("mythicalarchives", "short")
+        assert "oil painting" in suffix or "chiaroscuro" in suffix
+        assert "product photography" not in suffix
+
+    def test_niche_specific_suffix_lifestyle(self):
+        """Lifestyle niches should get 'bright natural lighting' style."""
+        suffix = _get_niche_suffix("bulletjournals", "short")
+        assert "natural lighting" in suffix or "cozy" in suffix
+        assert "film grain" not in suffix
+
+    def test_niche_specific_suffix_fitness(self):
+        """Fitness niche should get 'dynamic action' style."""
+        suffix = _get_niche_suffix("pulsegearreviews", "short")
+        assert "action" in suffix or "dynamic" in suffix
+
+    def test_composition_hint_short(self):
+        """Short format should include 'vertical composition'."""
+        suffix = _get_niche_suffix("smarthomewizards", "short")
+        assert "vertical" in suffix
+
+    def test_composition_hint_standard(self):
+        """Standard format should include 'widescreen composition'."""
+        suffix = _get_niche_suffix("smarthomewizards", "standard")
+        assert "widescreen" in suffix
+
+    def test_composition_hint_square(self):
+        """Square format should include 'centered composition'."""
+        suffix = _get_niche_suffix("smarthomewizards", "square")
+        assert "centered" in suffix
+
+    @patch("videoforge.assembly.visual_engine._get_fal_key", return_value="test_key")
+    @patch("videoforge.assembly.visual_engine.requests.post")
+    def test_fal_ai_uses_niche_suffix(self, mock_post, mock_key, visual_engine, tech_storyboard):
+        """FAL.ai API call should use niche-specific suffix in prompt."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"images": [{"url": "https://test.png"}]}
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        visual_engine._generate_fal_ai(tech_storyboard.scenes[0], tech_storyboard)
+        call_json = mock_post.call_args[1]["json"]
+        prompt = call_json["prompt"]
+        # Tech niche should NOT have "film grain" or "dramatic volumetric lighting"
+        assert "film grain" not in prompt
+        # Should have niche-appropriate terms
+        assert "product photography" in prompt or "ambient lighting" in prompt or "editorial" in prompt
+
+    def test_niche_suffix_categories_exist(self):
+        """All expected category suffixes should be defined."""
+        for category in ["tech", "ai_news", "witchcraft", "mythology", "lifestyle", "fitness", "business"]:
+            assert category in _NICHE_STYLE_SUFFIXES, f"Missing suffix for category: {category}"

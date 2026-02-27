@@ -1,4 +1,4 @@
-"""Tests for all 12 knowledge base modules."""
+"""Tests for all 13 knowledge base modules (including domain expertise)."""
 
 import pytest
 from videoforge.knowledge import (
@@ -14,6 +14,7 @@ from videoforge.knowledge import (
     NICHE_PROFILES, get_niche_profile,
     TRENDING_FORMATS, get_trending_formats,
     AUDIO_SOURCES, get_music_source,
+    DOMAIN_EXPERTISE, get_domain_expertise, get_style_suffix,
 )
 from videoforge.voice import VOICE_PROFILES, get_voice, get_voice_id, get_all_niches, get_elevenlabs_voice
 from videoforge.knowledge.audio_library import get_music_url, MUSIC_TRACKS
@@ -331,3 +332,100 @@ class TestVoiceProfiles:
         niches = get_all_niches()
         assert "witchcraftforbeginners" in niches
         assert len(niches) >= 16
+
+
+# ── Domain Expertise ──
+
+class TestDomainExpertise:
+    def test_has_all_16_niches(self):
+        """Every niche in NICHE_PROFILES should have domain expertise."""
+        for niche_id in NICHE_PROFILES:
+            assert niche_id in DOMAIN_EXPERTISE, f"{niche_id} missing from DOMAIN_EXPERTISE"
+
+    def test_each_has_required_fields(self):
+        """Each niche expertise should have all required keys."""
+        required = ["key_products", "expert_tips", "talking_points", "visual_subjects", "style_suffix"]
+        for niche_id, expertise in DOMAIN_EXPERTISE.items():
+            for field in required:
+                assert field in expertise, f"{niche_id} missing {field}"
+
+    def test_key_products_are_real(self):
+        """Products should be real names, not generic placeholders."""
+        for niche_id, expertise in DOMAIN_EXPERTISE.items():
+            products = expertise["key_products"]
+            assert len(products) >= 8, f"{niche_id} needs at least 8 products, has {len(products)}"
+            # Products should be specific (multi-word or capitalized)
+            for product in products[:3]:
+                assert len(product) > 3, f"{niche_id} has too-short product: {product}"
+
+    def test_expert_tips_are_actionable(self):
+        """Tips should be real advice, not filler."""
+        for niche_id, expertise in DOMAIN_EXPERTISE.items():
+            tips = expertise["expert_tips"]
+            assert len(tips) >= 5, f"{niche_id} needs at least 5 tips, has {len(tips)}"
+            for tip in tips:
+                assert len(tip) > 30, f"{niche_id} has too-short tip: {tip}"
+
+    def test_talking_points_have_topics(self):
+        """Each niche should have at least 3 talking point topics."""
+        for niche_id, expertise in DOMAIN_EXPERTISE.items():
+            tp = expertise["talking_points"]
+            assert len(tp) >= 3, f"{niche_id} needs at least 3 talking points, has {len(tp)}"
+
+    def test_visual_subjects_have_default(self):
+        """Each niche should have a 'default' visual subject."""
+        for niche_id, expertise in DOMAIN_EXPERTISE.items():
+            vs = expertise["visual_subjects"]
+            assert "default" in vs, f"{niche_id} missing default visual subject"
+            assert len(vs) >= 3, f"{niche_id} needs at least 3 visual subjects"
+
+    def test_style_suffix_starts_with_comma(self):
+        """Style suffix should start with comma for easy concatenation."""
+        for niche_id, expertise in DOMAIN_EXPERTISE.items():
+            suffix = expertise["style_suffix"]
+            assert suffix.startswith(","), f"{niche_id} style_suffix should start with comma"
+
+    def test_get_domain_expertise_helper(self):
+        """Helper function should return full dict for known niche."""
+        result = get_domain_expertise("smarthomewizards")
+        assert "key_products" in result
+        assert "Echo Dot" in result["key_products"][0] or "Amazon" in str(result["key_products"])
+
+    def test_get_domain_expertise_with_topic(self):
+        """Helper with topic should add matched talking point."""
+        result = get_domain_expertise("smarthomewizards", "smart lighting for beginners")
+        assert "matched_talking_point" in result
+        assert result["matched_talking_point"]["topic"] == "smart lighting"
+
+    def test_get_domain_expertise_unknown_niche(self):
+        """Unknown niche should return empty dict."""
+        result = get_domain_expertise("nonexistent_niche")
+        assert result == {}
+
+    def test_get_style_suffix_known_niche(self):
+        """Known niche should return its specific style suffix."""
+        suffix = get_style_suffix("witchcraftforbeginners")
+        assert "mystical" in suffix or "candlelight" in suffix
+
+    def test_get_style_suffix_unknown_niche(self):
+        """Unknown niche should fall back to category-based suffix."""
+        suffix = get_style_suffix("nonexistent_niche")
+        # Falls back to lifestyle (default category)
+        assert len(suffix) > 10
+
+    def test_tech_niches_have_product_style(self):
+        """Tech niches should have product photography style."""
+        for niche in ["smarthomewizards", "smarthomegearreviews", "wearablegearreviews", "aiinactionhub"]:
+            suffix = get_style_suffix(niche)
+            assert "product photography" in suffix or "ambient lighting" in suffix, f"{niche} should have tech style"
+
+    def test_witchcraft_niches_have_mystical_style(self):
+        """Witchcraft niches should have mystical style."""
+        for niche in ["witchcraftforbeginners", "moonrituallibrary", "manifestandalign"]:
+            suffix = get_style_suffix(niche)
+            assert "mystical" in suffix or "ethereal" in suffix, f"{niche} should have mystical style"
+
+    def test_mythology_has_epic_style(self):
+        """Mythology should have epic oil painting style."""
+        suffix = get_style_suffix("mythicalarchives")
+        assert "oil painting" in suffix or "chiaroscuro" in suffix
