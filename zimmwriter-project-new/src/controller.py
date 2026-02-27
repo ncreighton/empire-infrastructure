@@ -2490,10 +2490,34 @@ class ZimmWriterController:
     # ═══════════════════════════════════════════
 
     def start_bulk_writer(self):
-        """Start bulk content generation."""
+        """Start bulk content generation and confirm the article list popup."""
         self.ensure_connected()
         self.click_button(auto_id=self.BUTTON_IDS["start"][0])
-        logger.info("Bulk Writer STARTED")
+        logger.info("Bulk Writer START clicked, waiting for confirmation dialog...")
+
+        # ZimmWriter shows a confirmation popup listing the articles.
+        # Look for a button containing "Confirm" or "I Confirm" and click it.
+        for attempt in range(20):
+            time.sleep(1)
+            try:
+                for w in self.app.windows():
+                    try:
+                        for child in w.children():
+                            try:
+                                btn_text = child.window_text()
+                                if "confirm" in btn_text.lower():
+                                    child.click_input()
+                                    time.sleep(0.5)
+                                    logger.info(f"Confirmed article list via '{btn_text}'")
+                                    return
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+        logger.warning("No confirmation dialog found — may have auto-proceeded")
 
     def stop_bulk_writer(self):
         """Stop/exit bulk writing."""

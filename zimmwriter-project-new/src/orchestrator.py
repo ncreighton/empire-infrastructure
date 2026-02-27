@@ -89,23 +89,73 @@ class Orchestrator:
         }
 
         try:
-            # Clear previous data
-            self.controller.clear_all_data()
-            time.sleep(1)
+            # Reconnect before each job to ensure fresh window handle
+            self.controller.connect()
+            time.sleep(0.5)
 
-            # Apply site preset
+            # Ensure we're on Bulk Writer screen
+            title = self.controller.get_window_title()
+            if "Bulk" not in title:
+                # If ZimmWriter is actively generating, wait for it to finish
+                generation_states = ["Processing", "Writing", "Generating", "Uploading"]
+                if any(s in title for s in generation_states) or title == "":
+                    logger.info(f"ZimmWriter is busy ('{title}'), waiting for completion...")
+                    for wait_attempt in range(360):  # up to 30 minutes
+                        time.sleep(5)
+                        self.controller.connect()
+                        title = self.controller.get_window_title()
+                        if "Bulk" in title or "Menu" in title:
+                            break
+                    else:
+                        raise RuntimeError(f"Timed out waiting for generation, stuck on '{title}'")
+
+                # Now navigate to Bulk Writer if needed
+                self.controller.connect()
+                title = self.controller.get_window_title()
+                if "Bulk" not in title:
+                    logger.info(f"Navigating to Bulk Writer (on '{title}')...")
+                    if "Menu" in title:
+                        self.controller.open_bulk_writer()
+                    else:
+                        self.controller.back_to_menu()
+                        time.sleep(2)
+                        self.controller.connect()
+                        self.controller.open_bulk_writer()
+
+                    # Wait for Bulk Writer to fully load
+                    for attempt in range(10):
+                        time.sleep(2)
+                        self.controller.connect()
+                        title = self.controller.get_window_title()
+                        if "Bulk" in title:
+                            break
+                        logger.info(f"Waiting for Bulk Writer (on '{title}')...")
+                    else:
+                        raise RuntimeError(f"Failed to reach Bulk Writer, stuck on '{title}'")
+
+            # Skip clear_all_data — it can kick ZimmWriter back to Menu.
+            # load_profile reloads settings and set_bulk_titles overwrites content.
+
+            # Load profile (contains all saved settings from save_all_profiles.py)
+            profile = job.profile_name or job.domain
+            self.controller.load_profile(profile)
+            time.sleep(2)
+
+            # Fix non-persistent dropdowns that ZimmWriter doesn't save in profiles
             preset = get_preset(job.domain)
-            if not preset:
-                raise ValueError(f"No preset for: {job.domain}")
-
-            # Load profile if specified
-            if job.profile_name:
-                self.controller.load_profile(job.profile_name)
-                time.sleep(2)
-
-            # Apply configuration
-            self.controller.apply_site_config(preset)
-            time.sleep(1)
+            if preset:
+                non_persistent = {
+                    "featured_image": ("79", preset.get("featured_image", "None")),
+                    "section_length": ("48", preset.get("section_length", "Medium")),
+                    "subheading_images_model": ("85", preset.get("subheading_images_model", "None")),
+                }
+                for dd_name, (auto_id, value) in non_persistent.items():
+                    try:
+                        self.controller.set_dropdown(auto_id=auto_id, value=value)
+                        time.sleep(0.3)
+                    except Exception as e:
+                        logger.warning(f"Could not fix {dd_name}: {e}")
+            time.sleep(0.5)
 
             # Load content
             if job.csv_path:
