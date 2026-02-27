@@ -7,7 +7,7 @@ Provider priority by niche category:
 """
 
 import os
-import time
+import uuid
 import logging
 import requests
 from ..models import VisualAsset, Storyboard
@@ -113,7 +113,7 @@ def _get_pexels_key() -> str:
         )
     if not key:
         key = _load_key_from_file(
-            os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "config", ".env"),
+            os.path.join(os.path.dirname(__file__), "..", "..", "..", "config", ".env"),
             "PEXELS_API_KEY",
         )
     return key
@@ -128,7 +128,7 @@ def _get_fal_key() -> str:
         )
     if not key:
         key = _load_key_from_file(
-            os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "config", ".env"),
+            os.path.join(os.path.dirname(__file__), "..", "..", "..", "config", ".env"),
             "FAL_KEY",
         )
     return key
@@ -144,7 +144,7 @@ def _get_runware_key() -> str:
         )
     if not key:
         key = _load_key_from_file(
-            os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "config", ".env"),
+            os.path.join(os.path.dirname(__file__), "..", "..", "..", "config", ".env"),
             "RUNWARE_API_KEY",
         )
     return key
@@ -160,7 +160,7 @@ def _get_openai_key() -> str:
         )
     if not key:
         key = _load_key_from_file(
-            os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "config", ".env"),
+            os.path.join(os.path.dirname(__file__), "..", "..", "..", "config", ".env"),
             "OPENAI_API_KEY",
         )
     return key
@@ -292,10 +292,11 @@ class VisualEngine:
         niche_suffix = _get_niche_suffix(storyboard.niche, fmt)
         enhanced_prompt = scene.visual_prompt + niche_suffix
 
-        width = 1080 if storyboard.format == "short" else 1920
-        height = 1920 if storyboard.format == "short" else 1080
+        # Runware requires dimensions in multiples of 64
+        width = 1088 if storyboard.format == "short" else 1920
+        height = 1920 if storyboard.format == "short" else 1088
 
-        task_uuid = f"vf_{scene.scene_number}_{int(time.time())}"
+        task_uuid = str(uuid.uuid4())
 
         try:
             response = requests.post(

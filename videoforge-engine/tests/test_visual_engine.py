@@ -455,7 +455,7 @@ class TestRunwareProvider:
     @patch("videoforge.assembly.visual_engine._get_runware_key", return_value="test_key")
     @patch("videoforge.assembly.visual_engine.requests.post")
     def test_runware_dimensions_short(self, mock_post, mock_key, visual_engine, storyboard):
-        """Short format should request 1080x1920 from Runware."""
+        """Short format should request 1088x1920 from Runware (multiples of 64)."""
         mock_response = MagicMock()
         mock_response.json.return_value = [{"imageURL": "https://test.png"}]
         mock_response.raise_for_status = MagicMock()
@@ -463,13 +463,13 @@ class TestRunwareProvider:
 
         visual_engine._generate_runware(storyboard.scenes[0], storyboard)
         payload = mock_post.call_args[1]["json"][0]
-        assert payload["width"] == 1080
+        assert payload["width"] == 1088
         assert payload["height"] == 1920
 
     @patch("videoforge.assembly.visual_engine._get_runware_key", return_value="test_key")
     @patch("videoforge.assembly.visual_engine.requests.post")
     def test_runware_dimensions_standard(self, mock_post, mock_key, visual_engine, standard_storyboard):
-        """Standard format should request 1920x1080 from Runware."""
+        """Standard format should request 1920x1088 from Runware (multiples of 64)."""
         mock_response = MagicMock()
         mock_response.json.return_value = [{"imageURL": "https://test.png"}]
         mock_response.raise_for_status = MagicMock()
@@ -478,7 +478,7 @@ class TestRunwareProvider:
         visual_engine._generate_runware(standard_storyboard.scenes[0], standard_storyboard)
         payload = mock_post.call_args[1]["json"][0]
         assert payload["width"] == 1920
-        assert payload["height"] == 1080
+        assert payload["height"] == 1088
 
     @patch("videoforge.assembly.visual_engine._get_runware_key", return_value="test_key")
     @patch("videoforge.assembly.visual_engine.requests.post")
