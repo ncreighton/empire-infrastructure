@@ -1,0 +1,274 @@
+# Printer Profiles — Technical specs for reviews and guides
+# Copied from 3d-print-forge, extended for content generation
+
+printers:
+  ender_3_v2:
+    name: "Creality Ender 3 V2"
+    type: fdm
+    bed: [220, 220, 250]
+    nozzle: 0.4
+    layer_range: [0.08, 0.32]
+    materials: [PLA, PETG, TPU]
+    max_speed: 120
+    price: 199
+    brand: "Creality"
+    release_year: 2020
+    best_for: "Budget-conscious beginners who want a proven platform"
+    skip_if: "You want plug-and-play — this needs some tinkering"
+    notes: "The gateway printer. Massive community, endless upgrades."
+    pros:
+      - "Huge community and mod ecosystem"
+      - "Dirt cheap replacement parts"
+      - "Great for learning how printers work"
+      - "Silent mainboard (32-bit)"
+    cons:
+      - "Manual bed leveling gets old fast"
+      - "Bowden tube limits flexible filaments"
+      - "Stock firmware is basic"
+      - "No auto bed leveling without mods"
+
+  prusa_mk3s_plus:
+    name: "Prusa MK3S+"
+    type: fdm
+    bed: [250, 210, 210]
+    nozzle: 0.4
+    layer_range: [0.05, 0.30]
+    materials: [PLA, PETG, ABS, ASA, TPU, PC, PA]
+    max_speed: 200
+    price: 799
+    brand: "Prusa Research"
+    release_year: 2021
+    best_for: "Reliable workhorse for serious hobbyists"
+    skip_if: "Speed is your top priority"
+    notes: "Open source, incredible reliability, amazing support."
+    pros:
+      - "Rock-solid reliability out of the box"
+      - "Open source firmware and hardware"
+      - "Excellent PrusaSlicer integration"
+      - "Handles every filament type"
+    cons:
+      - "Not the fastest printer anymore"
+      - "Price is high for the print volume"
+      - "Kit build takes 8+ hours"
+      - "No enclosure included"
+
+  prusa_mk4s:
+    name: "Prusa MK4S"
+    type: fdm
+    bed: [250, 210, 220]
+    nozzle: 0.4
+    layer_range: [0.05, 0.30]
+    materials: [PLA, PETG, ABS, ASA, TPU, PC, PA]
+    max_speed: 250
+    price: 899
+    brand: "Prusa Research"
+    release_year: 2024
+    best_for: "All-rounder for daily printing across materials"
+    skip_if: "You only print PLA and want maximum speed"
+    notes: "Next-gen Prusa with input shaping and load cell."
+    pros:
+      - "Input shaping for faster, cleaner prints"
+      - "Load cell for perfect first layers"
+      - "Prints nearly everything"
+      - "Prusa's legendary support"
+    cons:
+      - "Still not Bambu-fast"
+      - "Premium price tag"
+      - "MMU multi-material is separate purchase"
+
+  bambu_x1c:
+    name: "Bambu Lab X1 Carbon"
+    type: fdm
+    bed: [256, 256, 256]
+    nozzle: 0.4
+    layer_range: [0.04, 0.40]
+    materials: [PLA, PETG, ABS, ASA, TPU, PC, PA, CF-Nylon]
+    max_speed: 500
+    price: 1199
+    brand: "Bambu Lab"
+    release_year: 2022
+    best_for: "Speed freaks and engineering-grade prints"
+    skip_if: "You want open source or budget-friendly"
+    notes: "The fastest consumer FDM. Full enclosure, carbon fiber capable."
+    pros:
+      - "Insanely fast — 500mm/s with input shaping"
+      - "AMS for auto color changes"
+      - "Built-in camera and LiDAR"
+      - "Prints carbon fiber nylon"
+    cons:
+      - "Closed ecosystem"
+      - "Expensive, especially with AMS"
+      - "Cloud-dependent features"
+      - "Proprietary slicer preferred"
+
+  bambu_p1s:
+    name: "Bambu Lab P1S"
+    type: fdm
+    bed: [256, 256, 256]
+    nozzle: 0.4
+    layer_range: [0.04, 0.40]
+    materials: [PLA, PETG, ABS, ASA, TPU]
+    max_speed: 500
+    price: 699
+    brand: "Bambu Lab"
+    release_year: 2023
+    best_for: "Best enclosed printer under $700"
+    skip_if: "You need LiDAR or camera monitoring"
+    notes: "X1C guts without the premium extras. Great value."
+    pros:
+      - "Same speed as X1C"
+      - "Full enclosure for ABS/ASA"
+      - "Significantly cheaper"
+      - "AMS compatible"
+    cons:
+      - "No LiDAR first layer scanning"
+      - "No built-in camera"
+      - "Still closed ecosystem"
+
+  bambu_a1_mini:
+    name: "Bambu Lab A1 Mini"
+    type: fdm
+    bed: [180, 180, 180]
+    nozzle: 0.4
+    layer_range: [0.04, 0.36]
+    materials: [PLA, PETG, TPU]
+    max_speed: 500
+    price: 299
+    brand: "Bambu Lab"
+    release_year: 2023
+    best_for: "Best first printer if you just want to print"
+    skip_if: "You need prints larger than 180mm"
+    notes: "Bambu speed in a compact, affordable package."
+    pros:
+      - "Setup in under 15 minutes"
+      - "Bambu speed at budget price"
+      - "AMS Lite for multi-color"
+      - "Dead simple to use"
+    cons:
+      - "Small build volume"
+      - "Open frame — no ABS printing"
+      - "PLA and PETG only realistically"
+      - "No enclosure option"
+
+  creality_k1:
+    name: "Creality K1"
+    type: fdm
+    bed: [220, 220, 250]
+    nozzle: 0.4
+    layer_range: [0.05, 0.35]
+    materials: [PLA, PETG, TPU]
+    max_speed: 600
+    price: 399
+    brand: "Creality"
+    release_year: 2023
+    best_for: "Fast printing on a budget"
+    skip_if: "You want enclosed printing or materials beyond PLA"
+    notes: "Creality's answer to Bambu speed, now with Klipper."
+    pros:
+      - "600mm/s max speed (impressive on paper)"
+      - "Runs Klipper out of the box"
+      - "Good price for the speed"
+      - "USB and WiFi connectivity"
+    cons:
+      - "Real-world speed lower than specs"
+      - "Quality control hit or miss"
+      - "No enclosure"
+      - "Firmware updates can be rocky"
+
+  sovol_sv06:
+    name: "Sovol SV06"
+    type: fdm
+    bed: [220, 220, 250]
+    nozzle: 0.4
+    layer_range: [0.08, 0.32]
+    materials: [PLA, PETG, TPU]
+    max_speed: 150
+    price: 179
+    brand: "Sovol"
+    release_year: 2022
+    best_for: "Best true budget printer with auto leveling"
+    skip_if: "Speed matters to you at all"
+    notes: "All-metal hotend and ABL at under $200. Hard to beat."
+    pros:
+      - "All-metal hotend at this price"
+      - "Auto bed leveling included"
+      - "Dual-gear direct drive"
+      - "PEI spring steel bed"
+    cons:
+      - "Slow compared to newer printers"
+      - "Small community vs Ender"
+      - "Firmware is bare-bones"
+
+  elegoo_mars_3:
+    name: "Elegoo Mars 3"
+    type: resin
+    bed: [143, 89.6, 175]
+    nozzle: null
+    layer_range: [0.01, 0.15]
+    materials: [Standard Resin, ABS-Like Resin, Water-Washable Resin]
+    max_speed: null
+    price: 229
+    brand: "Elegoo"
+    release_year: 2022
+    best_for: "Miniature painters and detail-obsessed makers"
+    skip_if: "You hate post-processing or need large prints"
+    notes: "4K mono screen, fast curing, incredible detail."
+    pros:
+      - "Insane detail quality"
+      - "4K mono screen for fast layers"
+      - "Great for miniatures and jewelry"
+      - "Under $250"
+    cons:
+      - "Messy resin workflow"
+      - "Small build volume"
+      - "Ventilation required"
+      - "Post-processing is time-consuming"
+
+  anycubic_photon_mono_2:
+    name: "Anycubic Photon Mono 2"
+    type: resin
+    bed: [143, 89, 165]
+    nozzle: null
+    layer_range: [0.01, 0.15]
+    materials: [Standard Resin, ABS-Like Resin, Water-Washable Resin]
+    max_speed: null
+    price: 199
+    brand: "Anycubic"
+    release_year: 2023
+    best_for: "Budget resin with fast exposure times"
+    skip_if: "You need larger than 143mm prints"
+
+  elegoo_saturn_3:
+    name: "Elegoo Saturn 3"
+    type: resin
+    bed: [218.88, 122.88, 250]
+    nozzle: null
+    layer_range: [0.01, 0.15]
+    materials: [Standard Resin, ABS-Like Resin, Plant-Based Resin]
+    max_speed: null
+    price: 399
+    brand: "Elegoo"
+    release_year: 2023
+    best_for: "Large resin prints and batch production"
+    skip_if: "Budget is tight or you're new to resin"
+
+  artillery_sidewinder_x2:
+    name: "Artillery Sidewinder X2"
+    type: fdm
+    bed: [300, 300, 400]
+    nozzle: 0.4
+    layer_range: [0.08, 0.32]
+    materials: [PLA, PETG, ABS, TPU]
+    max_speed: 150
+    price: 349
+    brand: "Artillery"
+    release_year: 2022
+    best_for: "Large format prints on a budget"
+    skip_if: "You want fast prints or a compact setup"
+
+# Common bed size categories for content generation
+bed_sizes:
+  small: [180, 180, 180]
+  standard: [220, 220, 250]
+  medium: [256, 256, 256]
+  large: [300, 300, 400]

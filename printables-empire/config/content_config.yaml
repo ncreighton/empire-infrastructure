@@ -1,0 +1,66 @@
+# Printables Empire - Content Pipeline Configuration
+
+anthropic:
+  models:
+    writer: "claude-sonnet-4-20250514"
+    classifier: "claude-haiku-4-5-20251001"
+  max_tokens:
+    article: 4096
+    review: 3000
+    listing: 1000
+    post: 500
+    classify: 100
+    tags: 200
+    title: 100
+  cache_threshold: 2048  # System prompts > this get cache_control
+
+pipeline:
+  pacing:
+    between_actions_sec: 1.5
+    between_publishes_sec: 30
+    daily_limit: 10
+  quality:
+    min_score_to_publish: 80
+    max_amplify_iterations: 3
+  images:
+    hero_size: [1200, 630]
+    step_size: [800, 600]
+    comparison_size: [1200, 800]
+
+printables:
+  base_url: "https://www.printables.com"
+  graphql_url: "https://www.printables.com/graphql/"
+  max_tags: 10
+  max_title_length: 70
+  categories:
+    guides: "3d-printing-guides"
+    reviews: "3d-printer-reviews"
+    tips: "3d-printing-tips"
+
+brand:
+  name: "ForgeFiles"
+  tagline: "Your 3D Printing Workshop"
+  colors:
+    primary: "#1E88E5"       # Blue
+    secondary: "#FF6D00"     # Orange
+    background_start: "#0D1117"
+    background_end: "#1A2332"
+    text: "#FFFFFF"
+    accent: "#4FC3F7"
+  pattern: "grid"
+
+content_types:
+  article:
+    word_range: [1500, 2500]
+    sections: [5, 8]
+    requires_images: true
+  review:
+    word_range: [1200, 2000]
+    sections: [6, 8]
+    requires_images: true
+  listing:
+    word_range: [200, 500]
+    requires_images: false
+  post:
+    word_range: [100, 300]
+    requires_images: false

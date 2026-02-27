@@ -1,0 +1,189 @@
+# Pre-researched Topics by Category
+# Each topic has: title, keywords, difficulty, seasonal_peak (optional), notes
+
+articles:
+  beginner:
+    - title: "How to Print in Vase Mode"
+      keywords: ["vase mode", "spiral vase", "single wall", "3d printing technique"]
+      difficulty: beginner
+      notes: "High search volume, few good guides on Printables"
+
+    - title: "Your First 3D Print: From File to Finished"
+      keywords: ["first 3d print", "beginner guide", "getting started"]
+      difficulty: beginner
+      notes: "Evergreen beginner content"
+
+    - title: "PLA vs PETG vs ABS: Which Filament Should You Use?"
+      keywords: ["pla vs petg", "filament comparison", "3d printing materials"]
+      difficulty: beginner
+      notes: "Comparison content performs well"
+
+    - title: "How to Level Your 3D Printer Bed (And Why It Matters)"
+      keywords: ["bed leveling", "first layer", "z offset", "calibration"]
+      difficulty: beginner
+      notes: "Most common beginner problem"
+
+    - title: "Understanding Layer Height: When to Go Thick or Thin"
+      keywords: ["layer height", "print quality", "resolution", "speed vs quality"]
+      difficulty: beginner
+
+    - title: "5 Prints Every Beginner Should Try"
+      keywords: ["beginner prints", "easy prints", "first prints", "test prints"]
+      difficulty: beginner
+
+    - title: "How to Clean and Maintain Your 3D Printer"
+      keywords: ["printer maintenance", "nozzle cleaning", "bed cleaning"]
+      difficulty: beginner
+
+    - title: "Getting Great First Layers Every Time"
+      keywords: ["first layer", "adhesion", "bed adhesion", "squish"]
+      difficulty: beginner
+
+  intermediate:
+    - title: "Multi-Color Printing Without an AMS"
+      keywords: ["multi color", "filament swap", "pause at layer", "manual color change"]
+      difficulty: intermediate
+
+    - title: "Printing Functional Parts: Strength and Orientation"
+      keywords: ["functional prints", "part strength", "print orientation", "infill"]
+      difficulty: intermediate
+
+    - title: "How to Post-Process Your 3D Prints Like a Pro"
+      keywords: ["post processing", "sanding", "painting", "acetone smoothing"]
+      difficulty: intermediate
+
+    - title: "Designing for 3D Printing: Tolerances and Clearances"
+      keywords: ["design for printing", "tolerances", "clearances", "fit"]
+      difficulty: intermediate
+
+    - title: "PETG Printing Guide: Settings That Actually Work"
+      keywords: ["petg settings", "petg guide", "stringing", "petg tips"]
+      difficulty: intermediate
+
+    - title: "How to Print Large Models in Parts"
+      keywords: ["split model", "large prints", "assembly", "gluing"]
+      difficulty: intermediate
+
+    - title: "TPU Printing: Flex Filament Without the Headaches"
+      keywords: ["tpu printing", "flexible filament", "tpu settings"]
+      difficulty: intermediate
+
+    - title: "Infill Patterns Compared: Which One and When"
+      keywords: ["infill pattern", "gyroid", "cubic", "infill strength"]
+      difficulty: intermediate
+
+  advanced:
+    - title: "Tuning Pressure Advance for Perfect Corners"
+      keywords: ["pressure advance", "linear advance", "corner quality"]
+      difficulty: advanced
+
+    - title: "Klipper Firmware: Is It Worth the Switch?"
+      keywords: ["klipper", "firmware", "input shaper", "speed tuning"]
+      difficulty: advanced
+
+    - title: "Resin Printing for Miniatures: Complete Workflow"
+      keywords: ["resin printing", "miniatures", "supports", "curing"]
+      difficulty: advanced
+
+    - title: "Building a Print Farm on a Budget"
+      keywords: ["print farm", "multiple printers", "batch printing", "scaling"]
+      difficulty: advanced
+
+  seasonal:
+    - title: "3D Printed Halloween Decorations That Actually Look Good"
+      keywords: ["halloween prints", "spooky", "decorations", "october"]
+      difficulty: beginner
+      seasonal_peak: 10
+
+    - title: "Best 3D Printed Gifts for the Holidays"
+      keywords: ["3d printed gifts", "christmas", "holiday gifts"]
+      difficulty: beginner
+      seasonal_peak: 12
+
+    - title: "Spring Organization: 3D Printed Storage Solutions"
+      keywords: ["organization", "storage", "spring cleaning", "containers"]
+      difficulty: beginner
+      seasonal_peak: 3
+
+    - title: "3D Printed Valentine's Day Gifts"
+      keywords: ["valentine", "gifts", "romantic", "heart"]
+      difficulty: beginner
+      seasonal_peak: 2
+
+    - title: "Back to School: 3D Printed Desk Accessories"
+      keywords: ["desk accessories", "school", "organizer", "pen holder"]
+      difficulty: beginner
+      seasonal_peak: 8
+
+reviews:
+  printers:
+    - title: "Bambu Lab A1 Mini Review"
+      product: "bambu_a1_mini"
+      keywords: ["bambu a1 mini", "a1 mini review", "budget bambu"]
+      notes: "Hot product, lots of search interest"
+
+    - title: "Creality Ender 3 V3 SE Review"
+      product: "ender_3_v2"
+      keywords: ["ender 3 v3 se", "creality review", "budget printer"]
+
+    - title: "Bambu Lab X1 Carbon Review"
+      product: "bambu_x1c"
+      keywords: ["bambu x1 carbon", "x1c review", "multi-material"]
+
+    - title: "Prusa MK4S Review: Worth the Upgrade?"
+      product: "prusa_mk4s"
+      keywords: ["prusa mk4s", "mk4s review", "prusa upgrade"]
+
+    - title: "Creality K1 Review: Speed vs Quality"
+      product: "creality_k1"
+      keywords: ["creality k1", "k1 review", "fast printer"]
+
+    - title: "Elegoo Mars 3 Review: Resin for Beginners"
+      product: "elegoo_mars_3"
+      keywords: ["elegoo mars 3", "resin printer review", "budget resin"]
+
+  filaments:
+    - title: "Hatchbox PLA Review: Still the Gold Standard?"
+      keywords: ["hatchbox pla", "filament review", "pla review"]
+
+    - title: "eSUN PLA+ Review: Budget Filament That Delivers"
+      keywords: ["esun pla+", "pla plus", "budget filament"]
+
+    - title: "Polymaker PolyTerra Review: Eco-Friendly Printing"
+      keywords: ["polyterra", "polymaker", "eco filament", "matte pla"]
+
+    - title: "Best TPU Filaments Compared"
+      keywords: ["tpu filament", "flexible filament", "tpu comparison"]
+
+posts:
+  tips:
+    - title: "5 First Layer Tips That Changed Everything for Me"
+      keywords: ["first layer", "adhesion", "tips"]
+
+    - title: "Stop Wasting Filament: My Calibration Routine"
+      keywords: ["calibration", "waste reduction", "flow rate"]
+
+    - title: "The Print Setting I Wish I Changed Sooner"
+      keywords: ["print settings", "hidden settings", "slicer tips"]
+
+    - title: "Why I Switched from Cura to OrcaSlicer"
+      keywords: ["orca slicer", "cura alternative", "slicer comparison"]
+
+    - title: "My Top 5 Functional Prints Around the House"
+      keywords: ["functional prints", "useful prints", "practical"]
+
+  discussions:
+    - title: "What's Your Go-To Print Speed?"
+      keywords: ["print speed", "community", "settings"]
+
+    - title: "Favorite Upgrades Under $20?"
+      keywords: ["upgrades", "cheap upgrades", "printer mods"]
+
+    - title: "How Do You Organize Your Filament?"
+      keywords: ["filament storage", "organization", "dry box"]
+
+    - title: "What Got You Into 3D Printing?"
+      keywords: ["community", "origin story", "hobby"]
+
+    - title: "Best Prints You've Made This Month?"
+      keywords: ["showcase", "community", "monthly"]
