@@ -33,61 +33,119 @@ except ImportError:
     pass
 
 
-# Ken Burns animation variants — cycled per scene
-# Uses valid Creatomate animation types: scale, pan, fade
+# Ken Burns animation variants — 12 cinematic motions cycled per scene
 KEN_BURNS_VARIANTS = [
-    {  # Slow zoom in
-        "name": "zoom_in",
+    {  # 1. Dramatic zoom in — quadratic-in
+        "name": "zoom_in_dramatic",
         "animations": [
+            {"time": "start", "type": "scale", "scope": "element", "easing": "quadratic-in",
+             "x_anchor": "50%", "y_anchor": "50%", "start_scale": "100%", "end_scale": "130%"},
+        ],
+    },
+    {  # 2. Zoom out reveal — quadratic-out
+        "name": "zoom_out_reveal",
+        "animations": [
+            {"time": "start", "type": "scale", "scope": "element", "easing": "quadratic-out",
+             "x_anchor": "50%", "y_anchor": "50%", "start_scale": "130%", "end_scale": "100%"},
+        ],
+    },
+    {  # 3. Pan left sweep with slight y drift — cubic-in-out
+        "name": "pan_left_sweep",
+        "animations": [
+            {"time": "start", "type": "pan", "scope": "element", "easing": "cubic-in-out",
+             "start_x": "60%", "end_x": "40%", "start_y": "48%", "end_y": "52%"},
+        ],
+    },
+    {  # 4. Pan right sweep with slight y drift — cubic-in-out
+        "name": "pan_right_sweep",
+        "animations": [
+            {"time": "start", "type": "pan", "scope": "element", "easing": "cubic-in-out",
+             "start_x": "40%", "end_x": "60%", "start_y": "52%", "end_y": "48%"},
+        ],
+    },
+    {  # 5. Drift up + zoom (combined) — linear
+        "name": "drift_up_zoom",
+        "animations": [
+            {"time": "start", "type": "pan", "scope": "element",
+             "start_x": "50%", "end_x": "50%", "start_y": "60%", "end_y": "42%"},
             {"time": "start", "type": "scale", "scope": "element",
-             "x_anchor": "50%", "y_anchor": "50%", "start_scale": "100%", "end_scale": "120%"},
+             "x_anchor": "50%", "y_anchor": "50%", "start_scale": "105%", "end_scale": "115%"},
         ],
     },
-    {  # Slow zoom out
-        "name": "zoom_out",
+    {  # 6. Drift down + reveal (combined) — linear
+        "name": "drift_down_reveal",
         "animations": [
+            {"time": "start", "type": "pan", "scope": "element",
+             "start_x": "50%", "end_x": "50%", "start_y": "40%", "end_y": "58%"},
             {"time": "start", "type": "scale", "scope": "element",
-             "x_anchor": "50%", "y_anchor": "50%", "start_scale": "120%", "end_scale": "100%"},
+             "x_anchor": "50%", "y_anchor": "50%", "start_scale": "120%", "end_scale": "105%"},
         ],
     },
-    {  # Pan left with slight zoom
-        "name": "pan_left",
+    {  # 7. Corner focus upper-left to center + zoom
+        "name": "corner_focus_ul",
         "animations": [
-            {"time": "start", "type": "pan", "scope": "element",
-             "start_x": "55%", "end_x": "45%", "start_y": "50%", "end_y": "50%"},
+            {"time": "start", "type": "pan", "scope": "element", "easing": "quadratic-out",
+             "start_x": "35%", "end_x": "50%", "start_y": "35%", "end_y": "50%"},
+            {"time": "start", "type": "scale", "scope": "element", "easing": "quadratic-out",
+             "x_anchor": "50%", "y_anchor": "50%", "start_scale": "110%", "end_scale": "120%"},
         ],
     },
-    {  # Pan right with slight zoom
-        "name": "pan_right",
+    {  # 8. Corner focus lower-right to center + zoom
+        "name": "corner_focus_lr",
         "animations": [
-            {"time": "start", "type": "pan", "scope": "element",
-             "start_x": "45%", "end_x": "55%", "start_y": "50%", "end_y": "50%"},
+            {"time": "start", "type": "pan", "scope": "element", "easing": "quadratic-out",
+             "start_x": "65%", "end_x": "50%", "start_y": "65%", "end_y": "50%"},
+            {"time": "start", "type": "scale", "scope": "element", "easing": "quadratic-out",
+             "x_anchor": "50%", "y_anchor": "50%", "start_scale": "110%", "end_scale": "120%"},
         ],
     },
-    {  # Slow drift up
-        "name": "drift_up",
+    {  # 9. Push in documentary — linear, slow
+        "name": "push_in_documentary",
         "animations": [
-            {"time": "start", "type": "pan", "scope": "element",
-             "start_x": "50%", "end_x": "50%", "start_y": "55%", "end_y": "45%"},
+            {"time": "start", "type": "scale", "scope": "element", "easing": "linear",
+             "x_anchor": "50%", "y_anchor": "50%", "start_scale": "100%", "end_scale": "115%"},
+        ],
+    },
+    {  # 10. Wide reveal — cubic-out, dramatic
+        "name": "wide_reveal",
+        "animations": [
+            {"time": "start", "type": "scale", "scope": "element", "easing": "cubic-out",
+             "x_anchor": "50%", "y_anchor": "50%", "start_scale": "140%", "end_scale": "100%"},
+        ],
+    },
+    {  # 11. Diagonal sweep — quintic-in-out
+        "name": "diagonal_sweep",
+        "animations": [
+            {"time": "start", "type": "pan", "scope": "element", "easing": "quintic-in-out",
+             "start_x": "35%", "end_x": "65%", "start_y": "35%", "end_y": "65%"},
+        ],
+    },
+    {  # 12. Subtle breathe — quadratic-in-out, gentle
+        "name": "subtle_breathe",
+        "animations": [
+            {"time": "start", "type": "scale", "scope": "element", "easing": "quadratic-in-out",
+             "x_anchor": "50%", "y_anchor": "50%", "start_scale": "108%", "end_scale": "118%"},
         ],
     },
 ]
 
-# Transition type → Creatomate animation config
+# Transition type → Creatomate animation config (with easing)
 TRANSITION_MAP = {
     "cut": None,
-    "crossfade": {"type": "fade", "duration": 1},
-    "fade_black": {"type": "fade", "duration": 1.5},
-    "fade_white": {"type": "fade", "duration": 1.5},
-    "slide_left": {"type": "slide", "direction": "180°", "duration": 0.5},
-    "slide_right": {"type": "slide", "direction": "0°", "duration": 0.5},
-    "slide_up": {"type": "slide", "direction": "270°", "duration": 0.5},
-    "slide_down": {"type": "slide", "direction": "90°", "duration": 0.5},
-    "flash": {"type": "fade", "duration": 0.3},
-    "whip_pan": {"type": "slide", "direction": "180°", "duration": 0.3},
-    "zoom_in": {"type": "fade", "duration": 0.5},
-    "zoom_out": {"type": "fade", "duration": 0.5},
-    "wipe": {"type": "wipe", "direction": "0°", "duration": 0.5},
+    "crossfade": {"type": "fade", "duration": 1, "easing": "linear"},
+    "fade_black": {"type": "fade", "duration": 1.5, "easing": "linear"},
+    "fade_white": {"type": "fade", "duration": 1.5, "easing": "linear"},
+    "slide_left": {"type": "slide", "direction": "180°", "duration": 0.5, "easing": "cubic-out"},
+    "slide_right": {"type": "slide", "direction": "0°", "duration": 0.5, "easing": "cubic-out"},
+    "slide_up": {"type": "slide", "direction": "270°", "duration": 0.5, "easing": "cubic-out"},
+    "slide_down": {"type": "slide", "direction": "90°", "duration": 0.5, "easing": "cubic-out"},
+    "flash": {"type": "fade", "duration": 0.15, "easing": "linear"},
+    "whip_pan": {"type": "slide", "direction": "180°", "duration": 0.3, "easing": "cubic-in"},
+    "zoom_in": {"type": "fade", "duration": 0.5, "easing": "quadratic-out"},
+    "zoom_out": {"type": "fade", "duration": 0.5, "easing": "quadratic-out"},
+    "wipe": {"type": "wipe", "direction": "0°", "duration": 0.5, "easing": "linear"},
+    "circular_wipe": {"type": "circular-wipe", "duration": 0.6, "easing": "quadratic-in-out"},
+    "spin": {"type": "spin", "duration": 0.5, "easing": "cubic-in-out"},
 }
 
 
@@ -270,11 +328,9 @@ class RenderEngine:
         for route in routing:
             visual_cost += route.get("est_cost", 0.05)
         if not routing:
-            # Estimate: text_card scenes are free, others are FAL.ai
-            for scene in (plan.storyboard.scenes if plan.storyboard else []):
-                if "text_card" in scene.shot_type:
-                    continue
-                visual_cost += 0.05
+            # All scenes get FAL.ai images
+            scene_count_for_visuals = len(plan.storyboard.scenes) if plan.storyboard else 0
+            visual_cost += scene_count_for_visuals * 0.05
 
         # Audio cost (ElevenLabs ~$0.00024/char, ~700 chars/scene)
         audio_cost = 0.0
@@ -303,16 +359,41 @@ class RenderEngine:
                                   sub_style, spec, asset, audio_data):
         """Build a Creatomate composition element for a single scene.
 
-        Each composition contains:
-        - Image/video visual with Ken Burns animation
-        - Subtitle text overlay with text-slide animation
-        - Narration audio (Creatomate's ElevenLabs TTS provider or pre-hosted URL)
+        Every scene gets:
+        1. Image with Ken Burns + color grading (ALL scenes)
+        2. Gradient overlay (dark bottom vignette for text readability)
+        3. Text overlay if scene has text_overlay (hook/CTA — large centered text)
+        4. Subtitle if scene has narration AND no text_overlay (prevents clutter)
+        5. Narration audio
         """
         elements = []
 
-        # 1. Visual element (image or text card background)
-        if "text_card" in scene.shot_type:
-            # Solid color background
+        # 1. Visual element — ALL scenes get an image
+        has_real_url = asset and asset.url and asset.url.startswith("http")
+
+        if has_real_url:
+            visual_el = {
+                "type": "image",
+                "source": asset.url,
+                "x": "50%",
+                "y": "50%",
+                "width": "100%",
+                "height": "100%",
+                "fit": "cover",
+            }
+            # Ken Burns animation (cycle through 12 variants)
+            kb_variant = KEN_BURNS_VARIANTS[scene_index % len(KEN_BURNS_VARIANTS)]
+            visual_el["animations"] = [dict(a) for a in kb_variant["animations"]]
+            # Color grading
+            self._apply_color_grade(visual_el, color)
+            elements.append(visual_el)
+        else:
+            # No real image — use gradient background with subtle color variation
+            gradient_colors = [
+                color.get("primary", "#0F172A"),
+                color.get("accent", "#1E293B"),
+            ]
+            bg_color = gradient_colors[scene_index % len(gradient_colors)]
             elements.append({
                 "type": "shape",
                 "shape_type": "rectangle",
@@ -320,88 +401,23 @@ class RenderEngine:
                 "y": "50%",
                 "width": "100%",
                 "height": "100%",
-                "fill_color": color.get("primary", "#0F172A"),
+                "fill_color": bg_color,
             })
-            # Text overlay
-            if scene.text_overlay:
-                ct_settings = sub_style.get("creatomate_settings", {})
-                elements.append({
-                    "type": "text",
-                    "text": scene.text_overlay,
-                    "x": "50%",
-                    "y": "50%",
-                    "width": "80%",
-                    "x_alignment": "50%",
-                    "y_alignment": "50%",
-                    "font_family": ct_settings.get("font_family", "Montserrat"),
-                    "font_weight": "800",
-                    "font_size": "8 vmin",
-                    "fill_color": color.get("text", "#FFFFFF"),
-                    "animations": [
-                        {"type": "text-slide", "time": "start", "duration": 0.5},
-                    ],
-                })
-        else:
-            has_real_url = asset and asset.url and asset.url.startswith("http")
 
-            if has_real_url:
-                # Image with Ken Burns effect
-                visual_el = {
-                    "type": "image",
-                    "source": asset.url,
-                    "x": "50%",
-                    "y": "50%",
-                    "width": "100%",
-                    "height": "100%",
-                    "fit": "cover",
-                }
-                # Ken Burns animation
-                kb_variant = KEN_BURNS_VARIANTS[scene_index % len(KEN_BURNS_VARIANTS)]
-                visual_el["animations"] = list(kb_variant["animations"])
-                elements.append(visual_el)
-            else:
-                # No real image — use gradient background with subtle color variation
-                gradient_colors = [
-                    color.get("primary", "#0F172A"),
-                    color.get("accent", "#1E293B"),
-                    color.get("secondary", "#334155"),
-                ]
-                bg_color = gradient_colors[scene_index % len(gradient_colors)]
-                elements.append({
-                    "type": "shape",
-                    "shape_type": "rectangle",
-                    "x": "50%",
-                    "y": "50%",
-                    "width": "100%",
-                    "height": "100%",
-                    "fill_color": bg_color,
-                })
+        # 2. Gradient overlay — dark bottom vignette on ALL scenes
+        elements.append(self._build_gradient_overlay())
 
-        # 2. Subtitle text overlay (skip on text_card scenes — they have their own text)
-        is_text_card = "text_card" in scene.shot_type
+        # 3. Text overlay for hook/CTA scenes (large centered text on top of image)
+        has_text_overlay = bool(scene.text_overlay)
+        if has_text_overlay:
+            elements.append(self._build_text_overlay(scene.text_overlay, color))
+
+        # 4. Subtitle — only if scene has narration AND no text_overlay
         subtitle_text = scene.subtitle_text or scene.narration
-        if subtitle_text and not is_text_card:
-            text_el = {
-                "type": "text",
-                "text": subtitle_text[:60],
-                "x": "50%",
-                "y": "85%",
-                "width": "90%",
-                "font_family": "Montserrat",
-                "font_weight": "700",
-                "font_size": "4.5 vmin",
-                "fill_color": "#FFFFFF",
-                "background_color": "rgba(0,0,0,0.6)",
-                "background_x_padding": "20%",
-                "background_y_padding": "8%",
-                "animations": [
-                    {"type": "text-slide", "time": "start", "duration": 0.3},
-                    {"type": "fade", "time": "end", "duration": 0.3, "reversed": True},
-                ],
-            }
-            elements.append(text_el)
+        if subtitle_text and not has_text_overlay:
+            elements.append(self._build_subtitle(subtitle_text))
 
-        # 3. Narration audio (Creatomate's built-in ElevenLabs TTS provider)
+        # 5. Narration audio
         narration_text = audio_data.get("text", "") if audio_data else ""
         if not narration_text:
             narration_text = scene.narration or ""
@@ -429,6 +445,84 @@ class RenderEngine:
                 }]
 
         return composition
+
+    def _build_gradient_overlay(self) -> dict:
+        """Build a dark gradient overlay shape — transparent top, 75% opaque black bottom."""
+        return {
+            "type": "shape",
+            "shape_type": "rectangle",
+            "x": "50%",
+            "y": "50%",
+            "width": "100%",
+            "height": "100%",
+            "fill_color": [
+                {"offset": "0%", "color": "rgba(0,0,0,0)"},
+                {"offset": "60%", "color": "rgba(0,0,0,0.15)"},
+                {"offset": "100%", "color": "rgba(0,0,0,0.75)"},
+            ],
+        }
+
+    def _apply_color_grade(self, visual_el: dict, color: dict):
+        """Apply color grading to an image element using niche color data."""
+        accent = color.get("accent", "")
+        contrast = color.get("contrast", 1.0)
+        if accent:
+            visual_el["color_overlay"] = accent
+            visual_el["color_overlay_opacity"] = "8%"
+        if contrast and contrast != 1.0:
+            visual_el["color_filter"] = "contrast"
+            visual_el["color_filter_value"] = f"{int(contrast * 100)}%"
+
+    def _build_text_overlay(self, text: str, color: dict) -> dict:
+        """Build a large centered text overlay for hook/CTA scenes."""
+        return {
+            "type": "text",
+            "text": text,
+            "x": "50%",
+            "y": "45%",
+            "width": "85%",
+            "x_alignment": "50%",
+            "y_alignment": "50%",
+            "font_family": "Montserrat",
+            "font_weight": "900",
+            "font_size": "8 vmin",
+            "fill_color": color.get("text", "#FFFFFF"),
+            "stroke_color": "rgba(0,0,0,0.8)",
+            "stroke_width": "0.15 vmin",
+            "shadow_color": "rgba(0,0,0,0.5)",
+            "shadow_blur": 8,
+            "animations": [
+                {"type": "text-fly", "time": "start", "duration": 0.6,
+                 "split": "word", "easing": "back-out"},
+            ],
+        }
+
+    def _build_subtitle(self, text: str) -> dict:
+        """Build a professional subtitle element with stroke, shadow, and word animation."""
+        return {
+            "type": "text",
+            "text": text[:60],
+            "x": "50%",
+            "y": "82%",
+            "width": "85%",
+            "font_family": "Montserrat",
+            "font_weight": "700",
+            "font_size": "4.5 vmin",
+            "fill_color": "#FFFFFF",
+            "stroke_color": "rgba(0,0,0,0.8)",
+            "stroke_width": "0.15 vmin",
+            "shadow_color": "rgba(0,0,0,0.5)",
+            "shadow_blur": 8,
+            "background_color": "rgba(0,0,0,0.4)",
+            "background_x_padding": "15%",
+            "background_y_padding": "8%",
+            "background_border_radius": 8,
+            "animations": [
+                {"type": "text-fly", "time": "start", "duration": 0.4,
+                 "split": "word", "easing": "quadratic-out"},
+                {"type": "fade", "time": "end", "duration": 0.3, "reversed": True},
+            ],
+        }
 
     def _get_transition_animation(self, transition_key: str) -> dict:
         """Convert a transition key to a Creatomate animation dict."""

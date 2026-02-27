@@ -64,7 +64,10 @@ class TestVideoSmith:
         audio = smith.craft_audio_plan(sb, "witchcraftforbeginners")
         assert isinstance(audio, AudioPlan)
         assert audio.voice_id
-        assert audio.tts_provider == "edge_tts"
+        assert audio.tts_provider == "elevenlabs"
+        assert audio.elevenlabs_voice_id
+        assert audio.elevenlabs_model == "eleven_turbo_v2_5"
+        assert "stability" in audio.voice_settings
 
     def test_craft_subtitle_track(self, smith):
         sb = smith.craft_storyboard("test topic", "smarthomewizards")
@@ -87,3 +90,30 @@ class TestVideoSmith:
     def test_color_grade_set(self, smith):
         sb = smith.craft_storyboard("tech review", "smarthomewizards")
         assert sb.color_grade
+
+    def test_no_text_card_scenes(self, smith):
+        """No scene should use text_card shot type."""
+        sb = smith.craft_storyboard("moon rituals", "witchcraftforbeginners")
+        for scene in sb.scenes:
+            assert "text_card" not in scene.shot_type, (
+                f"Scene {scene.scene_number} uses text_card — all scenes should have real shot types"
+            )
+
+    def test_hook_has_visual_prompt(self, smith):
+        """Hook scene must have a visual prompt for image generation."""
+        sb = smith.craft_storyboard("crystal healing", "witchcraftforbeginners")
+        hook_scenes = [s for s in sb.scenes if s.visual_prompt and "hero" in s.visual_prompt.lower()]
+        assert len(hook_scenes) >= 1, "Hook scene should have a dramatic hero shot visual prompt"
+
+    def test_scene_durations_match_narration(self, smith):
+        """Scenes with more words should generally have longer durations."""
+        sb = smith.craft_storyboard("smart home setup guide", "smarthomewizards")
+        narrated = [s for s in sb.scenes if s.narration and len(s.narration.split()) > 3]
+        if len(narrated) >= 2:
+            # Sort by word count
+            by_words = sorted(narrated, key=lambda s: len(s.narration.split()))
+            shortest_words = len(by_words[0].narration.split())
+            longest_words = len(by_words[-1].narration.split())
+            # If word counts differ significantly, durations should differ
+            if longest_words > shortest_words * 2:
+                assert by_words[-1].duration_seconds >= by_words[0].duration_seconds

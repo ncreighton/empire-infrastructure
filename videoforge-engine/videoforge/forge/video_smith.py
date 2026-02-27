@@ -14,7 +14,7 @@ from ..knowledge.color_grades import get_color_grade
 from ..knowledge.subtitle_styles import get_subtitle_style
 from ..knowledge.shot_types import SHOT_TYPES
 from ..knowledge.transitions import TRANSITIONS
-from ..voice import get_voice
+from ..voice import get_voice, get_elevenlabs_voice
 from .variation_engine import (
     VariationEngine, HOOK_OPENING_POOLS, CTA_POOLS,
     TRANSITION_PHRASE_POOLS, THUMBNAIL_CONCEPT_POOLS,
@@ -23,77 +23,159 @@ from .variation_engine import (
 
 # Storyboard templates by format
 _SHORT_TEMPLATE = [
-    {"role": "hook", "duration": 2.0, "shot": "text_card", "transition": "cut"},
+    {"role": "hook", "duration": 2.0, "shot": "slow_zoom_in", "transition": "cut"},
     {"role": "context", "duration": 4.0, "shot": "medium", "transition": "slide_left"},
     {"role": "point_1", "duration": 5.0, "shot": "close_up", "transition": "cut"},
     {"role": "point_2", "duration": 5.0, "shot": "overhead_flat_lay", "transition": "crossfade"},
     {"role": "point_3", "duration": 5.0, "shot": "slow_zoom_in", "transition": "cut"},
     {"role": "climax", "duration": 4.0, "shot": "low_angle", "transition": "flash"},
-    {"role": "cta", "duration": 3.0, "shot": "text_card", "transition": "fade_black"},
+    {"role": "cta", "duration": 3.0, "shot": "static_locked", "transition": "fade_black"},
 ]
 
 _STANDARD_TEMPLATE = [
     {"role": "hook", "duration": 5.0, "shot": "wide_establishing", "transition": "cut"},
     {"role": "intro", "duration": 10.0, "shot": "medium", "transition": "crossfade"},
     {"role": "section_1", "duration": 25.0, "shot": "close_up", "transition": "slide_left"},
-    {"role": "transition_hook", "duration": 3.0, "shot": "text_card", "transition": "flash"},
+    {"role": "transition_hook", "duration": 3.0, "shot": "dutch_angle", "transition": "flash"},
     {"role": "section_2", "duration": 25.0, "shot": "tracking_forward", "transition": "cut"},
-    {"role": "transition_hook_2", "duration": 3.0, "shot": "kinetic_text", "transition": "whip_pan"},
+    {"role": "transition_hook_2", "duration": 3.0, "shot": "extreme_close_up", "transition": "whip_pan"},
     {"role": "section_3", "duration": 25.0, "shot": "b_roll_montage", "transition": "crossfade"},
     {"role": "climax", "duration": 10.0, "shot": "slow_zoom_in", "transition": "fade_black"},
     {"role": "cta", "duration": 10.0, "shot": "static_locked", "transition": "crossfade"},
 ]
 
-# Narration templates per scene role
+# Narration templates per scene role (expanded for variation)
 _NARRATION_TEMPLATES = {
     "hook": [
         "{hook_text}",
     ],
     "context": [
         "Here's what you need to know about {topic}.",
-        "Let's talk about {topic} — and why it matters.",
+        "Let's talk about {topic} — and why it matters right now.",
         "Today we're diving into {topic}.",
+        "{topic} is about to change how you think about this.",
+        "Most people get {topic} completely wrong. Here's the truth.",
+        "I've spent years studying {topic}. Here's what I found.",
+        "If you only learn one thing about {topic}, make it this.",
+        "Everything you thought you knew about {topic}? Forget it.",
     ],
     "point_1": [
-        "First, {point}.",
-        "Number one: {point}.",
+        "First up: {point}.",
+        "Number one — {point}.",
         "The first thing you should know: {point}.",
+        "Let's start here. {point}.",
+        "Right off the bat — {point}.",
+        "This is foundational. {point}.",
+        "Most people miss this. {point}.",
+        "Here's where it begins. {point}.",
     ],
     "point_2": [
-        "Next up, {point}.",
-        "Number two: {point}.",
+        "But here's the thing — {point}.",
+        "Number two. {point}.",
         "Here's another key insight: {point}.",
+        "Now it gets interesting. {point}.",
+        "This one surprises everyone. {point}.",
+        "Pay attention to this. {point}.",
+        "And it doesn't stop there. {point}.",
+        "Here's what most people overlook. {point}.",
     ],
     "point_3": [
-        "And finally, {point}.",
-        "Last but not least: {point}.",
+        "And this is the one that matters most. {point}.",
+        "Last but not least — {point}.",
+        "The biggest takeaway: {point}.",
+        "Save this one. {point}.",
+        "This changes everything. {point}.",
+        "And the final piece: {point}.",
+        "Here's the part nobody talks about. {point}.",
         "The most important one: {point}.",
     ],
     "climax": [
         "This is the game-changer.",
         "And here's the part that changes everything.",
-        "Now you understand the full picture.",
+        "Now you see the full picture.",
+        "That's the real secret. And now you know it.",
+        "This is what separates the beginners from the experts.",
+        "And that? That changes everything about {topic}.",
+        "Once you understand this, you'll never go back.",
+        "This is the moment it all clicks.",
     ],
     "cta": [
         "{cta_text}",
     ],
     "intro": [
-        "Welcome back. Today we're exploring {topic} in depth.",
+        "Let's break down {topic} — from the ground up.",
+        "Today we're going deep on {topic}.",
+        "By the end of this, you'll understand {topic} completely.",
+        "This is the complete breakdown of {topic}.",
     ],
     "section_1": [
         "Let's start with the foundation. {point}.",
+        "The basics first. {point}.",
+        "Before we go further — {point}.",
+        "Ground zero. {point}.",
     ],
     "section_2": [
         "Now here's where it gets interesting. {point}.",
+        "This is the part most people skip. {point}.",
+        "Let's go deeper. {point}.",
+        "But here's what changes the game. {point}.",
     ],
     "section_3": [
         "And the final piece of the puzzle. {point}.",
+        "This ties everything together. {point}.",
+        "And the last thing you need to know. {point}.",
+        "The grand finale. {point}.",
     ],
     "transition_hook": [
         "But wait — there's more.",
+        "And it gets better.",
+        "Hold on. This next part is key.",
+        "But that's not even the best part.",
     ],
     "transition_hook_2": [
         "Stay with me — the best part is coming.",
+        "We're just getting started.",
+        "Don't skip this next part.",
+        "Now watch what happens next.",
+    ],
+}
+
+# Niche-specific point generators — replace generic "{point}" with niche-aware content
+_NICHE_POINT_TEMPLATES = {
+    "witchcraft": [
+        "the power of intention is real, and {topic} proves it",
+        "your energy and focus are the most powerful tools you have",
+        "the correspondences between herbs, crystals, and intention matter",
+        "timing your practice with the moon amplifies everything",
+        "building a personal practice changes your entire relationship with {topic}",
+    ],
+    "mythology": [
+        "the ancient stories carry wisdom we're only now rediscovering",
+        "this myth reveals something fundamental about human nature",
+        "the symbolism goes deeper than most scholars realize",
+        "civilizations rose and fell based on these beliefs",
+        "the parallels between cultures tell us something profound about {topic}",
+    ],
+    "tech": [
+        "the setup takes five minutes but saves you hours every week",
+        "this one integration changes how your entire system works",
+        "most people overcomplicate this — keep it simple",
+        "the real power is in the automation, not the device",
+        "compatibility is everything — check this before you buy",
+    ],
+    "ai_news": [
+        "this AI breakthrough just changed everything in the industry",
+        "the real impact isn't what the headlines are telling you",
+        "this technology is already being used by top companies",
+        "the implications for your career are massive",
+        "most people won't notice this shift until it's too late",
+    ],
+    "lifestyle": [
+        "this small change makes a bigger difference than you'd expect",
+        "consistency matters more than perfection",
+        "it's about building systems, not relying on motivation",
+        "the people who succeed at this all have one thing in common",
+        "start here — it takes less than ten minutes",
     ],
 }
 
@@ -153,14 +235,8 @@ class VideoSmith:
                 subtitle_text=narration,
             ))
 
-        # Scale durations to pacing profile
-        ideal_duration = pacing.get("ideal_total_duration", (30, 60))
-        target = (ideal_duration[0] + ideal_duration[1]) / 2
-        current_total = sum(s.duration_seconds for s in scenes)
-        if current_total > 0:
-            scale = target / current_total
-            for s in scenes:
-                s.duration_seconds = round(s.duration_seconds * scale, 1)
+        # Voice-driven scene durations based on narration word count
+        self._calculate_scene_durations(scenes, pacing)
 
         # Thumbnail concept
         thumb_pool = THUMBNAIL_CONCEPT_POOLS.get(category, THUMBNAIL_CONCEPT_POOLS.get("tech", []))
@@ -192,16 +268,24 @@ class VideoSmith:
     def craft_audio_plan(self, storyboard: Storyboard, niche: str) -> AudioPlan:
         """Generate an audio plan from a storyboard."""
         voice = get_voice(niche)
+        el_voice = get_elevenlabs_voice(niche)
         moods = get_mood_for_niche(niche)
 
         return AudioPlan(
             voice_id=voice["voice_id"],
             voice_name=voice["name"],
-            tts_provider="edge_tts",
+            tts_provider="elevenlabs",
             music_track=moods[0] if moods else "lo_fi",
             music_source="pixabay",
             music_volume=0.15,
-            sfx_cues=["whoosh", "pop"],  # Basic SFX
+            sfx_cues=["whoosh", "pop"],
+            elevenlabs_voice_id=el_voice["voice_id"],
+            elevenlabs_model="eleven_turbo_v2_5",
+            voice_settings={
+                "stability": el_voice["stability"],
+                "similarity_boost": el_voice["similarity_boost"],
+                "style": el_voice["style"],
+            },
         )
 
     def craft_subtitle_track(self, storyboard: Storyboard) -> SubtitleTrack:
@@ -251,6 +335,38 @@ class VideoSmith:
             status="draft",
         )
 
+    # ── Duration & Scene Calculation ─────────────────────────────────
+
+    def _calculate_scene_durations(self, scenes: list, pacing: dict):
+        """Calculate voice-driven scene durations based on narration word count.
+
+        Each scene's duration = max(min_dur, (word_count / wpm) * 60 + 1.0)
+        capped at max_dur. Light scaling only if total deviates >20% from target.
+        """
+        wpm = pacing.get("word_rate_wpm", 160)
+        min_dur = pacing.get("min_scene_duration", 1.0)
+        max_dur = pacing.get("max_scene_duration", 5.0)
+
+        for scene in scenes:
+            word_count = len(scene.narration.split()) if scene.narration else 0
+            if word_count > 0:
+                speech_dur = (word_count / wpm) * 60 + 1.0
+                scene.duration_seconds = round(
+                    max(min_dur, min(speech_dur, max_dur)), 1
+                )
+            else:
+                scene.duration_seconds = round(min_dur, 1)
+
+        # Light scaling only if total deviates >20% from target
+        ideal_duration = pacing.get("ideal_total_duration", (30, 60))
+        target = (ideal_duration[0] + ideal_duration[1]) / 2
+        current_total = sum(s.duration_seconds for s in scenes)
+        if current_total > 0:
+            ratio = target / current_total
+            if ratio < 0.8 or ratio > 1.2:
+                for s in scenes:
+                    s.duration_seconds = round(s.duration_seconds * ratio, 1)
+
     # ── Generators ────────────────────────────────────────────────────
 
     def _generate_hook(self, topic: str, niche: str, formula_key: str, formula: dict) -> str:
@@ -282,11 +398,25 @@ class VideoSmith:
                             cta_text: str, niche: str) -> str:
         """Generate narration for a scene based on role."""
         templates = _NARRATION_TEMPLATES.get(role, [f"More about {topic}."])
-        text = self.variation.pick(f"narration_{role}", templates)
+        text = self.variation.pick(f"narration_{role}_{niche}", templates)
         text = text.replace("{topic}", topic)
         text = text.replace("{hook_text}", hook_text)
         text = text.replace("{cta_text}", cta_text)
-        text = text.replace("{point}", f"an important aspect of {topic}")
+
+        # Replace {point} with niche-aware content instead of generic filler
+        if "{point}" in text:
+            profile = get_niche_profile(niche)
+            category = profile.get("category", "tech")
+            point_pool = _NICHE_POINT_TEMPLATES.get(
+                category, _NICHE_POINT_TEMPLATES.get("tech", [])
+            )
+            if point_pool:
+                point = self.variation.pick(f"point_{role}_{niche}", point_pool)
+                point = point.replace("{topic}", topic)
+            else:
+                point = f"this key aspect of {topic} that most people miss"
+            text = text.replace("{point}", point)
+
         return text
 
     def _generate_visual_prompt(self, role: str, topic: str,
@@ -301,19 +431,19 @@ class VideoSmith:
         colors_str = " and ".join(palette[:2]) if palette else ""
 
         prompts = {
-            "hook": f"{aesthetic} style, dramatic {topic} scene, {visuals_str}, bold and eye-catching, {colors_str} color scheme",
+            "hook": f"Dramatic hero shot, {aesthetic} style, {topic}, {visuals_str}, bold composition, intense lighting, {colors_str} color scheme, cinematic wide angle",
             "context": f"{aesthetic} establishing shot, {topic} environment, {visuals_str}, atmospheric",
             "point_1": f"Close-up detail shot, {topic} related, {visuals_str}, {aesthetic} style",
             "point_2": f"Overhead view, {topic} arrangement, {visuals_str}, organized composition",
             "point_3": f"Dynamic angle, {topic} highlight, {visuals_str}, engaging composition",
             "climax": f"Epic {aesthetic} shot, {topic} pinnacle moment, {visuals_str}, dramatic lighting",
-            "cta": f"Clean {aesthetic} background with subtle {visuals_str}, space for text overlay",
+            "cta": f"Cinematic wide shot, {aesthetic} style, {topic}, {visuals_str}, {colors_str}, space for text overlay, clean lower third",
             "intro": f"Wide {aesthetic} scene, {topic} world, {visuals_str}, establishing atmosphere",
             "section_1": f"Medium shot, {topic} focus, {visuals_str}, {aesthetic} style, informative",
             "section_2": f"Dynamic composition, {topic} deep dive, {visuals_str}, {aesthetic}",
             "section_3": f"B-roll montage style, {topic} variety, {visuals_str}, {aesthetic}",
-            "transition_hook": f"Text card background, {aesthetic} pattern, {colors_str}",
-            "transition_hook_2": f"Text card background, {aesthetic} gradient, {colors_str}",
+            "transition_hook": f"Dramatic angle, {aesthetic} style, {topic}, {visuals_str}, {colors_str}, bold visual",
+            "transition_hook_2": f"Extreme close-up, {aesthetic} texture, {topic}, {visuals_str}, {colors_str}, detail shot",
         }
         return prompts.get(role, f"{aesthetic} style, {topic}, {visuals_str}")
 

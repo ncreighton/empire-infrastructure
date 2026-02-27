@@ -42,7 +42,6 @@ def plan_with_assets(plan):
             duration=scene.duration_seconds,
         )
         for i, scene in enumerate(plan.storyboard.scenes)
-        if "text_card" not in scene.shot_type
     ]
     plan.narration_audio_data = [
         {
@@ -188,26 +187,28 @@ class TestRenderEngine:
         assert text_found >= 3, "Subtitle text should be in compositions"
 
     def test_subtitle_positioned_at_bottom(self, render_engine, plan):
-        """Narration subtitles must be at y: 85% with readable font size."""
+        """Narration subtitles must be at y: 82% with professional styling."""
         rs = render_engine.build_renderscript(plan)
         compositions = [e for e in rs["elements"] if e.get("type") == "composition"]
         for comp in compositions:
             texts = [el for el in comp.get("elements", []) if el.get("type") == "text"]
             for text_el in texts:
-                # Text_card centered text is at y: 50%, subtitles at y: 85%
-                if text_el.get("y") == "85%":
+                if text_el.get("y") == "82%":
                     assert text_el["font_size"] == "4.5 vmin", "Subtitle font should be 4.5 vmin"
-                    assert text_el.get("background_color"), "Subtitles need background for readability"
+                    assert text_el.get("stroke_color"), "Subtitles need stroke for readability"
+                    assert text_el.get("shadow_color"), "Subtitles need shadow"
 
-    def test_text_card_no_duplicate_subtitle(self, render_engine, plan):
-        """Text_card scenes should have only one text element (card text), not a subtitle too."""
-        rs = render_engine.build_renderscript(plan)
+    def test_hook_has_overlay_not_subtitle(self, render_engine, plan_with_assets):
+        """Hook/CTA scenes with text_overlay should get large overlay text, not a subtitle."""
+        rs = render_engine.build_renderscript(plan_with_assets)
         compositions = [e for e in rs["elements"] if e.get("type") == "composition"]
         for comp in compositions:
             texts = [el for el in comp.get("elements", []) if el.get("type") == "text"]
-            if any(t.get("y") == "50%" and t.get("font_size") == "8 vmin" for t in texts):
-                # This is a text_card scene — should only have 1 text element
-                assert len(texts) == 1, "Text_card scenes must not have duplicate subtitle text"
+            # If a composition has a large overlay (8 vmin), it should NOT also have a subtitle
+            has_overlay = any(t.get("font_size") == "8 vmin" for t in texts)
+            has_subtitle = any(t.get("y") == "82%" for t in texts)
+            if has_overlay:
+                assert not has_subtitle, "Scenes with text overlay must not also have a subtitle"
 
     def test_background_music_element(self, render_engine, plan):
         rs = render_engine.build_renderscript(plan)
@@ -231,7 +232,7 @@ class TestRenderEngine:
 
     def test_cost_within_budget(self, render_engine, plan):
         cost = render_engine.estimate_cost(plan)
-        assert cost.total_cost <= 1.00  # Budget limit (higher with FAL.ai + ElevenLabs)
+        assert cost.total_cost <= 1.50  # Budget limit (all scenes get FAL.ai images)
 
     def test_mock_render_no_api_key(self, render_engine, plan):
         from unittest.mock import patch
@@ -247,14 +248,67 @@ class TestRenderEngine:
 
 
 class TestKenBurns:
-    def test_has_5_variants(self):
-        assert len(KEN_BURNS_VARIANTS) == 5
+    def test_has_12_variants(self):
+        assert len(KEN_BURNS_VARIANTS) == 12
 
     def test_each_has_animations(self):
         for v in KEN_BURNS_VARIANTS:
             assert "name" in v
             assert "animations" in v
             assert len(v["animations"]) >= 1
+
+    def test_variants_have_unique_names(self):
+        names = [v["name"] for v in KEN_BURNS_VARIANTS]
+        assert len(names) == len(set(names)), "All Ken Burns variants must have unique names"
+
+
+class TestGradientOverlay:
+    def test_gradient_overlay_on_all_scenes(self):
+        """Every scene composition must have a gradient overlay shape."""
+        smith = VideoSmith(db_path=":memory:")
+        plan = smith.to_video_plan("test topic", "witchcraftforbeginners")
+        plan.optimizations = {"asset_routing": []}
+        plan.visual_assets = [
+            VisualAsset(
+                scene_number=i + 1, asset_type="image", source="fal_ai",
+                prompt="test", url=f"https://example.com/{i+1}.png",
+                cost=0.05, duration=s.duration_seconds,
+            )
+            for i, s in enumerate(plan.storyboard.scenes)
+        ]
+        engine = RenderEngine()
+        rs = engine.build_renderscript(plan)
+        compositions = [e for e in rs["elements"] if e.get("type") == "composition"]
+        for comp in compositions:
+            shapes = [el for el in comp["elements"] if el.get("type") == "shape"]
+            gradient_shapes = [s for s in shapes if isinstance(s.get("fill_color"), list)]
+            assert len(gradient_shapes) >= 1, "Every scene must have a gradient overlay"
+
+
+class TestColorGrading:
+    def test_color_grading_on_images(self):
+        """Image elements should have color_overlay for mood tinting."""
+        smith = VideoSmith(db_path=":memory:")
+        plan = smith.to_video_plan("test topic", "witchcraftforbeginners")
+        plan.optimizations = {"asset_routing": []}
+        plan.visual_assets = [
+            VisualAsset(
+                scene_number=i + 1, asset_type="image", source="fal_ai",
+                prompt="test", url=f"https://example.com/{i+1}.png",
+                cost=0.05, duration=s.duration_seconds,
+            )
+            for i, s in enumerate(plan.storyboard.scenes)
+        ]
+        engine = RenderEngine()
+        rs = engine.build_renderscript(plan)
+        compositions = [e for e in rs["elements"] if e.get("type") == "composition"]
+        images = []
+        for comp in compositions:
+            for el in comp["elements"]:
+                if el.get("type") == "image":
+                    images.append(el)
+        graded = [img for img in images if "color_overlay" in img]
+        assert len(graded) >= 1, "At least some images should have color grading"
 
 
 class TestTransitionMap:
@@ -270,4 +324,10 @@ class TestTransitionMap:
         assert TRANSITION_MAP["slide_left"]["direction"] == "180°"
 
     def test_flash_is_short(self):
-        assert TRANSITION_MAP["flash"]["duration"] == 0.3
+        assert TRANSITION_MAP["flash"]["duration"] == 0.15
+
+    def test_transitions_have_easing(self):
+        """All non-cut transitions should have easing."""
+        for key, anim in TRANSITION_MAP.items():
+            if anim is not None:
+                assert "easing" in anim, f"Transition '{key}' is missing easing"
