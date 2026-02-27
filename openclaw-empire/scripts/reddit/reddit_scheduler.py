@@ -21,13 +21,28 @@ import time
 from datetime import date, datetime
 from pathlib import Path
 
-# Ensure scripts/ is on path for adb_config
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Ensure project root and scripts/ are on path so this works both as
+# `python -m scripts.reddit.reddit_scheduler` AND as a direct script call
+# from Task Scheduler: `python scripts/reddit/reddit_scheduler.py`
+_project_root = str(Path(__file__).parent.parent.parent)
+_scripts_dir = str(Path(__file__).parent.parent)
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+if _scripts_dir not in sys.path:
+    sys.path.insert(0, _scripts_dir)
 
-from .reddit_adb import PhoneLock
-from .reddit_engagement import run_session
-from .reddit_safety import SafetyEngine, PHASE_LIMITS
-from .reddit_state import RedditState
+try:
+    # When run as part of package (python -m scripts.reddit.reddit_scheduler)
+    from .reddit_adb import PhoneLock
+    from .reddit_engagement import run_session
+    from .reddit_safety import SafetyEngine, PHASE_LIMITS
+    from .reddit_state import RedditState
+except ImportError:
+    # When run directly (python scripts/reddit/reddit_scheduler.py)
+    from reddit.reddit_adb import PhoneLock
+    from reddit.reddit_engagement import run_session
+    from reddit.reddit_safety import SafetyEngine, PHASE_LIMITS
+    from reddit.reddit_state import RedditState
 
 BASE_DIR = Path(__file__).parent.parent.parent
 DATA_DIR = BASE_DIR / "data" / "reddit"
