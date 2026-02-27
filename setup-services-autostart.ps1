@@ -27,6 +27,11 @@ $services = @(
         Name = "VideoForge API"
         Description = "Starts VideoForge Intelligence API at login (port 8090)"
         VbsPath = "D:\Claude Code Projects\launchers\launch-videoforge.vbs"
+    },
+    @{
+        Name = "BMC Webhook Handler"
+        Description = "Starts BMC Webhook Handler at login (port 8095)"
+        VbsPath = "D:\Claude Code Projects\launchers\launch-bmc-webhook.vbs"
     }
 )
 
@@ -84,11 +89,12 @@ Write-Host "  - Vision Service    -> http://localhost:8002" -ForegroundColor Whi
 Write-Host "  - Empire Dashboard  -> http://localhost:8000" -ForegroundColor White
 Write-Host "  - Grimoire API      -> http://localhost:8080" -ForegroundColor White
 Write-Host "  - VideoForge API    -> http://localhost:8090" -ForegroundColor White
+Write-Host "  - BMC Webhook       -> http://localhost:8095" -ForegroundColor White
 Write-Host ""
 Write-Host "Logs at: $env:LOCALAPPDATA\EmpireArchitect\" -ForegroundColor Gray
 Write-Host ""
 
 # Show task status
-Get-ScheduledTask -TaskName "Screenpipe", "Vision Service", "Empire Dashboard", "Grimoire API", "VideoForge API" -ErrorAction SilentlyContinue |
+Get-ScheduledTask -TaskName "Screenpipe", "Vision Service", "Empire Dashboard", "Grimoire API", "VideoForge API", "BMC Webhook Handler" -ErrorAction SilentlyContinue |
     Select-Object TaskName, State |
     Format-Table -AutoSize
