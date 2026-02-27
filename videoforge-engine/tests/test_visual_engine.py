@@ -1,9 +1,11 @@
-"""Tests for VisualEngine — FAL.ai primary routing, Pexels rare fallback, niche-specific suffixes."""
+"""Tests for VisualEngine — multi-provider routing, niche-specific suffixes."""
 
 import pytest
 from unittest.mock import patch, MagicMock
 from videoforge.assembly.visual_engine import (
     VisualEngine, _PROMPT_SUFFIX, _NICHE_STYLE_SUFFIXES, _get_niche_suffix,
+    _PROVIDER_CHAIN, _PROVIDER_COSTS, _OPENAI_SIZE_MAP,
+    _get_runware_key, _get_openai_key, _get_fal_key,
 )
 from videoforge.forge.video_smith import VideoSmith
 from videoforge.models import VisualAsset
@@ -46,43 +48,88 @@ def standard_storyboard(smith):
     return plan.storyboard
 
 
+# ── No-key patches (block all providers to isolate tests) ─────────────
+
+def _patch_no_keys():
+    """Patch all key loaders to return empty (no API keys)."""
+    return [
+        patch("videoforge.assembly.visual_engine._get_runware_key", return_value=""),
+        patch("videoforge.assembly.visual_engine._get_openai_key", return_value=""),
+        patch("videoforge.assembly.visual_engine._get_fal_key", return_value=""),
+    ]
+
+
 class TestVisualEngine:
     def test_generate_assets_returns_list(self, visual_engine, storyboard):
         """Without API keys, should return placeholder assets."""
-        assets = visual_engine.generate_assets(storyboard)
-        assert isinstance(assets, list)
-        assert len(assets) == len(storyboard.scenes)
+        patches = _patch_no_keys()
+        for p in patches:
+            p.start()
+        try:
+            assets = visual_engine.generate_assets(storyboard)
+            assert isinstance(assets, list)
+            assert len(assets) == len(storyboard.scenes)
+        finally:
+            for p in patches:
+                p.stop()
 
     def test_all_scenes_get_images(self, visual_engine, storyboard):
         """All scenes should get image assets — no text_card skips."""
-        assets = visual_engine.generate_assets(storyboard)
-        assert len(assets) == len(storyboard.scenes), "Every scene must get an image asset"
-        for asset in assets:
-            assert asset.asset_type == "image", f"Scene {asset.scene_number} should be image, not {asset.asset_type}"
-            assert "fal_ai" in asset.source, f"Scene {asset.scene_number} should route through FAL.ai"
+        patches = _patch_no_keys()
+        for p in patches:
+            p.start()
+        try:
+            assets = visual_engine.generate_assets(storyboard)
+            assert len(assets) == len(storyboard.scenes), "Every scene must get an image asset"
+            for asset in assets:
+                assert asset.asset_type == "image", f"Scene {asset.scene_number} should be image, not {asset.asset_type}"
+        finally:
+            for p in patches:
+                p.stop()
 
-    def test_default_routing_is_fal_ai(self, visual_engine, storyboard):
-        """Without routing, all scenes should default to FAL.ai."""
-        assets = visual_engine.generate_assets(storyboard)
-        for asset in assets:
-            # Without API key, should be fal_ai_placeholder
-            assert "fal_ai" in asset.source
+    def test_no_keys_returns_all_providers_failed(self, visual_engine, storyboard):
+        """Without any API keys, all scenes should get all_providers_failed."""
+        patches = _patch_no_keys()
+        for p in patches:
+            p.start()
+        try:
+            assets = visual_engine.generate_assets(storyboard)
+            for asset in assets:
+                assert asset.source == "all_providers_failed"
+        finally:
+            for p in patches:
+                p.stop()
 
     def test_pexels_only_on_explicit_override(self, visual_engine, storyboard):
         """Pexels should only be used when routing explicitly says pexels_override."""
-        # Without pexels override, NO assets should come from pexels
-        assets = visual_engine.generate_assets(storyboard)
-        for asset in assets:
-            assert "pexels" not in asset.source
+        patches = _patch_no_keys()
+        for p in patches:
+            p.start()
+        try:
+            assets = visual_engine.generate_assets(storyboard)
+            for asset in assets:
+                assert "pexels" not in asset.source
+        finally:
+            for p in patches:
+                p.stop()
 
     def test_pexels_override_routing(self, visual_engine, storyboard):
-        """Explicit pexels_override tries Pexels, falls back to FAL.ai if no key."""
-        routing = [{"scene": 2, "provider": "pexels_override"}]
-        assets = visual_engine.generate_assets(storyboard, routing)
-        scene_2 = next(a for a in assets if a.scene_number == 2)
-        # Without Pexels API key and no Pexels URL, falls back to FAL.ai placeholder
-        # (Pexels placeholder has no URL, so fallback to _generate_fal_ai kicks in)
-        assert scene_2.source in ("pexels_placeholder", "pexels", "fal_ai_placeholder", "fal_ai")
+        """Explicit pexels_override tries Pexels, falls back to fallback chain."""
+        patches = _patch_no_keys() + [
+            patch("videoforge.assembly.visual_engine._get_pexels_key", return_value=""),
+        ]
+        for p in patches:
+            p.start()
+        try:
+            routing = [{"scene": 2, "provider": "pexels_override"}]
+            assets = visual_engine.generate_assets(storyboard, routing)
+            scene_2 = next(a for a in assets if a.scene_number == 2)
+            # Without Pexels API key and no URL, falls back to fallback chain
+            valid_sources = ("pexels_placeholder", "all_providers_failed")
+            assert scene_2.source in valid_sources
+        finally:
+            for p in patches:
+                p.stop()
 
     @patch("videoforge.assembly.visual_engine._get_fal_key", return_value="test_key")
     @patch("videoforge.assembly.visual_engine.requests.post")
@@ -95,7 +142,6 @@ class TestVisualEngine:
         mock_response.raise_for_status = MagicMock()
         mock_post.return_value = mock_response
 
-        # Generate for first scene
         scene = storyboard.scenes[0]
         asset = visual_engine._generate_fal_ai(scene, storyboard)
         assert asset.source == "fal_ai"
@@ -104,13 +150,17 @@ class TestVisualEngine:
 
     def test_prompt_suffix_enhances_quality(self, visual_engine, storyboard):
         """Visual prompts should be enhanced with cinematic quality suffix."""
-        # Without API key, prompts are stored in placeholder assets
-        assets = visual_engine.generate_assets(storyboard)
-        for asset in assets:
-            if asset.prompt:
-                # Enhanced prompts should contain quality terms
-                # (only when FAL key is present, which adds suffix)
-                assert len(asset.prompt) > 10
+        patches = _patch_no_keys()
+        for p in patches:
+            p.start()
+        try:
+            assets = visual_engine.generate_assets(storyboard)
+            for asset in assets:
+                if asset.prompt:
+                    assert len(asset.prompt) > 10
+        finally:
+            for p in patches:
+                p.stop()
 
     def test_short_format_vertical_dimensions(self, visual_engine, storyboard):
         """Short format should request vertical (1080x1920) images."""
@@ -215,12 +265,323 @@ class TestNicheSpecificSuffixes:
         visual_engine._generate_fal_ai(tech_storyboard.scenes[0], tech_storyboard)
         call_json = mock_post.call_args[1]["json"]
         prompt = call_json["prompt"]
-        # Tech niche should NOT have "film grain" or "dramatic volumetric lighting"
         assert "film grain" not in prompt
-        # Should have niche-appropriate terms
         assert "product photography" in prompt or "ambient lighting" in prompt or "editorial" in prompt
 
     def test_niche_suffix_categories_exist(self):
         """All expected category suffixes should be defined."""
         for category in ["tech", "ai_news", "witchcraft", "mythology", "lifestyle", "fitness", "business"]:
             assert category in _NICHE_STYLE_SUFFIXES, f"Missing suffix for category: {category}"
+
+
+# ── Multi-Provider Routing Tests ──────────────────────────────────────
+
+class TestMultiProviderRouting:
+    """Test niche-based provider chain and fallback logic."""
+
+    def test_provider_chain_mythology(self):
+        """Mythology niche should prioritize OpenAI."""
+        chain = _PROVIDER_CHAIN["mythology"]
+        assert chain[0] == "openai"
+        assert "runware" in chain
+        assert "fal_ai" in chain
+
+    def test_provider_chain_witchcraft(self):
+        """Witchcraft niche should prioritize OpenAI."""
+        chain = _PROVIDER_CHAIN["witchcraft"]
+        assert chain[0] == "openai"
+
+    def test_provider_chain_tech(self):
+        """Tech niche should prioritize Runware."""
+        chain = _PROVIDER_CHAIN["tech"]
+        assert chain[0] == "runware"
+        assert "openai" in chain
+
+    def test_provider_chain_all_categories_defined(self):
+        """All niche categories should have a provider chain."""
+        for cat in ["mythology", "witchcraft", "tech", "ai_news", "lifestyle", "fitness", "business"]:
+            assert cat in _PROVIDER_CHAIN
+
+    def test_provider_costs_defined(self):
+        """All providers should have cost entries."""
+        assert _PROVIDER_COSTS["runware"] == 0.02
+        assert _PROVIDER_COSTS["openai"] == 0.04
+        assert _PROVIDER_COSTS["fal_ai"] == 0.06
+
+    @patch("videoforge.assembly.visual_engine._get_runware_key", return_value="test_rw_key")
+    @patch("videoforge.assembly.visual_engine._get_openai_key", return_value="")
+    @patch("videoforge.assembly.visual_engine._get_fal_key", return_value="")
+    @patch("videoforge.assembly.visual_engine.requests.post")
+    def test_fallback_runware_success(self, mock_post, mock_fal, mock_oai, mock_rw,
+                                      visual_engine, tech_storyboard):
+        """When Runware has a key and succeeds, use it for tech niche."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = [
+            {"imageURL": "https://cdn.runware.ai/test.png", "taskUUID": "vf_1"}
+        ]
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        assets = visual_engine.generate_assets(tech_storyboard)
+        # All scenes should use Runware (tech niche primary)
+        for asset in assets:
+            assert asset.source == "runware"
+            assert asset.url.startswith("https://")
+            assert asset.cost == 0.02
+
+    @patch("videoforge.assembly.visual_engine._get_openai_key", return_value="test_oai_key")
+    @patch("videoforge.assembly.visual_engine._get_runware_key", return_value="")
+    @patch("videoforge.assembly.visual_engine._get_fal_key", return_value="")
+    @patch("videoforge.assembly.visual_engine.requests.post")
+    def test_fallback_openai_for_mythology(self, mock_post, mock_fal, mock_rw, mock_oai,
+                                            visual_engine, mythology_storyboard):
+        """Mythology niche should use OpenAI as primary."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "data": [{"url": "https://oaidalleapiprodscus.blob.core.windows.net/test.png"}]
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        assets = visual_engine.generate_assets(mythology_storyboard)
+        for asset in assets:
+            assert asset.source == "openai"
+            assert asset.cost == 0.04
+
+    @patch("videoforge.assembly.visual_engine._get_runware_key", return_value="test_key")
+    @patch("videoforge.assembly.visual_engine._get_openai_key", return_value="test_key")
+    @patch("videoforge.assembly.visual_engine._get_fal_key", return_value="")
+    @patch("videoforge.assembly.visual_engine.requests.post")
+    def test_fallback_on_primary_failure(self, mock_post, mock_fal, mock_oai, mock_rw,
+                                          visual_engine, tech_storyboard):
+        """When primary provider fails, should fall back to secondary."""
+        call_count = [0]
+
+        def side_effect(*args, **kwargs):
+            call_count[0] += 1
+            mock_resp = MagicMock()
+            # First call (Runware) fails, second (OpenAI) succeeds
+            if "runware" in args[0]:
+                mock_resp.raise_for_status.side_effect = Exception("Runware API error")
+                return mock_resp
+            else:
+                mock_resp.json.return_value = {
+                    "data": [{"url": "https://openai.test/image.png"}]
+                }
+                mock_resp.raise_for_status = MagicMock()
+                return mock_resp
+
+        mock_post.side_effect = side_effect
+
+        scene = tech_storyboard.scenes[0]
+        asset = visual_engine._generate_with_fallback(scene, tech_storyboard)
+        assert asset.source == "openai"
+        assert asset.url.startswith("https://")
+
+    def test_all_providers_failed(self, visual_engine, storyboard):
+        """When all providers fail, returns all_providers_failed placeholder."""
+        patches = _patch_no_keys()
+        for p in patches:
+            p.start()
+        try:
+            scene = storyboard.scenes[0]
+            asset = visual_engine._generate_with_fallback(scene, storyboard)
+            assert asset.source == "all_providers_failed"
+            assert asset.cost == 0.0
+        finally:
+            for p in patches:
+                p.stop()
+
+    @patch("videoforge.assembly.visual_engine._get_runware_key", return_value="test_key")
+    @patch("videoforge.assembly.visual_engine._get_openai_key", return_value="")
+    @patch("videoforge.assembly.visual_engine._get_fal_key", return_value="")
+    @patch("videoforge.assembly.visual_engine.requests.post")
+    def test_explicit_provider_routing(self, mock_post, mock_fal, mock_oai, mock_rw,
+                                        visual_engine, storyboard):
+        """Routing override forces specific provider."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = [
+            {"imageURL": "https://cdn.runware.ai/explicit.png", "taskUUID": "vf_2"}
+        ]
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        routing = [{"scene": 1, "provider": "runware"}]
+        assets = visual_engine.generate_assets(storyboard, routing)
+        scene_1 = next(a for a in assets if a.scene_number == 1)
+        assert scene_1.source == "runware"
+        assert scene_1.url == "https://cdn.runware.ai/explicit.png"
+
+
+class TestRunwareProvider:
+    """Test Runware API integration."""
+
+    @patch("videoforge.assembly.visual_engine._get_runware_key", return_value="test_rw_key")
+    @patch("videoforge.assembly.visual_engine.requests.post")
+    def test_runware_api_call(self, mock_post, mock_key, visual_engine, storyboard):
+        """Mock Runware API call — verify request format and response parsing."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = [
+            {"imageURL": "https://cdn.runware.ai/output/abc123.png", "taskUUID": "vf_1_1234"}
+        ]
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        scene = storyboard.scenes[0]
+        asset = visual_engine._generate_runware(scene, storyboard)
+
+        assert asset.source == "runware"
+        assert asset.url == "https://cdn.runware.ai/output/abc123.png"
+        assert asset.cost == 0.02
+
+        # Verify request format
+        call_args = mock_post.call_args
+        assert "runware.ai" in call_args[0][0]
+        assert "Bearer test_rw_key" in call_args[1]["headers"]["Authorization"]
+        payload = call_args[1]["json"][0]
+        assert payload["taskType"] == "imageInference"
+        assert "negativePrompt" in payload
+        assert payload["outputFormat"] == "PNG"
+
+    def test_runware_no_key(self, visual_engine, storyboard):
+        """Without API key, Runware returns no-key placeholder."""
+        with patch("videoforge.assembly.visual_engine._get_runware_key", return_value=""):
+            scene = storyboard.scenes[0]
+            asset = visual_engine._generate_runware(scene, storyboard)
+            assert asset.source == "runware_no_key"
+            assert not asset.url
+            assert asset.cost == 0.0
+
+    @patch("videoforge.assembly.visual_engine._get_runware_key", return_value="test_key")
+    @patch("videoforge.assembly.visual_engine.requests.post")
+    def test_runware_dimensions_short(self, mock_post, mock_key, visual_engine, storyboard):
+        """Short format should request 1080x1920 from Runware."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = [{"imageURL": "https://test.png"}]
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        visual_engine._generate_runware(storyboard.scenes[0], storyboard)
+        payload = mock_post.call_args[1]["json"][0]
+        assert payload["width"] == 1080
+        assert payload["height"] == 1920
+
+    @patch("videoforge.assembly.visual_engine._get_runware_key", return_value="test_key")
+    @patch("videoforge.assembly.visual_engine.requests.post")
+    def test_runware_dimensions_standard(self, mock_post, mock_key, visual_engine, standard_storyboard):
+        """Standard format should request 1920x1080 from Runware."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = [{"imageURL": "https://test.png"}]
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        visual_engine._generate_runware(standard_storyboard.scenes[0], standard_storyboard)
+        payload = mock_post.call_args[1]["json"][0]
+        assert payload["width"] == 1920
+        assert payload["height"] == 1080
+
+    @patch("videoforge.assembly.visual_engine._get_runware_key", return_value="test_key")
+    @patch("videoforge.assembly.visual_engine.requests.post")
+    def test_runware_uses_niche_suffix(self, mock_post, mock_key, visual_engine, tech_storyboard):
+        """Runware prompt should include niche-specific suffix."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = [{"imageURL": "https://test.png"}]
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        visual_engine._generate_runware(tech_storyboard.scenes[0], tech_storyboard)
+        payload = mock_post.call_args[1]["json"][0]
+        prompt = payload["positivePrompt"]
+        assert "product photography" in prompt or "ambient lighting" in prompt or "editorial" in prompt
+
+
+class TestOpenAIProvider:
+    """Test OpenAI DALL-E 3 integration."""
+
+    @patch("videoforge.assembly.visual_engine._get_openai_key", return_value="test_oai_key")
+    @patch("videoforge.assembly.visual_engine.requests.post")
+    def test_openai_api_call(self, mock_post, mock_key, visual_engine, storyboard):
+        """Mock OpenAI DALL-E 3 API call."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "data": [{"url": "https://oaidalleapiprodscus.blob.core.windows.net/test.png"}]
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        scene = storyboard.scenes[0]
+        asset = visual_engine._generate_openai(scene, storyboard)
+
+        assert asset.source == "openai"
+        assert "oaidalleapiprodscus" in asset.url
+        assert asset.cost == 0.04
+
+        # Verify request format
+        call_args = mock_post.call_args
+        assert "openai.com" in call_args[0][0]
+        assert "Bearer test_oai_key" in call_args[1]["headers"]["Authorization"]
+        payload = call_args[1]["json"]
+        assert payload["model"] == "dall-e-3"
+        assert payload["quality"] == "standard"
+        assert payload["n"] == 1
+
+    def test_openai_no_key(self, visual_engine, storyboard):
+        """Without API key, OpenAI returns no-key placeholder."""
+        with patch("videoforge.assembly.visual_engine._get_openai_key", return_value=""):
+            scene = storyboard.scenes[0]
+            asset = visual_engine._generate_openai(scene, storyboard)
+            assert asset.source == "openai_no_key"
+            assert not asset.url
+            assert asset.cost == 0.0
+
+    def test_openai_size_mapping_short(self):
+        """Short format maps to 1024x1792."""
+        assert _OPENAI_SIZE_MAP["short"] == "1024x1792"
+
+    def test_openai_size_mapping_standard(self):
+        """Standard format maps to 1792x1024."""
+        assert _OPENAI_SIZE_MAP["standard"] == "1792x1024"
+
+    def test_openai_size_mapping_square(self):
+        """Square format maps to 1024x1024."""
+        assert _OPENAI_SIZE_MAP["square"] == "1024x1024"
+
+    @patch("videoforge.assembly.visual_engine._get_openai_key", return_value="test_key")
+    @patch("videoforge.assembly.visual_engine.requests.post")
+    def test_openai_short_format_size(self, mock_post, mock_key, visual_engine, storyboard):
+        """Short storyboard should request 1024x1792 from DALL-E 3."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"data": [{"url": "https://test.png"}]}
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        visual_engine._generate_openai(storyboard.scenes[0], storyboard)
+        payload = mock_post.call_args[1]["json"]
+        assert payload["size"] == "1024x1792"
+
+    @patch("videoforge.assembly.visual_engine._get_openai_key", return_value="test_key")
+    @patch("videoforge.assembly.visual_engine.requests.post")
+    def test_openai_standard_format_size(self, mock_post, mock_key, visual_engine, standard_storyboard):
+        """Standard storyboard should request 1792x1024 from DALL-E 3."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"data": [{"url": "https://test.png"}]}
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        visual_engine._generate_openai(standard_storyboard.scenes[0], standard_storyboard)
+        payload = mock_post.call_args[1]["json"]
+        assert payload["size"] == "1792x1024"
+
+    @patch("videoforge.assembly.visual_engine._get_openai_key", return_value="test_key")
+    @patch("videoforge.assembly.visual_engine.requests.post")
+    def test_openai_uses_niche_suffix(self, mock_post, mock_key, visual_engine, mythology_storyboard):
+        """OpenAI prompt should include niche-specific suffix for mythology."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"data": [{"url": "https://test.png"}]}
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        visual_engine._generate_openai(mythology_storyboard.scenes[0], mythology_storyboard)
+        payload = mock_post.call_args[1]["json"]
+        prompt = payload["prompt"]
+        assert "oil painting" in prompt or "chiaroscuro" in prompt or "ancient" in prompt

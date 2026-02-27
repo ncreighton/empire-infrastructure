@@ -1,7 +1,13 @@
-"""VisualEngine — AI image generation (FAL.ai primary) + stock video (Pexels rare fallback)."""
+"""VisualEngine — Multi-provider AI image generation with niche-based routing.
+
+Provider priority by niche category:
+- mythology/witchcraft: OpenAI DALL-E 3 (epic artistic scenes) -> Runware -> FAL.ai
+- tech/ai_news/lifestyle/fitness/business: Runware (fast, cheap) -> OpenAI -> FAL.ai
+- Pexels: stock footage, only as explicit override via routing
+"""
 
 import os
-import sys
+import time
 import logging
 import requests
 from ..models import VisualAsset, Storyboard
@@ -11,7 +17,7 @@ from ..knowledge.domain_expertise import get_style_suffix
 logger = logging.getLogger(__name__)
 
 # Shared ai_gen_client disabled — module lacks generate_image attribute.
-# Use direct FAL.ai API calls instead.
+# Use direct API calls instead.
 _ai_gen_client = None
 
 
@@ -42,6 +48,34 @@ _PROMPT_SUFFIX = {
     "square": ", ultra realistic, cinematic film still, 8K UHD, sharp focus, dramatic volumetric lighting, depth of field, film grain, color graded, centered composition, professional cinematography, photorealistic, award-winning photography",
 }
 
+# ── Provider Routing ──────────────────────────────────────────────────
+
+# Provider chain by niche category — tried in order until one succeeds
+_PROVIDER_CHAIN = {
+    "mythology": ["openai", "runware", "fal_ai"],
+    "witchcraft": ["openai", "runware", "fal_ai"],
+    "tech": ["runware", "openai", "fal_ai"],
+    "ai_news": ["runware", "openai", "fal_ai"],
+    "lifestyle": ["runware", "openai", "fal_ai"],
+    "fitness": ["runware", "openai", "fal_ai"],
+    "business": ["runware", "openai", "fal_ai"],
+}
+
+_DEFAULT_CHAIN = ["runware", "openai", "fal_ai"]
+
+_PROVIDER_COSTS = {
+    "runware": 0.02,
+    "openai": 0.04,
+    "fal_ai": 0.06,
+}
+
+# DALL-E 3 size mapping (closest to target aspect ratios)
+_OPENAI_SIZE_MAP = {
+    "short": "1024x1792",
+    "standard": "1792x1024",
+    "square": "1024x1024",
+}
+
 
 def _get_niche_suffix(niche: str, fmt: str) -> str:
     """Get the niche-specific prompt suffix with composition hint.
@@ -57,47 +91,95 @@ def _get_niche_suffix(niche: str, fmt: str) -> str:
     return suffix + composition
 
 
+def _load_key_from_file(env_path: str, key_name: str) -> str:
+    """Load a key from a .env file by key name."""
+    if os.path.exists(env_path):
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith(f"{key_name}="):
+                    val = line.split("=", 1)[1]
+                    if val:
+                        return val
+    return ""
+
+
 def _get_pexels_key() -> str:
     key = os.environ.get("PEXELS_API_KEY", "")
     if not key:
-        env_path = os.path.join(
-            os.path.dirname(__file__), "..", "..", "configs", "api_keys.env"
+        key = _load_key_from_file(
+            os.path.join(os.path.dirname(__file__), "..", "..", "configs", "api_keys.env"),
+            "PEXELS_API_KEY",
         )
-        if os.path.exists(env_path):
-            with open(env_path) as f:
-                for line in f:
-                    if line.startswith("PEXELS_API_KEY="):
-                        key = line.strip().split("=", 1)[1]
+    if not key:
+        key = _load_key_from_file(
+            os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "config", ".env"),
+            "PEXELS_API_KEY",
+        )
     return key
 
 
 def _get_fal_key() -> str:
     key = os.environ.get("FAL_KEY", "")
     if not key:
-        env_path = os.path.join(
-            os.path.dirname(__file__), "..", "..", "configs", "api_keys.env"
+        key = _load_key_from_file(
+            os.path.join(os.path.dirname(__file__), "..", "..", "configs", "api_keys.env"),
+            "FAL_KEY",
         )
-        if os.path.exists(env_path):
-            with open(env_path) as f:
-                for line in f:
-                    if line.startswith("FAL_KEY="):
-                        key = line.strip().split("=", 1)[1]
+    if not key:
+        key = _load_key_from_file(
+            os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "config", ".env"),
+            "FAL_KEY",
+        )
+    return key
+
+
+def _get_runware_key() -> str:
+    """Load Runware API key from env var or config files."""
+    key = os.environ.get("RUNWARE_API_KEY", "")
+    if not key:
+        key = _load_key_from_file(
+            os.path.join(os.path.dirname(__file__), "..", "..", "configs", "api_keys.env"),
+            "RUNWARE_API_KEY",
+        )
+    if not key:
+        key = _load_key_from_file(
+            os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "config", ".env"),
+            "RUNWARE_API_KEY",
+        )
+    return key
+
+
+def _get_openai_key() -> str:
+    """Load OpenAI API key from env var or config files."""
+    key = os.environ.get("OPENAI_API_KEY", "")
+    if not key:
+        key = _load_key_from_file(
+            os.path.join(os.path.dirname(__file__), "..", "..", "configs", "api_keys.env"),
+            "OPENAI_API_KEY",
+        )
+    if not key:
+        key = _load_key_from_file(
+            os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "config", ".env"),
+            "OPENAI_API_KEY",
+        )
     return key
 
 
 class VisualEngine:
     """Generates and sources visual assets for video scenes.
 
-    Routing priority:
-    1. FAL.ai FLUX Pro for ALL scenes (AI-generated visuals)
-    2. Pexels only as explicit override via routing
+    Multi-provider routing with niche-based priority:
+    - mythology/witchcraft: OpenAI DALL-E 3 -> Runware -> FAL.ai
+    - tech/lifestyle/etc: Runware -> OpenAI -> FAL.ai
+    - Pexels: only as explicit override via routing
     """
 
     def generate_assets(self, storyboard: Storyboard,
                         routing: list = None) -> list:
         """Generate visual assets for all scenes in a storyboard.
 
-        Default: FAL.ai for everything. All scenes get real images.
+        Uses niche-based provider routing with automatic fallback.
         Pexels only when routing explicitly says 'pexels_override'.
         """
         assets = []
@@ -107,20 +189,232 @@ class VisualEngine:
 
         for scene in storyboard.scenes:
             route = routing_map.get(scene.scene_number, {})
-            provider = route.get("provider", "fal_ai_flux_pro")
+            provider = route.get("provider", None)
 
             if provider == "pexels_override":
                 asset = self._search_pexels(scene, storyboard)
                 if not asset.url:
-                    # Fallback to AI generation
-                    asset = self._generate_fal_ai(scene, storyboard)
+                    asset = self._generate_with_fallback(scene, storyboard)
+                assets.append(asset)
+            elif provider:
+                # Explicit provider specified in routing
+                asset = self._generate_single_provider(provider, scene, storyboard)
+                if not asset.url or not asset.url.startswith("http"):
+                    # Explicit provider failed, try fallback chain
+                    asset = self._generate_with_fallback(scene, storyboard)
                 assets.append(asset)
             else:
-                # Default: FAL.ai for everything
-                asset = self._generate_fal_ai(scene, storyboard)
+                # Smart routing based on niche
+                asset = self._generate_with_fallback(scene, storyboard)
                 assets.append(asset)
 
         return assets
+
+    def _generate_single_provider(self, provider: str, scene, storyboard: Storyboard) -> VisualAsset:
+        """Try a single specific provider."""
+        dispatch = {
+            "runware": self._generate_runware,
+            "openai": self._generate_openai,
+            "fal_ai": self._generate_fal_ai,
+        }
+        gen_fn = dispatch.get(provider)
+        if not gen_fn:
+            logger.warning(f"Unknown provider: {provider}")
+            return VisualAsset(
+                scene_number=scene.scene_number,
+                asset_type="image",
+                source=f"{provider}_unknown",
+                prompt=scene.visual_prompt,
+                cost=0.0,
+                duration=scene.duration_seconds,
+            )
+        try:
+            return gen_fn(scene, storyboard)
+        except Exception as e:
+            logger.warning(f"{provider} failed for scene {scene.scene_number}: {e}")
+            return VisualAsset(
+                scene_number=scene.scene_number,
+                asset_type="image",
+                source=f"{provider}_failed",
+                prompt=scene.visual_prompt,
+                cost=0.0,
+                duration=scene.duration_seconds,
+            )
+
+    def _generate_with_fallback(self, scene, storyboard: Storyboard) -> VisualAsset:
+        """Try providers in niche-priority order until one succeeds."""
+        profile = get_niche_profile(storyboard.niche)
+        category = profile.get("category", "tech") if profile else "tech"
+        chain = _PROVIDER_CHAIN.get(category, _DEFAULT_CHAIN)
+
+        for provider_name in chain:
+            try:
+                if provider_name == "runware":
+                    asset = self._generate_runware(scene, storyboard)
+                elif provider_name == "openai":
+                    asset = self._generate_openai(scene, storyboard)
+                elif provider_name == "fal_ai":
+                    asset = self._generate_fal_ai(scene, storyboard)
+                else:
+                    continue
+
+                if asset.url and asset.url.startswith("http"):
+                    return asset
+            except Exception as e:
+                logger.warning(f"{provider_name} failed for scene {scene.scene_number}: {e}")
+                continue
+
+        # All providers failed
+        return VisualAsset(
+            scene_number=scene.scene_number,
+            asset_type="image",
+            source="all_providers_failed",
+            prompt=scene.visual_prompt,
+            cost=0.0,
+            duration=scene.duration_seconds,
+        )
+
+    def _generate_runware(self, scene, storyboard: Storyboard) -> VisualAsset:
+        """Generate an image using Runware API."""
+        runware_key = _get_runware_key()
+        if not runware_key:
+            logger.info("No RUNWARE_API_KEY — skipping Runware")
+            return VisualAsset(
+                scene_number=scene.scene_number,
+                asset_type="image",
+                source="runware_no_key",
+                prompt=scene.visual_prompt,
+                cost=0.0,
+                duration=scene.duration_seconds,
+            )
+
+        fmt = storyboard.format if storyboard.format in _COMPOSITION_HINT else "short"
+        niche_suffix = _get_niche_suffix(storyboard.niche, fmt)
+        enhanced_prompt = scene.visual_prompt + niche_suffix
+
+        width = 1080 if storyboard.format == "short" else 1920
+        height = 1920 if storyboard.format == "short" else 1080
+
+        task_uuid = f"vf_{scene.scene_number}_{int(time.time())}"
+
+        try:
+            response = requests.post(
+                "https://api.runware.ai/v1",
+                headers={
+                    "Authorization": f"Bearer {runware_key}",
+                    "Content-Type": "application/json",
+                },
+                json=[{
+                    "taskType": "imageInference",
+                    "taskUUID": task_uuid,
+                    "positivePrompt": enhanced_prompt,
+                    "negativePrompt": "blurry, low quality, text, watermark, deformed, disfigured",
+                    "width": width,
+                    "height": height,
+                    "model": "runware:100@1",
+                    "numberResults": 1,
+                    "outputFormat": "PNG",
+                }],
+                timeout=60,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            # Response is a list of result items
+            items = data if isinstance(data, list) else data.get("data", [])
+            image_url = ""
+            for item in items:
+                if item.get("imageURL"):
+                    image_url = item["imageURL"]
+                    break
+
+            if image_url:
+                return VisualAsset(
+                    scene_number=scene.scene_number,
+                    asset_type="image",
+                    source="runware",
+                    prompt=enhanced_prompt,
+                    url=image_url,
+                    cost=_PROVIDER_COSTS["runware"],
+                    duration=scene.duration_seconds,
+                )
+        except Exception as e:
+            logger.warning(f"Runware generation failed for scene {scene.scene_number}: {e}")
+
+        return VisualAsset(
+            scene_number=scene.scene_number,
+            asset_type="image",
+            source="runware_failed",
+            prompt=enhanced_prompt,
+            cost=0.0,
+            duration=scene.duration_seconds,
+        )
+
+    def _generate_openai(self, scene, storyboard: Storyboard) -> VisualAsset:
+        """Generate an image using OpenAI DALL-E 3."""
+        openai_key = _get_openai_key()
+        if not openai_key:
+            logger.info("No OPENAI_API_KEY — skipping OpenAI")
+            return VisualAsset(
+                scene_number=scene.scene_number,
+                asset_type="image",
+                source="openai_no_key",
+                prompt=scene.visual_prompt,
+                cost=0.0,
+                duration=scene.duration_seconds,
+            )
+
+        fmt = storyboard.format if storyboard.format in _COMPOSITION_HINT else "short"
+        niche_suffix = _get_niche_suffix(storyboard.niche, fmt)
+        enhanced_prompt = scene.visual_prompt + niche_suffix
+
+        size = _OPENAI_SIZE_MAP.get(fmt, "1024x1792")
+
+        try:
+            response = requests.post(
+                "https://api.openai.com/v1/images/generations",
+                headers={
+                    "Authorization": f"Bearer {openai_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "dall-e-3",
+                    "prompt": enhanced_prompt,
+                    "size": size,
+                    "quality": "standard",
+                    "n": 1,
+                },
+                timeout=90,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            image_url = ""
+            items = data.get("data", [])
+            if items:
+                image_url = items[0].get("url", "")
+
+            if image_url:
+                return VisualAsset(
+                    scene_number=scene.scene_number,
+                    asset_type="image",
+                    source="openai",
+                    prompt=enhanced_prompt,
+                    url=image_url,
+                    cost=_PROVIDER_COSTS["openai"],
+                    duration=scene.duration_seconds,
+                )
+        except Exception as e:
+            logger.warning(f"OpenAI generation failed for scene {scene.scene_number}: {e}")
+
+        return VisualAsset(
+            scene_number=scene.scene_number,
+            asset_type="image",
+            source="openai_failed",
+            prompt=enhanced_prompt,
+            cost=0.0,
+            duration=scene.duration_seconds,
+        )
 
     def _generate_fal_ai(self, scene, storyboard: Storyboard) -> VisualAsset:
         """Generate an image using FAL.ai FLUX Pro."""

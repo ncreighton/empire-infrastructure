@@ -1,7 +1,7 @@
 # VideoForge Intelligence System
 
 Self-hosted video creation pipeline with FORGE+AMPLIFY intelligence.
-Replaces Revid.ai with unlimited capacity at ~$0.36-0.48 per video.
+Replaces Revid.ai with unlimited capacity at ~$0.24-0.38 per video.
 
 ## Quick Start
 
@@ -77,7 +77,7 @@ ENRICH → EXPAND → FORTIFY → ANTICIPATE → OPTIMIZE → VALIDATE
 
 ### Assembly Engines (API costs)
 - **ScriptEngine** — OpenRouter (DeepSeek $0.002, Claude $0.02)
-- **VisualEngine** — FAL.ai FLUX Pro ($0.05/image, primary) + Pexels (rare fallback)
+- **VisualEngine** — Multi-provider: Runware ($0.02), OpenAI DALL-E 3 ($0.04), FAL.ai ($0.06) with niche-based routing + Pexels (rare fallback)
 - **AudioEngine** — ElevenLabs Turbo v2.5 (primary, ~$0.005/scene) + Edge TTS (free fallback)
 - **SubtitleEngine** — Algorithmic (free)
 - **RenderEngine** — Creatomate (~$0.08), composition-based with Ken Burns + transitions
@@ -147,18 +147,36 @@ pip install fastapi uvicorn requests edge-tts pydantic pytest httpx
 Copy `configs/api_keys.env.template` to `configs/api_keys.env` and fill in:
 - `CREATOMATE_API_KEY` — Video rendering
 - `OPENROUTER_API_KEY` — AI script generation
-- `FAL_KEY` — AI image generation
+- `RUNWARE_API_KEY` — AI image generation (primary for tech niches, $0.02/image)
+- `OPENAI_API_KEY` — AI image generation via DALL-E 3 (primary for mythology/witchcraft, $0.04/image)
+- `FAL_KEY` — AI image generation fallback (FAL.ai FLUX Pro, $0.06/image)
 - `PEXELS_API_KEY` — Stock footage (free, rare fallback)
 - `ELEVENLABS_API_KEY` — Premium TTS voices
+
+Keys are loaded from: env vars > `configs/api_keys.env` > `../../config/.env` (empire-wide).
 
 ## Cost Per Video
 
 | Component | Cost |
 |-----------|------|
 | Script (DeepSeek) | $0.002 |
-| Visuals (FAL.ai, 7-9 scenes, ALL get images) | $0.35-0.54 |
+| Visuals (7-9 scenes, ALL get images) | $0.14-0.36 |
 | Audio (ElevenLabs Turbo v2.5) | $0.03-0.05 |
 | Music (Pixabay CC0) | $0.00 |
 | Subtitles | $0.00 |
 | Render (Creatomate) | $0.08 |
-| **Total** | **$0.46-0.58** |
+| **Total** | **$0.25-0.49** |
+
+### Visual Provider Routing
+
+| Niche Category | Primary ($) | Fallback ($) | Rationale |
+|----------------|-------------|--------------|-----------|
+| mythology | OpenAI DALL-E 3 ($0.04) | Runware ($0.02) | Epic artistic scenes |
+| witchcraft | OpenAI DALL-E 3 ($0.04) | Runware ($0.02) | Moody atmospheric |
+| tech | Runware ($0.02) | OpenAI ($0.04) | Clean product shots |
+| ai_news | Runware ($0.02) | OpenAI ($0.04) | Digital aesthetics |
+| lifestyle | Runware ($0.02) | OpenAI ($0.04) | Bright lifestyle |
+| fitness | Runware ($0.02) | OpenAI ($0.04) | Action shots |
+| business | Runware ($0.02) | OpenAI ($0.04) | Corporate aesthetics |
+
+FAL.ai is the final fallback for all categories (for when credits return).
