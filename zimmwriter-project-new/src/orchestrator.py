@@ -48,6 +48,43 @@ class Orchestrator:
         self.jobs.append(JobSpec(domain, titles, csv_path, profile_name, wait))
         logger.info(f"Queued: {domain} ({len(titles or [])} titles / CSV: {csv_path})")
 
+    def _wait_for_idle(self, timeout: int = 1800):
+        """Wait until ZimmWriter finishes generating and returns to Bulk Writer or Menu.
+
+        During generation, ZimmWriter shows titles like 'Processing SERP',
+        'Writing Article 1 of 5', or blank.  When done it returns to
+        'Bulk Blog Writer' or 'Menu'.  We detect generation by checking if
+        the title does NOT contain 'Bulk' or 'Menu' at some point.
+        """
+        saw_busy = False
+        for _ in range(timeout // 5):
+            try:
+                self.controller.connect()
+                title = self.controller.get_window_title()
+                is_idle = ("Bulk" in title or "Menu" in title) and title != ""
+                is_busy = not is_idle
+
+                if is_busy:
+                    saw_busy = True
+                    logger.info(f"Waiting for idle (currently: '{title}')...")
+                elif saw_busy and is_idle:
+                    # Was busy, now idle — generation complete
+                    logger.info(f"Generation complete (now: '{title}')")
+                    return
+                elif not saw_busy and is_idle:
+                    # Never saw busy state — generation may not have started yet
+                    # Keep waiting a bit to give it time to transition
+                    pass
+            except Exception:
+                saw_busy = True  # Connection error likely means window is changing
+            time.sleep(5)
+
+        if not saw_busy:
+            # Never saw generation start — it may have been instant or skipped
+            logger.warning("Never detected generation state — proceeding anyway")
+            return
+        raise RuntimeError(f"Timed out waiting for ZimmWriter to become idle")
+
     def run_all(self, delay_between: int = 10) -> List[Dict]:
         """
         Run all queued jobs sequentially.
@@ -79,7 +116,7 @@ class Orchestrator:
         return self.results
 
     def _run_single(self, job: JobSpec, index: int, total: int) -> Dict:
-        """Run a single job."""
+        """Run a single job using controller.run_job()."""
         start = time.time()
         result = {
             "domain": job.domain,
@@ -89,99 +126,37 @@ class Orchestrator:
         }
 
         try:
-            # Reconnect before each job to ensure fresh window handle
-            self.controller.connect()
-            time.sleep(0.5)
+            # Wait for any active generation to finish first
+            self._wait_for_idle()
 
-            # Ensure we're on Bulk Writer screen
-            title = self.controller.get_window_title()
-            if "Bulk" not in title:
-                # If ZimmWriter is actively generating, wait for it to finish
-                generation_states = ["Processing", "Writing", "Generating", "Uploading"]
-                if any(s in title for s in generation_states) or title == "":
-                    logger.info(f"ZimmWriter is busy ('{title}'), waiting for completion...")
-                    for wait_attempt in range(360):  # up to 30 minutes
-                        time.sleep(5)
-                        self.controller.connect()
-                        title = self.controller.get_window_title()
-                        if "Bulk" in title or "Menu" in title:
-                            break
-                    else:
-                        raise RuntimeError(f"Timed out waiting for generation, stuck on '{title}'")
-
-                # Now navigate to Bulk Writer if needed
-                self.controller.connect()
-                title = self.controller.get_window_title()
-                if "Bulk" not in title:
-                    logger.info(f"Navigating to Bulk Writer (on '{title}')...")
-                    if "Menu" in title:
-                        self.controller.open_bulk_writer()
-                    else:
-                        self.controller.back_to_menu()
-                        time.sleep(2)
-                        self.controller.connect()
-                        self.controller.open_bulk_writer()
-
-                    # Wait for Bulk Writer to fully load
-                    for attempt in range(10):
-                        time.sleep(2)
-                        self.controller.connect()
-                        title = self.controller.get_window_title()
-                        if "Bulk" in title:
-                            break
-                        logger.info(f"Waiting for Bulk Writer (on '{title}')...")
-                    else:
-                        raise RuntimeError(f"Failed to reach Bulk Writer, stuck on '{title}'")
-
-            # Skip clear_all_data — it can kick ZimmWriter back to Menu.
-            # load_profile reloads settings and set_bulk_titles overwrites content.
-
-            # Load profile (contains all saved settings from save_all_profiles.py)
+            # Delegate to controller.run_job which handles:
+            # - Navigation to Bulk Writer
+            # - Profile loading
+            # - Title/CSV loading
+            # - Starting + confirming
             profile = job.profile_name or job.domain
-            self.controller.load_profile(profile)
-            time.sleep(2)
+            started = self.controller.run_job(
+                titles=job.titles,
+                csv_path=job.csv_path,
+                profile_name=profile,
+                wait=False,  # We handle waiting ourselves below
+            )
 
-            # Fix non-persistent dropdowns that ZimmWriter doesn't save in profiles
-            preset = get_preset(job.domain)
-            if preset:
-                non_persistent = {
-                    "featured_image": ("79", preset.get("featured_image", "None")),
-                    "section_length": ("48", preset.get("section_length", "Medium")),
-                    "subheading_images_model": ("85", preset.get("subheading_images_model", "None")),
-                }
-                for dd_name, (auto_id, value) in non_persistent.items():
-                    try:
-                        self.controller.set_dropdown(auto_id=auto_id, value=value)
-                        time.sleep(0.3)
-                    except Exception as e:
-                        logger.warning(f"Could not fix {dd_name}: {e}")
-            time.sleep(0.5)
-
-            # Load content
-            if job.csv_path:
-                self.controller.load_seo_csv(job.csv_path)
-                result["source"] = f"CSV: {job.csv_path}"
-            elif job.titles:
-                self.controller.set_bulk_titles(job.titles)
-                result["source"] = f"{len(job.titles)} titles"
-            else:
-                result["status"] = "skipped"
-                result["error"] = "No content provided"
+            if not started:
+                result["status"] = "failed"
+                result["error"] = "run_job returned False"
                 return result
 
-            time.sleep(1)
+            result["source"] = f"{len(job.titles or [])} titles" if job.titles else f"CSV: {job.csv_path}"
 
-            # Start generation
-            self.controller.start_bulk_writer()
+            # Give ZimmWriter time to transition into generation state
+            logger.info("Waiting 30s for generation to begin...")
+            time.sleep(30)
 
-            if job.wait:
-                monitor = JobMonitor(self.controller)
-                monitor.start(total_articles=len(job.titles or []) or None)
-                completed = monitor.wait_until_done(timeout=7200)
-                result["status"] = "completed" if completed else "timeout"
-                result["monitoring_log"] = monitor.log[-1] if monitor.log else {}
-            else:
-                result["status"] = "started"
+            # Now wait for generation to complete
+            logger.info("Waiting for generation to complete...")
+            self._wait_for_idle()
+            result["status"] = "completed"
 
         except Exception as e:
             result["status"] = "error"
