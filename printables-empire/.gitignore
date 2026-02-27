@@ -1,0 +1,16 @@
+# Session/credentials
+config/printables_session.json
+
+# SQLite databases
+data/
+*.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Temp output
+output/
+*.stl
