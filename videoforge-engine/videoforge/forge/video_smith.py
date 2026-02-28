@@ -341,10 +341,9 @@ class VideoSmith:
     def _calculate_scene_durations(self, scenes: list, pacing: dict):
         """Calculate voice-driven scene durations based on narration word count.
 
-        Each scene's duration = max(min_dur, (word_count / wpm) * 60 + 0.5)
-        capped at max_dur. The +0.5s buffer prevents tight cuts and gives
-        breathing room between sentences. Light scaling only if total deviates
-        >20% from target.
+        Each scene's duration = max(min_dur, (word_count / wpm) * 60 + 0.2)
+        capped at max_dur. The +0.2s buffer gives minimal breathing room.
+        Actual audio duration overrides this in the render engine.
         """
         wpm = pacing.get("word_rate_wpm", 160)
         min_dur = pacing.get("min_scene_duration", 1.0)
@@ -353,7 +352,7 @@ class VideoSmith:
         for scene in scenes:
             word_count = len(scene.narration.split()) if scene.narration else 0
             if word_count > 0:
-                speech_dur = (word_count / wpm) * 60 + 0.5
+                speech_dur = (word_count / wpm) * 60 + 0.2
                 scene.duration_seconds = round(
                     max(min_dur, min(speech_dur, max_dur)), 1
                 )

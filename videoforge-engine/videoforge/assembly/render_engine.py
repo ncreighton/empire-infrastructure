@@ -603,12 +603,14 @@ class RenderEngine:
             if audio_el:
                 elements.append(audio_el)
 
-        # Sync composition duration with audio + 0.3s safety buffer
-        # to prevent overlapping narration at end of video
+        # Sync composition duration with actual audio — audio is the source of truth.
+        # Use audio duration + small buffer, NOT the WPM-estimated scene duration
+        # which inflates pauses. Fall back to scene duration only if no audio data.
         comp_duration = scene.duration_seconds
         if audio_data and audio_data.get("duration_estimate"):
             audio_dur = audio_data["duration_estimate"]
-            comp_duration = max(comp_duration, audio_dur + 0.3)
+            # Audio-driven: actual speech + 0.15s breathing room
+            comp_duration = audio_dur + 0.15
 
         # Build the composition — track 2 ensures scenes auto-sequence
         composition = {
@@ -633,17 +635,20 @@ class RenderEngine:
         """Apply color grading to an image element using niche color data.
 
         Creatomate color_overlay accepts RGBA strings — hex colors without alpha
-        would cover the image completely, so we convert to rgba() with 8% opacity.
+        would cover the image completely, so we convert to rgba() with 5% opacity.
+        Contrast is capped at 115% to avoid crushing dark images further.
         """
         accent = color.get("accent", "")
         contrast = color.get("contrast", 1.0)
         if accent:
-            # Convert hex to rgba with 8% opacity for subtle tint
+            # Convert hex to rgba with 5% opacity for very subtle tint
             r, g, b = self._hex_to_rgb(accent)
-            visual_el["color_overlay"] = f"rgba({r},{g},{b},0.08)"
-        if contrast and contrast != 1.0:
+            visual_el["color_overlay"] = f"rgba({r},{g},{b},0.05)"
+        # Only boost contrast slightly — cap at 115% to avoid darkening images
+        if contrast and contrast > 1.0:
+            capped = min(contrast, 1.15)
             visual_el["color_filter"] = "contrast"
-            visual_el["color_filter_value"] = f"{int(contrast * 100)}%"
+            visual_el["color_filter_value"] = f"{int(capped * 100)}%"
 
     @staticmethod
     def _hex_to_rgb(hex_color: str) -> tuple:

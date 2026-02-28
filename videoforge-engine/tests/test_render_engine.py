@@ -392,6 +392,7 @@ class TestColorGrading:
         assert len(graded) >= 1, "At least some images should have color_overlay"
         for img in graded:
             assert "rgba(" in img["color_overlay"], "color_overlay should be rgba format"
+            assert "0.05)" in img["color_overlay"], "Overlay should be 5% opacity"
 
 
 class TestTransitionMap:
@@ -483,9 +484,9 @@ class TestMusicDucking:
                     assert "value" in kf, "Keyframe must have value"
 
 
-class TestSafetyBuffer:
-    def test_composition_duration_includes_buffer(self):
-        """Composition duration should be >= audio duration + 0.3s buffer."""
+class TestAudioDrivenDuration:
+    def test_composition_duration_matches_audio(self):
+        """Composition duration should be audio-driven (audio + 0.15s)."""
         smith = VideoSmith(db_path=":memory:")
         plan = smith.to_video_plan("test topic", "witchcraftforbeginners")
         plan.optimizations = {"asset_routing": []}
@@ -503,8 +504,8 @@ class TestSafetyBuffer:
         rs = engine.build_renderscript(plan)
         compositions = [e for e in rs["elements"] if e.get("type") == "composition"]
         for comp in compositions:
-            # Duration should be at least 5.3 (5.0 audio + 0.3 buffer) for scenes with audio
-            assert comp["duration"] >= 5.3 or comp["duration"] >= 1.0
+            # Duration should be audio-driven: 5.0 + 0.15 = 5.15
+            assert comp["duration"] >= 5.1 or comp["duration"] >= 1.0
 
 
 class TestContentHashSelection:
