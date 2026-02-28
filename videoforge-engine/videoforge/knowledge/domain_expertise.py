@@ -270,14 +270,14 @@ DOMAIN_EXPERTISE = {
             "protection": "Black tourmaline by your front door blocks negative energy, salt circles create sacred space, rosemary hung above doorways protects the home",
         },
         "visual_subjects": {
-            "default": "crystal collection on dark altar cloth, candlelight, dried herbs, mystical atmosphere",
-            "crystals": "amethyst and clear quartz crystals on dark surface, candlelight reflection, mystical purple glow",
-            "herbs": "dried herbs in glass jars on wooden shelf, mortar and pestle, apothecary aesthetic, warm lighting",
-            "moon": "full moon in night sky, silhouette of tree branches, mystical blue glow, ethereal atmosphere",
-            "candles": "ritual candles burning on altar, melted wax dripping, warm golden light, sacred space",
-            "tarot": "tarot cards spread on dark velvet cloth, candlelight, mystical symbols, divination setup",
+            "default": "crystal collection on purple velvet cloth, warm candlelight glow, dried herbs and flowers, bright mystical atmosphere, golden warm tones",
+            "crystals": "amethyst and clear quartz crystals catching bright light, purple and pink reflections, sparkling facets, warm golden backdrop",
+            "herbs": "dried herbs in glass jars on wooden shelf, mortar and pestle, bright apothecary aesthetic, warm sunlit window, golden hour glow",
+            "moon": "luminous full moon in deep blue sky, soft glowing clouds, bright ethereal moonlight, magical atmosphere",
+            "candles": "ritual candles with bright warm flames on altar, soft golden glow filling the scene, cozy sacred space, warm inviting light",
+            "tarot": "tarot cards spread on rich purple velvet, warm candlelight illumination, golden mystical symbols, bright inviting setup",
         },
-        "style_suffix": ", mystical atmosphere, candlelight, soft ethereal glow, dark moody background, sacred space aesthetic, shallow depth of field, fine art photography",
+        "style_suffix": ", mystical atmosphere, warm candlelight glow, soft ethereal radiance, rich purple and gold tones, bright sacred space aesthetic, shallow depth of field, fine art photography, vivid colors",
     },
 
     "moonrituallibrary": {
@@ -301,12 +301,12 @@ DOMAIN_EXPERTISE = {
             "moon water": "Collect water under the full moon for cleansing sprays, add to baths for emotional healing, use in spell jars for amplified intentions",
         },
         "visual_subjects": {
-            "default": "full moon reflecting on still water, night scene, mystical blue light, serene landscape",
-            "ritual": "moon ritual setup with candles and crystals, moonlight streaming in, sacred ceremony space",
-            "crystals": "moonstone and selenite under moonlight, glowing ethereal quality, dark velvet background",
-            "water": "glass jar of moon water catching moonlight, crystals surrounding it, mystical atmosphere",
+            "default": "luminous full moon reflecting on still water, bright silver-blue moonlight, serene glowing landscape, vivid sky",
+            "ritual": "moon ritual setup with bright candles and glowing crystals, silver moonlight streaming in, warm sacred ceremony space",
+            "crystals": "moonstone and selenite glowing with bright inner light, soft purple and silver radiance, ethereal sparkle",
+            "water": "glass jar of moon water glowing with bright silver light, crystals surrounding it, warm mystical atmosphere",
         },
-        "style_suffix": ", mystical atmosphere, candlelight, soft ethereal glow, dark moody background, sacred space aesthetic, shallow depth of field, fine art photography",
+        "style_suffix": ", mystical atmosphere, warm candlelight glow, soft ethereal radiance, rich purple and gold tones, bright sacred space aesthetic, shallow depth of field, fine art photography, vivid colors",
     },
 
     "manifestandalign": {
@@ -335,7 +335,7 @@ DOMAIN_EXPERTISE = {
             "journal": "beautiful manifestation journal with pen, golden hour lighting, inspiring workspace",
             "meditation": "person meditating in golden light, peaceful setting, cosmic energy visualization",
         },
-        "style_suffix": ", mystical atmosphere, candlelight, soft ethereal glow, dark moody background, sacred space aesthetic, shallow depth of field, fine art photography",
+        "style_suffix": ", mystical atmosphere, warm candlelight glow, soft ethereal radiance, rich purple and gold tones, bright sacred space aesthetic, shallow depth of field, fine art photography, vivid colors",
     },
 
     # ── Mythology (1 niche) ───────────────────────────────────────────────
@@ -493,7 +493,7 @@ DOMAIN_EXPERTISE = {
 _CATEGORY_STYLE_SUFFIXES = {
     "tech": ", clean product photography, soft ambient lighting, modern minimalist interior, shallow depth of field, editorial style, sharp focus, 4K, professional",
     "ai_news": ", futuristic digital environment, holographic displays, neon accents, clean tech aesthetic, sharp focus, 4K, professional photography",
-    "witchcraft": ", mystical atmosphere, candlelight, soft ethereal glow, dark moody background, sacred space aesthetic, shallow depth of field, fine art photography",
+    "witchcraft": ", mystical atmosphere, warm candlelight glow, soft ethereal radiance, rich purple and gold tones, bright sacred space aesthetic, shallow depth of field, fine art photography, vivid colors",
     "mythology": ", vivid bright digital painting, clean natural daylight, saturated bold colors, sharp detailed textures, bright highlights, no shadows, no dark tones, 4K illustration, masterwork quality",
     "lifestyle": ", bright natural lighting, cozy warm interior, lifestyle photography, inviting atmosphere, editorial style, shallow depth of field, 4K",
     "fitness": ", dynamic action photography, high contrast, gym or outdoor setting, motivational energy, sharp focus, sports photography, 4K",

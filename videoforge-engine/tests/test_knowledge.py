@@ -151,7 +151,7 @@ class TestColorGrades:
 
     def test_get_by_niche(self):
         result = get_color_grade(niche="witchcraftforbeginners")
-        assert result["name"] == "Dark Witchcraft"
+        assert result["name"] == "Mystical Witchcraft"
 
 
 # ── Subtitle Styles ──
