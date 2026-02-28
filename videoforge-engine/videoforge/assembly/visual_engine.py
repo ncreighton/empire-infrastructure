@@ -246,6 +246,9 @@ class VisualEngine:
             "runware": self._generate_runware,
             "openai": self._generate_openai,
             "fal_ai": self._generate_fal_ai,
+            # Aliases from AMPLIFY routing
+            "fal_ai_flux_pro": self._generate_fal_ai,
+            "pexels_or_seedream": self._generate_runware,
         }
         gen_fn = dispatch.get(provider)
         if not gen_fn:
