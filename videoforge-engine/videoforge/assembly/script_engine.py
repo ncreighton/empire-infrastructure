@@ -35,24 +35,55 @@ MODELS = {
 }
 
 
+def _load_key_from_file(filepath: str, key_name: str) -> str:
+    """Load a key from an env-style file."""
+    if os.path.exists(filepath):
+        with open(filepath) as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith(f"{key_name}="):
+                    val = line.split("=", 1)[1].strip()
+                    if val:
+                        return val
+    return ""
+
+
 def _get_api_key() -> str:
-    """Get OpenRouter API key from environment."""
+    """Get OpenRouter API key from env → configs/api_keys.env → empire config/.env."""
     key = os.environ.get("OPENROUTER_API_KEY", "")
-    if not key:
-        env_path = os.path.join(
-            os.path.dirname(__file__), "..", "..", "configs", "api_keys.env"
-        )
-        if os.path.exists(env_path):
-            with open(env_path) as f:
-                for line in f:
-                    if line.startswith("OPENROUTER_API_KEY="):
-                        key = line.strip().split("=", 1)[1]
+    if key:
+        return key
+    # Check project config
+    key = _load_key_from_file(
+        os.path.join(os.path.dirname(__file__), "..", "..", "configs", "api_keys.env"),
+        "OPENROUTER_API_KEY",
+    )
+    if key:
+        return key
+    # Check empire-wide config
+    key = _load_key_from_file(
+        os.path.join(os.path.dirname(__file__), "..", "..", "..", "config", ".env"),
+        "OPENROUTER_API_KEY",
+    )
     return key
 
 
 def _get_anthropic_key() -> str:
-    """Get Anthropic API key from environment."""
-    return os.environ.get("ANTHROPIC_API_KEY", "")
+    """Get Anthropic API key from env → configs/api_keys.env → empire config/.env."""
+    key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if key:
+        return key
+    key = _load_key_from_file(
+        os.path.join(os.path.dirname(__file__), "..", "..", "configs", "api_keys.env"),
+        "ANTHROPIC_API_KEY",
+    )
+    if key:
+        return key
+    key = _load_key_from_file(
+        os.path.join(os.path.dirname(__file__), "..", "..", "..", "config", ".env"),
+        "ANTHROPIC_API_KEY",
+    )
+    return key
 
 
 class ScriptEngine:

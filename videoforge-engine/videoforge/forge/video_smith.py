@@ -14,6 +14,7 @@ from ..knowledge.color_grades import get_color_grade
 from ..knowledge.subtitle_styles import get_subtitle_style
 from ..knowledge.shot_types import SHOT_TYPES
 from ..knowledge.transitions import TRANSITIONS
+from ..knowledge.domain_expertise import get_domain_expertise
 from ..voice import get_voice, get_elevenlabs_voice
 from .variation_engine import (
     VariationEngine, HOOK_OPENING_POOLS, CTA_POOLS,
@@ -340,17 +341,19 @@ class VideoSmith:
     def _calculate_scene_durations(self, scenes: list, pacing: dict):
         """Calculate voice-driven scene durations based on narration word count.
 
-        Each scene's duration = max(min_dur, (word_count / wpm) * 60 + 0.3)
-        capped at max_dur. Light scaling only if total deviates >20% from target.
+        Each scene's duration = max(min_dur, (word_count / wpm) * 60 + 0.5)
+        capped at max_dur. The +0.5s buffer prevents tight cuts and gives
+        breathing room between sentences. Light scaling only if total deviates
+        >20% from target.
         """
         wpm = pacing.get("word_rate_wpm", 160)
         min_dur = pacing.get("min_scene_duration", 1.0)
-        max_dur = pacing.get("max_scene_duration", 5.0)
+        max_dur = pacing.get("max_scene_duration", 8.0)
 
         for scene in scenes:
             word_count = len(scene.narration.split()) if scene.narration else 0
             if word_count > 0:
-                speech_dur = (word_count / wpm) * 60
+                speech_dur = (word_count / wpm) * 60 + 0.5
                 scene.duration_seconds = round(
                     max(min_dur, min(speech_dur, max_dur)), 1
                 )
@@ -421,31 +424,44 @@ class VideoSmith:
 
     def _generate_visual_prompt(self, role: str, topic: str,
                                 niche: str, profile: dict) -> str:
-        """Generate a visual description prompt for AI image generation."""
-        visual_dna = profile.get("visual_dna", {})
-        aesthetic = visual_dna.get("aesthetic", "clean")
-        key_visuals = visual_dna.get("key_visuals", [])
-        palette = visual_dna.get("color_palette", [])
+        """Generate a visual description prompt using domain expertise visual subjects.
 
-        visuals_str = ", ".join(key_visuals[:3]) if key_visuals else topic
-        colors_str = " and ".join(palette[:2]) if palette else ""
+        Uses specific visual_subjects from domain_expertise.py matched to the topic,
+        falling back to niche defaults, then visual_dna key_visuals.
+        """
+        # Get domain expertise visual subjects for this niche
+        expertise = get_domain_expertise(niche, topic)
+        visual_subjects = expertise.get("visual_subjects", {})
 
-        prompts = {
-            "hook": f"Dramatic hero shot, {aesthetic} style, {topic}, {visuals_str}, bold composition, intense lighting, {colors_str} color scheme, cinematic wide angle",
-            "context": f"{aesthetic} establishing shot, {topic} environment, {visuals_str}, atmospheric",
-            "point_1": f"Close-up detail shot, {topic} related, {visuals_str}, {aesthetic} style",
-            "point_2": f"Overhead view, {topic} arrangement, {visuals_str}, organized composition",
-            "point_3": f"Dynamic angle, {topic} highlight, {visuals_str}, engaging composition",
-            "climax": f"Epic {aesthetic} shot, {topic} pinnacle moment, {visuals_str}, dramatic lighting",
-            "cta": f"Cinematic wide shot, {aesthetic} style, {topic}, {visuals_str}, {colors_str}, space for text overlay, clean lower third",
-            "intro": f"Wide {aesthetic} scene, {topic} world, {visuals_str}, establishing atmosphere",
-            "section_1": f"Medium shot, {topic} focus, {visuals_str}, {aesthetic} style, informative",
-            "section_2": f"Dynamic composition, {topic} deep dive, {visuals_str}, {aesthetic}",
-            "section_3": f"B-roll montage style, {topic} variety, {visuals_str}, {aesthetic}",
-            "transition_hook": f"Dramatic angle, {aesthetic} style, {topic}, {visuals_str}, {colors_str}, bold visual",
-            "transition_hook_2": f"Extreme close-up, {aesthetic} texture, {topic}, {visuals_str}, {colors_str}, detail shot",
+        # Pick the best visual subject: topic-matched > default > fallback
+        matched = expertise.get("matched_visual", {})
+        subject = matched.get("description", "") if matched else ""
+        if not subject:
+            subject = visual_subjects.get("default", "")
+
+        # Fallback to visual_dna key_visuals if no expertise
+        if not subject:
+            visual_dna = profile.get("visual_dna", {})
+            key_visuals = visual_dna.get("key_visuals", [])
+            subject = ", ".join(key_visuals[:3]) if key_visuals else topic
+
+        # Role-specific composition direction (what the camera does)
+        compositions = {
+            "hook": f"Dramatic hero shot, {subject}, bold composition, intense lighting, cinematic wide angle",
+            "context": f"Establishing shot, {subject}, atmospheric wide view",
+            "point_1": f"Close-up detail, {subject}, sharp focus, informative framing",
+            "point_2": f"Overhead flat lay view, {subject}, organized composition, clean layout",
+            "point_3": f"Dynamic angle, {subject}, engaging composition, dramatic perspective",
+            "climax": f"Epic shot, {subject}, dramatic lighting, pinnacle moment",
+            "cta": f"Cinematic wide shot, {subject}, space for text overlay, clean lower third",
+            "intro": f"Wide establishing scene, {subject}, atmospheric opening",
+            "section_1": f"Medium shot, {subject}, informative framing",
+            "section_2": f"Dynamic composition, {subject}, engaging detail",
+            "section_3": f"B-roll variety shot, {subject}, visual interest",
+            "transition_hook": f"Dramatic angle, {subject}, bold visual, high energy",
+            "transition_hook_2": f"Extreme close-up, {subject}, texture detail, macro feel",
         }
-        return prompts.get(role, f"{aesthetic} style, {topic}, {visuals_str}")
+        return compositions.get(role, f"{subject}, professional composition")
 
     def _get_text_overlay(self, role: str, hook_text: str, cta_text: str) -> str:
         """Get text overlay for specific scene roles."""

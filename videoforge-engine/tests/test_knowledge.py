@@ -87,7 +87,7 @@ class TestPacing:
         result = get_pacing(platform="youtube_shorts", niche="witchcraftforbeginners")
         # Platform timing preserved (youtube_shorts)
         assert result["ideal_total_duration"] == (30, 60)
-        assert result["max_scene_duration"] == 5
+        assert result["max_scene_duration"] == 8
         # Niche voice/energy merged in
         assert result["word_rate_wpm"] == 140
         assert result["energy_curve"] == "ritual_arc"

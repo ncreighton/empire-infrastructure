@@ -198,9 +198,9 @@ OVERLAY_ANIMATION_STYLES = [
 # Transition type → Creatomate animation config (with easing)
 TRANSITION_MAP = {
     "cut": None,
-    "crossfade": {"type": "fade", "duration": 0.8, "easing": "linear"},
-    "fade_black": {"type": "fade", "duration": 1.2, "easing": "linear"},
-    "fade_white": {"type": "fade", "duration": 1.2, "easing": "linear"},
+    "crossfade": {"type": "fade", "duration": 0.5, "easing": "linear"},
+    "fade_black": {"type": "fade", "duration": 0.8, "easing": "linear"},
+    "fade_white": {"type": "fade", "duration": 0.8, "easing": "linear"},
     "slide_left": {"type": "slide", "direction": "180°", "duration": 0.5, "easing": "cubic-out"},
     "slide_right": {"type": "slide", "direction": "0°", "duration": 0.5, "easing": "cubic-out"},
     "slide_up": {"type": "slide", "direction": "270°", "duration": 0.5, "easing": "cubic-out"},

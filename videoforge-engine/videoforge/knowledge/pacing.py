@@ -4,14 +4,14 @@ PACING_PROFILES = {
     # ── Platform-based pacing ──
     "youtube_shorts": {
         "name": "YouTube Shorts",
-        "avg_scene_duration": 2.5,
-        "max_scene_duration": 5,
-        "min_scene_duration": 1,
-        "cuts_per_minute": 18,
+        "avg_scene_duration": 3.5,
+        "max_scene_duration": 8,
+        "min_scene_duration": 1.5,
+        "cuts_per_minute": 14,
         "hook_window_seconds": 1.5,
         "energy_curve": "spike_sustain",  # High start, maintain
         "ideal_total_duration": (30, 60),
-        "word_rate_wpm": 165,
+        "word_rate_wpm": 150,
     },
     "tiktok": {
         "name": "TikTok",
