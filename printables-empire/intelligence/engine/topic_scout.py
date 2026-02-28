@@ -51,7 +51,7 @@ class TopicScout:
         }
 
     def suggest_topics(self, content_type: str, count: int = 10) -> list[dict]:
-        """Suggest topics for a given content type."""
+        """Suggest topics for a given content type, skipping already-published titles."""
         suggestions = []
 
         if content_type == "article":
@@ -68,6 +68,18 @@ class TopicScout:
             for category in ("tips", "discussions"):
                 items = self.topics.get("posts", {}).get(category, [])
                 suggestions.extend(items)
+
+        elif content_type == "listing":
+            for category in ("functional", "home", "maker"):
+                items = self.topics.get("listings", {}).get(category, [])
+                suggestions.extend(items)
+
+        # Remove already-published titles
+        published = self._get_published_titles()
+        suggestions = [
+            s for s in suggestions
+            if s.get("title", "").lower() not in published
+        ]
 
         # Filter by seasonal relevance
         month = datetime.now().month
@@ -89,6 +101,20 @@ class TopicScout:
         # Sort by score (descending) and return top N
         scored.sort(key=lambda x: x[0], reverse=True)
         return [item for _, item in scored[:count]]
+
+    def _get_published_titles(self) -> set[str]:
+        """Load already-published titles from SQLite to avoid duplicates."""
+        import sqlite3
+        db_path = Path(__file__).parent.parent.parent / "data" / "content.db"
+        if not db_path.exists():
+            return set()
+        try:
+            db = sqlite3.connect(str(db_path))
+            rows = db.execute("SELECT title FROM published_content").fetchall()
+            db.close()
+            return {row[0].lower() for row in rows}
+        except Exception:
+            return set()
 
     def get_seasonal_topics(self) -> list[dict]:
         """Get topics relevant to the current month."""

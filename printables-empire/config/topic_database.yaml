@@ -187,3 +187,53 @@ posts:
 
     - title: "Best Prints You've Made This Month?"
       keywords: ["showcase", "community", "monthly"]
+
+listings:
+  functional:
+    - title: "Desk Cable Management Clip"
+      keywords: ["cable clip", "desk organizer", "cable management"]
+      notes: "Simple functional print, high demand"
+
+    - title: "Adjustable Phone Stand"
+      keywords: ["phone stand", "phone holder", "desk accessory"]
+
+    - title: "Headphone Hook for Desk Mount"
+      keywords: ["headphone hook", "desk mount", "headphone holder"]
+
+    - title: "Drawer Divider System"
+      keywords: ["drawer divider", "organizer", "storage"]
+
+    - title: "Wall-Mount Tool Holder"
+      keywords: ["tool holder", "wall mount", "workshop", "garage"]
+
+  home:
+    - title: "Geometric Planter with Drainage"
+      keywords: ["planter", "geometric", "succulent", "drainage"]
+
+    - title: "Minimalist Coaster Set"
+      keywords: ["coaster", "minimalist", "home decor"]
+
+    - title: "Floating Shelf Bracket"
+      keywords: ["shelf bracket", "floating shelf", "wall mount"]
+
+    - title: "Light Switch Cover Plate"
+      keywords: ["light switch", "cover plate", "home improvement"]
+
+    - title: "Magnetic Spice Jar Rack"
+      keywords: ["spice rack", "magnetic", "kitchen", "organization"]
+
+  maker:
+    - title: "Filament Spool Holder with Bearings"
+      keywords: ["spool holder", "filament", "bearings", "printer upgrade"]
+
+    - title: "Nozzle Storage Box"
+      keywords: ["nozzle storage", "printer accessories", "organization"]
+
+    - title: "Print Removal Tool Handle"
+      keywords: ["removal tool", "scraper handle", "printer tool"]
+
+    - title: "SD Card Holder"
+      keywords: ["sd card", "storage", "organizer", "micro sd"]
+
+    - title: "Test Print Calibration Tower"
+      keywords: ["calibration", "test print", "temperature tower"]

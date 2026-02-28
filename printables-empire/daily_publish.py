@@ -9,13 +9,17 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+# Ensure data dir exists before setting up file logger
+_data_dir = Path(__file__).parent / "data"
+_data_dir.mkdir(exist_ok=True)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%H:%M:%S",
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler(Path(__file__).parent / "data" / "daily_publish.log", encoding="utf-8"),
+        logging.FileHandler(_data_dir / "daily_publish.log", encoding="utf-8"),
     ],
 )
 log = logging.getLogger("daily_publish")
