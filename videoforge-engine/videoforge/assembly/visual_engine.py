@@ -77,6 +77,36 @@ _OPENAI_SIZE_MAP = {
 }
 
 
+def _brighten_prompt(prompt: str) -> str:
+    """Strip dark/shadow terms from prompts and ensure brightness keywords.
+
+    AI-generated visual directions often default to dark/moody imagery.
+    This ensures images are vivid and well-lit for video content.
+    """
+    import re
+    # Remove terms that cause dark image generation
+    dark_terms = [
+        r'\bdark\s+(?:atmospheric|moody|background|shadows?|tones?)\b',
+        r'\bchiaroscuro\b', r'\bsilhouette\b', r'\bdarkening\b',
+        r'\bdimly[- ]lit\b', r'\bshadowy\b', r'\bmurky\b',
+        r'\bdramatic shadows?\b', r'\bdark atmospheric\b',
+    ]
+    cleaned = prompt
+    for pattern in dark_terms:
+        cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE)
+    # Clean up double commas/spaces from removals
+    cleaned = re.sub(r',\s*,', ',', cleaned)
+    cleaned = re.sub(r'\s{2,}', ' ', cleaned).strip().strip(',').strip()
+
+    # Append brightness keywords if not already present
+    brightness_terms = ["bright", "vivid", "well-lit", "vibrant"]
+    has_brightness = any(t in cleaned.lower() for t in brightness_terms)
+    if not has_brightness:
+        cleaned += ", bright vivid colors, well-lit"
+
+    return cleaned
+
+
 def _get_niche_suffix(niche: str, fmt: str) -> str:
     """Get the niche-specific prompt suffix with composition hint.
 
@@ -290,7 +320,7 @@ class VisualEngine:
 
         fmt = storyboard.format if storyboard.format in _COMPOSITION_HINT else "short"
         niche_suffix = _get_niche_suffix(storyboard.niche, fmt)
-        enhanced_prompt = scene.visual_prompt + niche_suffix
+        enhanced_prompt = _brighten_prompt(scene.visual_prompt) + niche_suffix
 
         # Runware requires dimensions in multiples of 64
         width = 1088 if storyboard.format == "short" else 1920
@@ -367,7 +397,7 @@ class VisualEngine:
 
         fmt = storyboard.format if storyboard.format in _COMPOSITION_HINT else "short"
         niche_suffix = _get_niche_suffix(storyboard.niche, fmt)
-        enhanced_prompt = scene.visual_prompt + niche_suffix
+        enhanced_prompt = _brighten_prompt(scene.visual_prompt) + niche_suffix
 
         size = _OPENAI_SIZE_MAP.get(fmt, "1024x1792")
 
@@ -434,7 +464,7 @@ class VisualEngine:
         # Enhance prompt with niche-specific quality suffix
         fmt = storyboard.format if storyboard.format in _COMPOSITION_HINT else "short"
         niche_suffix = _get_niche_suffix(storyboard.niche, fmt)
-        enhanced_prompt = scene.visual_prompt + niche_suffix
+        enhanced_prompt = _brighten_prompt(scene.visual_prompt) + niche_suffix
 
         # Use shared ai_gen_client if available
         if _ai_gen_client:
@@ -463,11 +493,11 @@ class VisualEngine:
 
         prompts_to_try = [enhanced_prompt]
         # Simplified fallback prompt (shorter, fewer modifiers)
-        simple_prompt = scene.visual_prompt + ", cinematic, high quality, 4K"
+        simple_prompt = _brighten_prompt(scene.visual_prompt) + ", cinematic, high quality, 4K"
         prompts_to_try.append(simple_prompt)
         # Generic fallback (strips topic to avoid content filters)
         shot = scene.shot_type or "cinematic"
-        generic_prompt = f"{shot} shot, dramatic lighting, epic atmosphere, ancient mythology, 4K, cinematic, depth of field, professional photography"
+        generic_prompt = f"{shot} shot, bright natural lighting, vivid colors, epic atmosphere, 4K, cinematic, depth of field, professional photography"
         prompts_to_try.append(generic_prompt)
 
         for attempt, prompt in enumerate(prompts_to_try):

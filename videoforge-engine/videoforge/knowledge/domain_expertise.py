@@ -361,13 +361,13 @@ DOMAIN_EXPERTISE = {
             "artifacts": "Excalibur could only be drawn by the true king, Pandora's Box released all evils but kept hope inside, the Holy Grail promised eternal life",
         },
         "visual_subjects": {
-            "default": "ancient Greek temple ruins at golden hour, vivid blue sky, epic sunlit landscape, mythological grandeur",
-            "gods": "powerful deity figure on a throne, divine golden light rays, bright marble temple interior, epic scale",
-            "monsters": "mythological creature in dramatic pose, vibrant fantasy landscape, epic digital art illustration",
-            "battles": "epic mythological battle scene, gods clashing, bright lightning and fire, vivid dramatic sky",
-            "artifacts": "legendary artifact glowing with golden power, sunlit ancient setting, warm dramatic lighting, mystical energy",
+            "default": "ancient Greek temple with white marble columns, bright blue sky with white clouds, sunlit Mediterranean landscape",
+            "gods": "powerful deity figure in white marble hall, bright natural daylight streaming in, vivid blue and white palette, epic scale",
+            "monsters": "mythological creature in vivid fantasy landscape, bright colorful scenery, epic digital art, clear blue sky",
+            "battles": "epic mythological battle scene, bright vivid sky, bold saturated colors, clear sharp details",
+            "artifacts": "legendary artifact with bright magical glow, white marble pedestal, clean bright setting, vivid blue and gold details",
         },
-        "style_suffix": ", epic digital painting style, warm golden-hour lighting, vibrant colors, ancient grandeur, detailed textures, high brightness, museum quality, masterwork illustration",
+        "style_suffix": ", vivid bright digital painting, clean natural daylight, saturated bold colors, sharp detailed textures, bright highlights, no shadows, no dark tones, 4K illustration, masterwork quality",
     },
 
     # ── Lifestyle (4 niches) ──────────────────────────────────────────────
@@ -494,7 +494,7 @@ _CATEGORY_STYLE_SUFFIXES = {
     "tech": ", clean product photography, soft ambient lighting, modern minimalist interior, shallow depth of field, editorial style, sharp focus, 4K, professional",
     "ai_news": ", futuristic digital environment, holographic displays, neon accents, clean tech aesthetic, sharp focus, 4K, professional photography",
     "witchcraft": ", mystical atmosphere, candlelight, soft ethereal glow, dark moody background, sacred space aesthetic, shallow depth of field, fine art photography",
-    "mythology": ", epic digital painting style, warm golden-hour lighting, vibrant colors, ancient grandeur, detailed textures, high brightness, museum quality, masterwork illustration",
+    "mythology": ", vivid bright digital painting, clean natural daylight, saturated bold colors, sharp detailed textures, bright highlights, no shadows, no dark tones, 4K illustration, masterwork quality",
     "lifestyle": ", bright natural lighting, cozy warm interior, lifestyle photography, inviting atmosphere, editorial style, shallow depth of field, 4K",
     "fitness": ", dynamic action photography, high contrast, gym or outdoor setting, motivational energy, sharp focus, sports photography, 4K",
     "business": ", professional corporate aesthetic, clean modern workspace, data visualization, confident atmosphere, editorial photography, 4K",

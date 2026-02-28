@@ -319,6 +319,7 @@ class ScriptEngine:
             f"- One line per scene, format: 'Scene N: [narration] | VISUAL: [image description]'\n"
             f"- The VISUAL must describe what should be shown during this narration\n"
             f"- VISUAL descriptions should be specific subjects/objects, not camera directions\n"
+            f"- VISUAL descriptions MUST be bright and vivid — use well-lit scenes, vibrant colors, clear subjects against clean backgrounds. NEVER use dark, shadowy, silhouette, or dimly-lit descriptions\n"
             f"- Example: 'Scene 3: The Echo Dot costs just thirty dollars. | VISUAL: Amazon Echo Dot smart speaker on a white countertop, blue LED ring glowing'\n"
             f"- Target ~{target_words} words total (narration only, not counting VISUAL descriptions)\n"
             f"- Scene 1 must be an immediate hook — no setup, no intro\n"

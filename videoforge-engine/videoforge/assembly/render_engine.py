@@ -632,21 +632,20 @@ class RenderEngine:
         return composition
 
     def _apply_color_grade(self, visual_el: dict, color: dict):
-        """Apply color grading to an image element using niche color data.
+        """Apply subtle color grading to an image element.
 
-        Creatomate color_overlay accepts RGBA strings — hex colors without alpha
-        would cover the image completely, so we convert to rgba() with 5% opacity.
-        Contrast is capped at 115% to avoid crushing dark images further.
+        Very light touch — 3% opacity tint + mild contrast only.
+        Skipped entirely if contrast is neutral (1.0) to keep images clean.
         """
         accent = color.get("accent", "")
         contrast = color.get("contrast", 1.0)
         if accent:
-            # Convert hex to rgba with 5% opacity for very subtle tint
+            # Convert hex to rgba with 3% opacity for barely-visible tint
             r, g, b = self._hex_to_rgb(accent)
-            visual_el["color_overlay"] = f"rgba({r},{g},{b},0.05)"
-        # Only boost contrast slightly — cap at 115% to avoid darkening images
-        if contrast and contrast > 1.0:
-            capped = min(contrast, 1.15)
+            visual_el["color_overlay"] = f"rgba({r},{g},{b},0.03)"
+        # Only boost contrast if explicitly above neutral — cap at 110%
+        if contrast and contrast > 1.02:
+            capped = min(contrast, 1.10)
             visual_el["color_filter"] = "contrast"
             visual_el["color_filter_value"] = f"{int(capped * 100)}%"
 

@@ -392,7 +392,7 @@ class TestColorGrading:
         assert len(graded) >= 1, "At least some images should have color_overlay"
         for img in graded:
             assert "rgba(" in img["color_overlay"], "color_overlay should be rgba format"
-            assert "0.05)" in img["color_overlay"], "Overlay should be 5% opacity"
+            assert "0.03)" in img["color_overlay"], "Overlay should be 3% opacity"
 
 
 class TestTransitionMap:

@@ -26,13 +26,13 @@ COLOR_GRADES = {
     "mythology_epic": {
         "name": "Epic Mythology",
         "primary": "#0A1628",
-        "accent": "#FFD700",
+        "accent": "#87CEEB",
         "text": "#FFFFFF",
         "saturation": 0.9,
-        "contrast": 1.1,
-        "warmth": 0.1,
-        "vignette": 0.15,
-        "description": "Warm gold accents, cinematic scope, vibrant",
+        "contrast": 1.0,
+        "warmth": 0.0,
+        "vignette": 0.1,
+        "description": "Cool sky-blue accent, bright and vivid, no darkening",
     },
     "mythology_ancient": {
         "name": "Ancient Mythology",

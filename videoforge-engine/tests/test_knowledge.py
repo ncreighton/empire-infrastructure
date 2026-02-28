@@ -460,7 +460,9 @@ class TestDomainExpertise:
             suffix = get_style_suffix(niche)
             assert "mystical" in suffix or "ethereal" in suffix, f"{niche} should have mystical style"
 
-    def test_mythology_has_epic_style(self):
-        """Mythology should have epic digital painting style with vibrant lighting."""
+    def test_mythology_has_bright_vivid_style(self):
+        """Mythology should have bright vivid style, no dark-inducing terms."""
         suffix = get_style_suffix("mythicalarchives")
-        assert "digital painting" in suffix or "golden-hour" in suffix
+        assert "vivid" in suffix or "bright" in suffix
+        assert "chiaroscuro" not in suffix
+        assert "oil painting" not in suffix
