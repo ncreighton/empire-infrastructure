@@ -533,6 +533,403 @@ def generate_gear():
 
 
 # ---------------------------------------------------------------------------
+# Model 4: Phone Stand (~200-400 triangles, ~80mm tall, L-shaped)
+# ---------------------------------------------------------------------------
+
+def generate_phone_stand():
+    """
+    L-shaped bracket with a slot for holding a phone.
+    Functional print, asymmetric, thin walls.
+    """
+    tris = []
+
+    # Base plate: 60mm wide x 40mm deep x 5mm thick
+    base_w, base_d, base_h = 60, 40, 5
+
+    def box_tris(cx, cy, cz, w, d, h):
+        """Generate triangles for an axis-aligned box centered at (cx, cy, cz)."""
+        hw, hd, hh = w / 2, d / 2, h / 2
+        corners = [
+            (cx - hw, cy - hd, cz - hh),  # 0: bottom-left-front
+            (cx + hw, cy - hd, cz - hh),  # 1: bottom-right-front
+            (cx + hw, cy + hd, cz - hh),  # 2: bottom-right-back
+            (cx - hw, cy + hd, cz - hh),  # 3: bottom-left-back
+            (cx - hw, cy - hd, cz + hh),  # 4: top-left-front
+            (cx + hw, cy - hd, cz + hh),  # 5: top-right-front
+            (cx + hw, cy + hd, cz + hh),  # 6: top-right-back
+            (cx - hw, cy + hd, cz + hh),  # 7: top-left-back
+        ]
+        c = corners
+        box = []
+        # Bottom
+        box.extend(quad_triangles(c[0], c[3], c[2], c[1]))
+        # Top
+        box.extend(quad_triangles(c[4], c[5], c[6], c[7]))
+        # Front
+        box.extend(quad_triangles(c[0], c[1], c[5], c[4]))
+        # Back
+        box.extend(quad_triangles(c[2], c[3], c[7], c[6]))
+        # Left
+        box.extend(quad_triangles(c[0], c[4], c[7], c[3]))
+        # Right
+        box.extend(quad_triangles(c[1], c[2], c[6], c[5]))
+        return box
+
+    # Base plate (sits on ground, centered at x=0)
+    tris.extend(box_tris(0, 0, base_h / 2, base_w, base_d, base_h))
+
+    # Back wall (vertical support, 60mm wide x 5mm thick x 75mm tall)
+    wall_h = 75
+    wall_t = 5
+    tris.extend(box_tris(0, base_d / 2 - wall_t / 2, base_h + wall_h / 2,
+                         base_w, wall_t, wall_h))
+
+    # Phone lip (small ridge at front of base to hold phone bottom)
+    lip_h = 10
+    lip_t = 4
+    lip_w = base_w
+    tris.extend(box_tris(0, -base_d / 2 + lip_t / 2, base_h + lip_h / 2,
+                         lip_w, lip_t, lip_h))
+
+    # Support ribs (two triangular buttresses connecting wall to base)
+    rib_t = 3  # thickness of rib
+    rib_h = 35  # height up the wall
+    rib_d = 20  # depth along base
+
+    for sign in [-1, 1]:
+        x_center = sign * (base_w / 2 - 8)
+        # Right triangle: base on bottom plate, hypotenuse to wall
+        # Build as a triangular prism (6 faces)
+        p0 = (x_center - rib_t / 2, base_d / 2 - wall_t, base_h)  # bottom-back
+        p1 = (x_center - rib_t / 2, base_d / 2 - wall_t - rib_d, base_h)  # bottom-front
+        p2 = (x_center - rib_t / 2, base_d / 2 - wall_t, base_h + rib_h)  # top-back
+        p3 = (x_center + rib_t / 2, base_d / 2 - wall_t, base_h)
+        p4 = (x_center + rib_t / 2, base_d / 2 - wall_t - rib_d, base_h)
+        p5 = (x_center + rib_t / 2, base_d / 2 - wall_t, base_h + rib_h)
+        # Two triangular faces
+        tris.append((p0, p1, p2))
+        tris.append((p3, p5, p4))
+        # Three quad faces
+        tris.extend(quad_triangles(p0, p3, p4, p1))  # bottom
+        tris.extend(quad_triangles(p0, p2, p5, p3))  # back
+        tris.extend(quad_triangles(p1, p4, p5, p2))  # hypotenuse
+
+    return tris
+
+
+# ---------------------------------------------------------------------------
+# Model 5: Mini Planter (~400-600 triangles, cylinder with drainage holes)
+# ---------------------------------------------------------------------------
+
+def generate_mini_planter():
+    """
+    Cylindrical planter with drainage holes in the bottom.
+    Hollow interior, lip at top.
+    """
+    tris = []
+    outer_r = 25.0
+    inner_r = 22.0
+    height = 50.0
+    lip_height = 4.0
+    lip_r = 27.0
+    n_seg = 20
+    base_thickness = 4.0
+
+    def ring(center_z, radius, segments):
+        pts = []
+        for j in range(segments):
+            angle = 2 * math.pi * j / segments
+            pts.append((radius * math.cos(angle), radius * math.sin(angle), center_z))
+        return pts
+
+    # Outer wall
+    bottom_outer = ring(0, outer_r, n_seg)
+    top_outer = ring(height, outer_r, n_seg)
+    for j in range(n_seg):
+        j1 = (j + 1) % n_seg
+        tris.append((bottom_outer[j], bottom_outer[j1], top_outer[j]))
+        tris.append((top_outer[j], bottom_outer[j1], top_outer[j1]))
+
+    # Inner wall (reversed normals for inside)
+    bottom_inner = ring(base_thickness, inner_r, n_seg)
+    top_inner = ring(height, inner_r, n_seg)
+    for j in range(n_seg):
+        j1 = (j + 1) % n_seg
+        tris.append((bottom_inner[j], top_inner[j], bottom_inner[j1]))
+        tris.append((top_inner[j], top_inner[j1], bottom_inner[j1]))
+
+    # Top lip ring (outer_r -> lip_r, then lip_r down to inner connection)
+    top_lip = ring(height, lip_r, n_seg)
+    top_lip_inner = ring(height + lip_height, lip_r, n_seg)
+    # Lip top surface: outer to lip
+    for j in range(n_seg):
+        j1 = (j + 1) % n_seg
+        tris.append((top_outer[j], top_lip[j], top_outer[j1]))
+        tris.append((top_outer[j1], top_lip[j], top_lip[j1]))
+    # Lip outer wall
+    for j in range(n_seg):
+        j1 = (j + 1) % n_seg
+        tris.append((top_lip[j], top_lip_inner[j], top_lip[j1]))
+        tris.append((top_lip[j1], top_lip_inner[j], top_lip_inner[j1]))
+    # Lip top face (ring from lip_r to inner_r)
+    top_inner_lip = ring(height + lip_height, inner_r, n_seg)
+    for j in range(n_seg):
+        j1 = (j + 1) % n_seg
+        tris.append((top_lip_inner[j], top_inner_lip[j], top_lip_inner[j1]))
+        tris.append((top_lip_inner[j1], top_inner_lip[j], top_inner_lip[j1]))
+    # Inner lip wall back down
+    for j in range(n_seg):
+        j1 = (j + 1) % n_seg
+        tris.append((top_inner_lip[j], top_inner[j], top_inner_lip[j1]))
+        tris.append((top_inner_lip[j1], top_inner[j], top_inner[j1]))
+
+    # Bottom plate (annular ring: outer_r to inner_r at z=0 and z=base_thickness)
+    bottom_plate_outer = ring(0, outer_r, n_seg)
+    bottom_plate_inner = ring(0, inner_r * 0.3, n_seg)  # small center hole
+    # Bottom face (outer ring)
+    for j in range(n_seg):
+        j1 = (j + 1) % n_seg
+        tris.append((bottom_plate_outer[j1], bottom_plate_outer[j], bottom_plate_inner[j]))
+        tris.append((bottom_plate_outer[j1], bottom_plate_inner[j], bottom_plate_inner[j1]))
+    # Inner floor
+    floor_inner = ring(base_thickness, inner_r, n_seg)
+    floor_center = ring(base_thickness, inner_r * 0.3, n_seg)
+    for j in range(n_seg):
+        j1 = (j + 1) % n_seg
+        tris.append((floor_inner[j], floor_inner[j1], floor_center[j]))
+        tris.append((floor_center[j], floor_inner[j1], floor_center[j1]))
+
+    # Drainage hole walls (connect bottom_plate_inner to floor_center)
+    for j in range(n_seg):
+        j1 = (j + 1) % n_seg
+        tris.append((bottom_plate_inner[j], floor_center[j], bottom_plate_inner[j1]))
+        tris.append((bottom_plate_inner[j1], floor_center[j], floor_center[j1]))
+
+    return tris
+
+
+# ---------------------------------------------------------------------------
+# Model 6: Chess Piece — Queen (~400-700 triangles)
+# ---------------------------------------------------------------------------
+
+def generate_chess_piece():
+    """
+    Chess queen: circular base/pedestal, tapered body, crowned top.
+    Tests base/pedestal detection (actual pedestal).
+    """
+    tris = []
+    n_seg = 20
+
+    # Build as stacked cylinder segments (lathe profile)
+    # Profile: (radius, z_bottom, z_top)
+    profile = [
+        # Wide base
+        (16.0, 0.0, 3.0),
+        (14.0, 3.0, 5.0),
+        # Pedestal taper
+        (8.0, 5.0, 12.0),
+        # Body bulge
+        (10.0, 12.0, 20.0),
+        (11.0, 20.0, 35.0),
+        (10.0, 35.0, 45.0),
+        # Neck taper
+        (6.0, 45.0, 55.0),
+        # Crown base
+        (9.0, 55.0, 58.0),
+        # Crown taper
+        (7.0, 58.0, 65.0),
+        # Tip
+        (3.0, 65.0, 70.0),
+    ]
+
+    def ring_at(z, r):
+        return [(r * math.cos(2 * math.pi * j / n_seg),
+                 r * math.sin(2 * math.pi * j / n_seg), z) for j in range(n_seg)]
+
+    # Bottom cap
+    center_bottom = (0, 0, 0)
+    bottom_ring = ring_at(0, profile[0][0])
+    for j in range(n_seg):
+        j1 = (j + 1) % n_seg
+        tris.append((center_bottom, bottom_ring[j1], bottom_ring[j]))
+
+    # Stacked segments
+    prev_ring = bottom_ring
+    for r, z_bot, z_top in profile:
+        top_ring = ring_at(z_top, r)
+        for j in range(n_seg):
+            j1 = (j + 1) % n_seg
+            tris.append((prev_ring[j], prev_ring[j1], top_ring[j]))
+            tris.append((top_ring[j], prev_ring[j1], top_ring[j1]))
+        prev_ring = top_ring
+
+    # Connect segments with transition rings where radius changes
+    for i in range(len(profile) - 1):
+        r1 = profile[i][0]
+        r2 = profile[i + 1][0]
+        z = profile[i][2]  # transition height
+        if abs(r1 - r2) > 0.5:
+            ring1 = ring_at(z, r1)
+            ring2 = ring_at(z, r2)
+            for j in range(n_seg):
+                j1 = (j + 1) % n_seg
+                tris.append((ring1[j], ring1[j1], ring2[j]))
+                tris.append((ring2[j], ring1[j1], ring2[j1]))
+
+    # Top cap
+    top_r = profile[-1][0]
+    top_z = profile[-1][2]
+    top_ring = ring_at(top_z, top_r)
+    center_top = (0, 0, top_z)
+    for j in range(n_seg):
+        j1 = (j + 1) % n_seg
+        tris.append((center_top, top_ring[j], top_ring[j1]))
+
+    # Crown sphere on top
+    tris.extend(sphere_triangles(0, 0, top_z + 3, 4, n_lat=8, n_lon=12))
+
+    # Crown spikes (4 small cones around the crown base)
+    for k in range(4):
+        angle = 2 * math.pi * k / 4 + math.pi / 4
+        spike_x = 7 * math.cos(angle)
+        spike_y = 7 * math.sin(angle)
+        spike_base = (spike_x, spike_y, 56)
+        spike_tip = (spike_x * 1.2, spike_y * 1.2, 63)
+        tris.extend(cone_triangles(spike_base, spike_tip, 1.5, n_seg=6))
+
+    return tris
+
+
+# ---------------------------------------------------------------------------
+# Model 7: Gear Tower (~500-800 triangles, stacked interlocking gears)
+# ---------------------------------------------------------------------------
+
+def generate_gear_tower():
+    """
+    Three stacked gears of different sizes on a central shaft.
+    Articulated/mechanical look, complex silhouette.
+    """
+    tris = []
+
+    def gear_disc(center_z, outer_r, inner_r, thickness, n_teeth, hub_r=None):
+        """Generate a gear disc at a given Z height."""
+        disc_tris = []
+        tooth_half_angle = math.pi / n_teeth * 0.4
+        z_bot = center_z
+        z_top = center_z + thickness
+
+        def gear_profile():
+            pts = []
+            for i in range(n_teeth):
+                base_angle = 2 * math.pi * i / n_teeth
+                a0 = base_angle - math.pi / n_teeth
+                pts.append((inner_r * math.cos(a0), inner_r * math.sin(a0)))
+                a1 = base_angle - tooth_half_angle
+                pts.append((outer_r * math.cos(a1), outer_r * math.sin(a1)))
+                a2 = base_angle + tooth_half_angle
+                pts.append((outer_r * math.cos(a2), outer_r * math.sin(a2)))
+                a3 = base_angle + math.pi / n_teeth
+                pts.append((inner_r * math.cos(a3), inner_r * math.sin(a3)))
+            return pts
+
+        profile = gear_profile()
+        n_pts = len(profile)
+        center_top = (0, 0, z_top)
+        center_bot = (0, 0, z_bot)
+
+        for i in range(n_pts):
+            j = (i + 1) % n_pts
+            p0, p1 = profile[i], profile[j]
+            # Top face
+            disc_tris.append((center_top, (p0[0], p0[1], z_top), (p1[0], p1[1], z_top)))
+            # Bottom face
+            disc_tris.append((center_bot, (p1[0], p1[1], z_bot), (p0[0], p0[1], z_bot)))
+
+        # Side walls
+        for i in range(n_pts):
+            j = (i + 1) % n_pts
+            p0b = (profile[i][0], profile[i][1], z_bot)
+            p1b = (profile[j][0], profile[j][1], z_bot)
+            p0t = (profile[i][0], profile[i][1], z_top)
+            p1t = (profile[j][0], profile[j][1], z_top)
+            disc_tris.append((p0b, p1b, p0t))
+            disc_tris.append((p0t, p1b, p1t))
+
+        return disc_tris
+
+    # Central shaft (cylinder)
+    shaft_r = 3.0
+    shaft_h = 55.0
+    tris.extend(cylinder_triangles((0, 0, 0), (0, 0, shaft_h), shaft_r, n_seg=12))
+
+    # Bottom gear: large, 20 teeth
+    tris.extend(gear_disc(2, outer_r=22, inner_r=16, thickness=6, n_teeth=20))
+
+    # Middle gear: medium, 14 teeth, offset
+    tris.extend(gear_disc(18, outer_r=16, inner_r=11, thickness=5, n_teeth=14))
+
+    # Top gear: small, 10 teeth
+    tris.extend(gear_disc(34, outer_r=12, inner_r=8, thickness=4, n_teeth=10))
+
+    # Top cap (small sphere)
+    tris.extend(sphere_triangles(0, 0, shaft_h, 4, n_lat=8, n_lon=10))
+
+    return tris
+
+
+# ---------------------------------------------------------------------------
+# Model 8: Organic Blob (~400-600 triangles, Perlin-noise-like deformed sphere)
+# ---------------------------------------------------------------------------
+
+def generate_organic_blob():
+    """
+    Sphere deformed by pseudo-random noise.
+    Organic shape, no flat faces, tests centroid calculation.
+    Uses sin-based pseudo-noise (no external deps).
+    """
+    tris = []
+    base_r = 20.0
+    n_lat = 16
+    n_lon = 20
+
+    def pseudo_noise(x, y, z):
+        """Simple deterministic pseudo-noise from sin combinations."""
+        return (math.sin(x * 1.7 + y * 2.3 + 0.5) * 0.3 +
+                math.sin(y * 2.1 + z * 1.9 + 1.2) * 0.25 +
+                math.sin(z * 1.3 + x * 2.7 + 2.8) * 0.2 +
+                math.sin(x * 3.1 + z * 1.1) * 0.15 +
+                math.sin(y * 2.9 + x * 0.7 + z * 1.5) * 0.1)
+
+    def blob_point(lat_i, lon_j):
+        theta = math.pi * lat_i / n_lat
+        phi = 2 * math.pi * lon_j / n_lon
+        # Base sphere coordinates
+        nx = math.sin(theta) * math.cos(phi)
+        ny = math.sin(theta) * math.sin(phi)
+        nz = math.cos(theta)
+        # Deform radius by noise
+        noise_val = pseudo_noise(nx * 3, ny * 3, nz * 3)
+        r = base_r * (1.0 + noise_val * 0.35)
+        x = r * nx
+        y = r * ny
+        z = r * nz + 25  # lift above ground
+        return (x, y, z)
+
+    for i in range(n_lat):
+        for j in range(n_lon):
+            p00 = blob_point(i, j)
+            p10 = blob_point(i + 1, j)
+            p01 = blob_point(i, j + 1)
+            p11 = blob_point(i + 1, j + 1)
+            if i > 0:
+                tris.append((p00, p10, p01))
+            if i < n_lat - 1:
+                tris.append((p01, p10, p11))
+
+    return tris
+
+
+# ---------------------------------------------------------------------------
 # Main: generate all models
 # ---------------------------------------------------------------------------
 
@@ -543,6 +940,11 @@ def main():
         ("dragon_guardian.stl", generate_dragon, "Dragon Guardian"),
         ("geometric_vase.stl", generate_vase, "Geometric Vase"),
         ("articulated_gear.stl", generate_gear, "Articulated Gear"),
+        ("phone_stand.stl", generate_phone_stand, "Phone Stand"),
+        ("mini_planter.stl", generate_mini_planter, "Mini Planter"),
+        ("chess_piece.stl", generate_chess_piece, "Chess Piece"),
+        ("gear_tower.stl", generate_gear_tower, "Gear Tower"),
+        ("organic_blob.stl", generate_organic_blob, "Organic Blob"),
     ]
 
     print("=" * 60)

@@ -83,6 +83,7 @@ class RenderConfig:
     TURNTABLE_DURATION = 6
     TURNTABLE_FRAMES = 180  # 6s @ 30fps
     SPEED_MULTIPLIER = 1.0  # 1.0 = normal, 0.3 = slow elegant
+    VISUAL_CENTER_BLEND = 0.85  # 0.0 = bbox center, 1.0 = surface centroid
 
     # Physically-based material presets
     # PLA: semi-glossy, slight SSS at thin walls, IOR ~1.45
@@ -105,16 +106,20 @@ class RenderConfig:
         "metallic_gold":   {"color": (0.83, 0.62, 0.18, 1.0), "roughness": 0.22, "metallic": 0.85, "ior": 2.5,  "specular": 0.9, "clearcoat": 0.0},
         "matte_black":     {"color": (0.015, 0.015, 0.015, 1.0), "roughness": 0.85, "metallic": 0.0, "ior": 1.45, "specular": 0.3, "clearcoat": 0.0},
         "matte_white":     {"color": (0.92, 0.92, 0.92, 1.0), "roughness": 0.80, "metallic": 0.0, "ior": 1.45, "specular": 0.3, "clearcoat": 0.0},
+        "marble_white":    {"color": (0.93, 0.91, 0.88, 1.0), "roughness": 0.25, "metallic": 0.0, "ior": 1.55, "specular": 0.6, "clearcoat": 0.2,
+                            "subsurface": 0.03, "subsurface_color": (0.95, 0.93, 0.88)},
+        "wood_walnut":     {"color": (0.25, 0.15, 0.08, 1.0), "roughness": 0.55, "metallic": 0.0, "ior": 1.50, "specular": 0.4, "clearcoat": 0.1},
+        "copper_patina":   {"color": (0.25, 0.55, 0.45, 1.0), "roughness": 0.45, "metallic": 0.75, "ior": 2.4, "specular": 0.8, "clearcoat": 0.0},
     }
 
     DEFAULT_MATERIAL = "gray_pla"
 
     BEAUTY_ANGLES = [
-        {"name": "front",      "azimuth": 0,   "elevation": 15},
+        {"name": "front",      "azimuth": 0,   "elevation": 30},
         {"name": "front_high", "azimuth": 0,   "elevation": 45},
-        {"name": "quarter",    "azimuth": 45,  "elevation": 25},
-        {"name": "side",       "azimuth": 90,  "elevation": 15},
-        {"name": "hero",       "azimuth": 35,  "elevation": 30},
+        {"name": "quarter",    "azimuth": 45,  "elevation": 35},
+        {"name": "side",       "azimuth": 90,  "elevation": 30},
+        {"name": "hero",       "azimuth": 35,  "elevation": 35},
     ]
 
     ORTHO_VIEWS = [
@@ -317,6 +322,161 @@ def get_model_dimensions(obj):
         "is_flat": min(d.x, d.y, d.z) < max_d * 0.05,
         "is_wide": max(d.x, d.y) > d.z * 2.0,
     }
+
+
+def _detect_base_height(obj, world_matrix, num_slices=20):
+    """Detect flat base/pedestal geometry at the bottom of a model.
+
+    Scans horizontal slices from bottom up. A slice is "base" if >50% of its
+    surface area comes from flat polygons (|normal.z| > 0.7). Uses 20 slices
+    for finer resolution. Returns the world-Z height where the base ends,
+    or None if no base detected.
+    """
+    mesh = obj.data
+    height = obj.dimensions.z
+    if height < 1e-6:
+        return None
+
+    # Get world-space bounding box min Z
+    bb_min_z = min((world_matrix @ Vector(c)).z for c in obj.bound_box)
+    slice_height = height / num_slices
+
+    # Bucket polygon area into slices: (flat_area, total_area) per slice
+    slices = [[0.0, 0.0] for _ in range(num_slices)]
+
+    for poly in mesh.polygons:
+        area = poly.area
+        if area < 1e-10:
+            continue
+        world_center = world_matrix @ poly.center
+        world_normal = (world_matrix.to_3x3() @ poly.normal).normalized()
+        slice_idx = int((world_center.z - bb_min_z) / slice_height)
+        slice_idx = max(0, min(num_slices - 1, slice_idx))
+        slices[slice_idx][1] += area
+        if abs(world_normal.z) > 0.7:  # Flat face (within ~45° of horizontal)
+            slices[slice_idx][0] += area
+
+    # Scan from bottom: mark contiguous "base" slices (>50% flat area)
+    base_top_slice = -1
+    for i in range(num_slices):
+        flat_area, total_area = slices[i]
+        if total_area < 1e-10:
+            continue
+        if flat_area / total_area > 0.50:
+            base_top_slice = i
+        else:
+            break  # First non-base slice — stop scanning
+
+    if base_top_slice < 0:
+        return None
+
+    # Base must not exceed 40% of total height (otherwise it's the model itself)
+    base_top_z = bb_min_z + (base_top_slice + 1) * slice_height
+    base_fraction = (base_top_z - bb_min_z) / height
+    if base_fraction > 0.40:
+        return None
+
+    return base_top_z
+
+
+def compute_visual_center(obj):
+    """Compute surface-area-weighted centroid Z with base detection, crop-aware bbox,
+    and crop-aware bounding box for camera framing.
+
+    For models on pedestals/bases, the geometric center sits too low because
+    the base dominates the bounding box.
+
+    Returns a dict with:
+        z: Z coordinate for camera look-at targeting
+        crop_dims: {"x", "y", "z", "max"} of non-base geometry (or None)
+    """
+    bbox_center_z = obj.dimensions.z / 2
+    mesh = obj.data
+    no_base = {"z": bbox_center_z, "crop_dims": None}
+
+    if not mesh or not hasattr(mesh, 'polygons') or len(mesh.polygons) == 0:
+        return no_base
+
+    world_matrix = obj.matrix_world
+
+    # Phase 1: Detect base/pedestal
+    base_top_z = _detect_base_height(obj, world_matrix)
+
+    # Phase 2: Surface-area-weighted centroid + non-base bounding box + flatness
+    total_area = 0.0
+    weighted_z = 0.0
+    excluded_area = 0.0
+    # Track non-base vertex extents for crop-aware framing
+    crop_min = [float('inf'), float('inf'), float('inf')]
+    crop_max = [float('-inf'), float('-inf'), float('-inf')]
+
+    for poly in mesh.polygons:
+        area = poly.area
+        if area < 1e-10:
+            continue
+        world_center = world_matrix @ poly.center
+
+        # Skip base polygons if base was detected
+        if base_top_z is not None and world_center.z < base_top_z:
+            excluded_area += area
+            continue
+
+        weighted_z += world_center.z * area
+        total_area += area
+
+        # Expand non-base bounding box
+        for i in range(3):
+            if world_center[i] < crop_min[i]:
+                crop_min[i] = world_center[i]
+            if world_center[i] > crop_max[i]:
+                crop_max[i] = world_center[i]
+
+    if total_area < 1e-10:
+        return no_base
+
+    surface_centroid_z = weighted_z / total_area
+
+    # Blend: surface centroid vs bbox center
+    blend = RenderConfig.VISUAL_CENTER_BLEND
+    blended_z = surface_centroid_z * blend + bbox_center_z * (1.0 - blend)
+
+    # Clamp to 20%-80% of model height to prevent extreme shifts
+    min_z = obj.dimensions.z * 0.20
+    max_z = obj.dimensions.z * 0.80
+    blended_z = max(min_z, min(max_z, blended_z))
+
+    # Build crop dimensions if base was detected
+    crop_dims = None
+    if base_top_z is not None and crop_min[0] < float('inf'):
+        cx = crop_max[0] - crop_min[0]
+        cy = crop_max[1] - crop_min[1]
+        cz = crop_max[2] - crop_min[2]
+        # Sanity: crop dims must be at least 50% of original in X/Y
+        # (prevents over-cropping if base extends wider than the model)
+        cx = max(cx, obj.dimensions.x * 0.5)
+        cy = max(cy, obj.dimensions.y * 0.5)
+        crop_dims = {
+            "x": cx, "y": cy, "z": cz,
+            "max": max(cx, cy, cz),
+        }
+
+    # Log results
+    shift = abs(blended_z - bbox_center_z)
+    if base_top_z is not None:
+        total_with_base = total_area + excluded_area
+        base_pct = excluded_area / total_with_base * 100 if total_with_base > 0 else 0
+        print(f"[Render] Base detected: excluded {base_pct:.0f}% of surface area "
+              f"below z={base_top_z:.3f}")
+        if crop_dims:
+            print(f"[Render] Crop-aware bbox: {crop_dims['x']:.2f} x "
+                  f"{crop_dims['y']:.2f} x {crop_dims['z']:.2f} "
+                  f"(full: {obj.dimensions.x:.2f} x {obj.dimensions.y:.2f} x "
+                  f"{obj.dimensions.z:.2f})")
+    if shift > obj.dimensions.z * 0.03:
+        print(f"[Render] Visual center shifted {shift:.3f} units "
+              f"({shift / obj.dimensions.z * 100:.1f}% of height) — "
+              f"bbox center {bbox_center_z:.3f} → visual center {blended_z:.3f}")
+    return {"z": blended_z, "crop_dims": crop_dims}
 
 
 # ============================================================================
@@ -652,14 +812,31 @@ def position_camera_spherical(camera, azimuth_deg, elevation_deg, distance, look
     _point_at(camera, look_at)
 
 
-def auto_frame_camera(camera, obj, padding=1.3):
-    """Auto-adjust camera distance based on model dimensions and camera FOV."""
+def auto_frame_camera(camera, obj, padding=1.3, crop_dims=None):
+    """Auto-adjust camera distance based on model dimensions and camera FOV.
+
+    When crop_dims is provided (non-base bounding box from compute_visual_center),
+    frames to the crop region instead of the full model bounding box. This lets
+    models on large bases be framed to the actual subject, not the pedestal.
+    """
     dims = get_model_dimensions(obj)
     fov = camera.data.angle
-    distance = (dims["max"] * padding) / (2 * math.tan(fov / 2))
+
+    if crop_dims is not None:
+        # Frame to non-base geometry instead of full bounding box
+        frame_size = crop_dims["max"]
+    else:
+        frame_size = dims["max"]
+
+    distance = (frame_size * padding) / (2 * math.tan(fov / 2))
     # Adjust for aspect ratio — tall models need more distance in wide format
     if dims["is_tall"]:
         distance *= 1.2
+    # Boxy models (all dims similar) project wider at camera angles —
+    # pull back to fit the full shape without clipping
+    min_d = min(dims["x"], dims["y"], dims["z"])
+    if min_d / dims["max"] > 0.6:
+        distance *= 1.4
     return max(distance, 2.5)
 
 
@@ -890,14 +1067,26 @@ def frames_to_video(frame_pattern, output_path, fps=None):
 # RENDER MODES
 # ============================================================================
 
+def _setup_lighting_by_name(lighting_name):
+    """Select and set up lighting by name string."""
+    if lighting_name == "dramatic":
+        return setup_dramatic_lighting()
+    elif lighting_name == "product":
+        return setup_product_lighting()
+    else:
+        return setup_studio_lighting()
+
+
 def render_turntable(obj, output_dir, model_name, platform="wide",
                      material_name=None, preset=None, camera_style="standard",
-                     color_grade="cinematic", duration_seconds=None, speed=None):
+                     color_grade="cinematic", duration_seconds=None, speed=None,
+                     lighting=None):
     """Render a 360 turntable with easing and camera style variations.
 
     Args:
         duration_seconds: Override duration (default: from config, typically 6s)
         speed: Rotation speed multiplier (0.3=slow elegant, 1.0=full 360)
+        lighting: Lighting setup name (studio/dramatic/product). Default: studio.
     """
     print(f"[Render] Turntable: {model_name} ({platform}, {camera_style})")
 
@@ -905,12 +1094,13 @@ def render_turntable(obj, output_dir, model_name, platform="wide",
     apply_material(obj, material_name)
 
     setup_gradient_background()
-    setup_studio_lighting()
+    _setup_lighting_by_name(lighting or "studio")
     ground = create_ground_plane(material="reflective")
     camera = create_camera()
 
-    distance = auto_frame_camera(camera, obj)
-    look_at_z = obj.dimensions.z / 2
+    vc = compute_visual_center(obj)
+    look_at_z, crop_dims = vc["z"], vc["crop_dims"]
+    distance = auto_frame_camera(camera, obj, crop_dims=crop_dims)
 
     # Parameterized duration and speed
     dur = duration_seconds or RenderConfig.TURNTABLE_DURATION
@@ -933,7 +1123,7 @@ def render_turntable(obj, output_dir, model_name, platform="wide",
 
     if camera_style == "standard":
         # Fixed camera, model rotates with ease-in-out
-        position_camera_spherical(camera, 35, 25, distance, look_at=(0, 0, look_at_z))
+        position_camera_spherical(camera, 35, 28, distance, look_at=(0, 0, look_at_z))
 
         empty.rotation_euler = (0, 0, 0)
         empty.keyframe_insert(data_path="rotation_euler", frame=1)
@@ -943,7 +1133,7 @@ def render_turntable(obj, output_dir, model_name, platform="wide",
 
     elif camera_style == "orbital":
         # Camera orbits with vertical oscillation
-        position_camera_spherical(camera, 0, 20, distance, look_at=(0, 0, look_at_z))
+        position_camera_spherical(camera, 0, 30, distance, look_at=(0, 0, look_at_z))
 
         # Keyframe model rotation
         empty.rotation_euler = (0, 0, 0)
@@ -955,7 +1145,7 @@ def render_turntable(obj, output_dir, model_name, platform="wide",
         # Keyframe camera elevation oscillation
         for i, frac in enumerate([0, 0.25, 0.5, 0.75, 1.0]):
             frame = int(1 + frac * (frames - 1))
-            elevation = 25 + 15 * math.sin(frac * math.pi * 2)
+            elevation = 30 + 10 * math.sin(frac * math.pi * 2)
             position_camera_spherical(camera, 35, elevation, distance, look_at=(0, 0, look_at_z))
             camera.keyframe_insert(data_path="location", frame=frame)
             camera.keyframe_insert(data_path="rotation_euler", frame=frame)
@@ -963,11 +1153,11 @@ def render_turntable(obj, output_dir, model_name, platform="wide",
 
     elif camera_style == "pedestal":
         # Camera rises while model rotates
-        position_camera_spherical(camera, 35, 10, distance, look_at=(0, 0, look_at_z))
+        position_camera_spherical(camera, 35, 25, distance, look_at=(0, 0, look_at_z))
         camera.keyframe_insert(data_path="location", frame=1)
         camera.keyframe_insert(data_path="rotation_euler", frame=1)
 
-        position_camera_spherical(camera, 35, 40, distance * 0.95, look_at=(0, 0, look_at_z))
+        position_camera_spherical(camera, 35, 45, distance * 0.95, look_at=(0, 0, look_at_z))
         camera.keyframe_insert(data_path="location", frame=frames)
         camera.keyframe_insert(data_path="rotation_euler", frame=frames)
         apply_easing(camera, "ease_in_out")
@@ -980,11 +1170,11 @@ def render_turntable(obj, output_dir, model_name, platform="wide",
 
     elif camera_style == "dolly_in":
         # Camera pushes in while orbiting
-        position_camera_spherical(camera, 35, 25, distance * 1.3, look_at=(0, 0, look_at_z))
+        position_camera_spherical(camera, 35, 30, distance * 1.3, look_at=(0, 0, look_at_z))
         camera.keyframe_insert(data_path="location", frame=1)
         camera.keyframe_insert(data_path="rotation_euler", frame=1)
 
-        position_camera_spherical(camera, 35, 25, distance * 0.8, look_at=(0, 0, look_at_z))
+        position_camera_spherical(camera, 35, 30, distance * 0.8, look_at=(0, 0, look_at_z))
         camera.keyframe_insert(data_path="location", frame=frames)
         camera.keyframe_insert(data_path="rotation_euler", frame=frames)
         apply_easing(camera, "ease_in_out")
@@ -996,12 +1186,12 @@ def render_turntable(obj, output_dir, model_name, platform="wide",
         apply_easing(empty, "ease_in_out")
 
     elif camera_style == "hero_spin":
-        # Start close at dramatic angle, pull back to hero
-        position_camera_spherical(camera, 0, 10, distance * 0.7, look_at=(0, 0, look_at_z))
+        # Start close at hero angle, pull back to wider hero
+        position_camera_spherical(camera, 0, 30, distance * 0.7, look_at=(0, 0, look_at_z))
         camera.keyframe_insert(data_path="location", frame=1)
         camera.keyframe_insert(data_path="rotation_euler", frame=1)
 
-        position_camera_spherical(camera, 35, 30, distance, look_at=(0, 0, look_at_z))
+        position_camera_spherical(camera, 35, 28, distance, look_at=(0, 0, look_at_z))
         camera.keyframe_insert(data_path="location", frame=frames)
         camera.keyframe_insert(data_path="rotation_euler", frame=frames)
         apply_easing(camera, "ease_in_out")
@@ -1036,7 +1226,8 @@ def render_turntable(obj, output_dir, model_name, platform="wide",
 
 
 def render_beauty_shots(obj, output_dir, model_name, platform="wide",
-                        material_name=None, preset=None, color_grade="cinematic"):
+                        material_name=None, preset=None, color_grade="cinematic",
+                        lighting=None):
     """Render static beauty shots with DOF and professional lighting."""
     print(f"[Render] Beauty shots: {model_name}")
 
@@ -1044,12 +1235,13 @@ def render_beauty_shots(obj, output_dir, model_name, platform="wide",
     apply_material(obj, material_name)
 
     setup_gradient_background()
-    setup_studio_lighting()
+    _setup_lighting_by_name(lighting or "studio")
     ground = create_ground_plane(material="reflective")
     camera = create_camera()
 
-    distance = auto_frame_camera(camera, obj)
-    look_at_z = obj.dimensions.z / 2
+    vc = compute_visual_center(obj)
+    look_at_z, crop_dims = vc["z"], vc["crop_dims"]
+    distance = auto_frame_camera(camera, obj, crop_dims=crop_dims)
 
     # DOF for portfolio/ultra
     quality = RenderConfig.QUALITY_PRESETS.get(preset or RenderConfig.ACTIVE_PRESET, {})
@@ -1083,8 +1275,9 @@ def render_wireframe_reveal(obj, output_dir, model_name, platform="wide",
     setup_dramatic_lighting()
     camera = create_camera()
 
-    distance = auto_frame_camera(camera, obj)
-    look_at_z = obj.dimensions.z / 2
+    vc = compute_visual_center(obj)
+    look_at_z, crop_dims = vc["z"], vc["crop_dims"]
+    distance = auto_frame_camera(camera, obj, crop_dims=crop_dims)
     position_camera_spherical(camera, 35, 25, distance, look_at=(0, 0, look_at_z))
 
     # Create a single material that transitions from wireframe to solid
@@ -1221,8 +1414,9 @@ def render_material_variants(obj, output_dir, model_name, platform="wide",
     ground = create_ground_plane(material="reflective")
     camera = create_camera()
 
-    distance = auto_frame_camera(camera, obj)
-    look_at_z = obj.dimensions.z / 2
+    vc = compute_visual_center(obj)
+    look_at_z, crop_dims = vc["z"], vc["crop_dims"]
+    distance = auto_frame_camera(camera, obj, crop_dims=crop_dims)
     position_camera_spherical(camera, 35, 25, distance, look_at=(0, 0, look_at_z))
 
     renders = []
@@ -1254,8 +1448,9 @@ def render_dramatic_reveal(obj, output_dir, model_name, platform="wide",
     ground = create_ground_plane(material="matte")
     camera = create_camera()
 
-    distance = auto_frame_camera(camera, obj, padding=1.5)
-    look_at_z = obj.dimensions.z / 2
+    vc = compute_visual_center(obj)
+    look_at_z, crop_dims = vc["z"], vc["crop_dims"]
+    distance = auto_frame_camera(camera, obj, padding=1.5, crop_dims=crop_dims)
 
     scene = bpy.context.scene
     dur = duration_seconds or (120 / RenderConfig.FPS)  # Default ~4s
@@ -1263,12 +1458,12 @@ def render_dramatic_reveal(obj, output_dir, model_name, platform="wide",
     scene.frame_start = 1
     scene.frame_end = total_frames
 
-    # Camera: start close/low, pull back to hero angle
-    position_camera_spherical(camera, 0, 10, distance * 0.7, look_at=(0, 0, look_at_z))
+    # Camera: start close at front, pull back to hero angle
+    position_camera_spherical(camera, 0, 25, distance * 0.7, look_at=(0, 0, look_at_z))
     camera.keyframe_insert(data_path="location", frame=1)
     camera.keyframe_insert(data_path="rotation_euler", frame=1)
 
-    position_camera_spherical(camera, 45, 30, distance * 1.1, look_at=(0, 0, look_at_z))
+    position_camera_spherical(camera, 45, 35, distance * 1.1, look_at=(0, 0, look_at_z))
     camera.keyframe_insert(data_path="location", frame=total_frames)
     camera.keyframe_insert(data_path="rotation_euler", frame=total_frames)
 
@@ -1312,17 +1507,18 @@ def render_close_up(obj, output_dir, model_name, platform="wide",
     ground = create_ground_plane(material="reflective")
     camera = create_camera()
 
-    distance = auto_frame_camera(camera, obj)
-    look_at_z = obj.dimensions.z / 2
+    vc = compute_visual_center(obj)
+    look_at_z, crop_dims = vc["z"], vc["crop_dims"]
+    distance = auto_frame_camera(camera, obj, crop_dims=crop_dims)
     fps = RenderConfig.FPS
 
-    # Close-up angle definitions (tight framing with DOF)
+    # Close-up angle definitions (tight framing with DOF, never showing bottom)
     angle_defs = {
-        "hero":   {"azimuth": 35,  "elevation": 30, "dist_mult": 0.6},
-        "detail": {"azimuth": 90,  "elevation": 15, "dist_mult": 0.5},
-        "top":    {"azimuth": 0,   "elevation": 65, "dist_mult": 0.7},
-        "low":    {"azimuth": 20,  "elevation": 5,  "dist_mult": 0.55},
-        "back":   {"azimuth": 180, "elevation": 20, "dist_mult": 0.6},
+        "hero":   {"azimuth": 35,  "elevation": 35, "dist_mult": 0.6},
+        "detail": {"azimuth": 90,  "elevation": 30, "dist_mult": 0.5},
+        "top":    {"azimuth": 0,   "elevation": 55, "dist_mult": 0.7},
+        "low":    {"azimuth": 20,  "elevation": 20, "dist_mult": 0.55},
+        "back":   {"azimuth": 180, "elevation": 30, "dist_mult": 0.6},
     }
 
     scene = bpy.context.scene
@@ -1382,8 +1578,9 @@ def render_material_carousel(obj, output_dir, model_name, platform="wide",
     ground = create_ground_plane(material="reflective")
     camera = create_camera()
 
-    distance = auto_frame_camera(camera, obj)
-    look_at_z = obj.dimensions.z / 2
+    vc = compute_visual_center(obj)
+    look_at_z, crop_dims = vc["z"], vc["crop_dims"]
+    distance = auto_frame_camera(camera, obj, crop_dims=crop_dims)
     position_camera_spherical(camera, 35, 25, distance, look_at=(0, 0, look_at_z))
     fps = RenderConfig.FPS
 
@@ -1496,7 +1693,7 @@ def render_material_carousel(obj, output_dir, model_name, platform="wide",
 
 def render_beauty_hero(obj, output_dir, model_name, platform="wide",
                        material_name=None, preset=None, color_grade="cinematic",
-                       duration_seconds=3):
+                       duration_seconds=3, lighting=None):
     """Render a final beauty hero shot as a short video clip.
     Static hero angle with subtle breathing camera motion and shallow DOF.
     """
@@ -1506,12 +1703,13 @@ def render_beauty_hero(obj, output_dir, model_name, platform="wide",
     apply_material(obj, material_name)
 
     setup_gradient_background()
-    setup_studio_lighting()
+    _setup_lighting_by_name(lighting or "studio")
     ground = create_ground_plane(material="reflective")
     camera = create_camera()
 
-    distance = auto_frame_camera(camera, obj)
-    look_at_z = obj.dimensions.z / 2
+    vc = compute_visual_center(obj)
+    look_at_z, crop_dims = vc["z"], vc["crop_dims"]
+    distance = auto_frame_camera(camera, obj, crop_dims=crop_dims)
     fps = RenderConfig.FPS
 
     scene = bpy.context.scene
@@ -1696,7 +1894,7 @@ def render_technical_views(obj, output_dir, model_name, platform="square",
     bpy.context.scene.collection.objects.link(cam_obj)
     bpy.context.scene.camera = cam_obj
 
-    half_z = obj.dimensions.z / 2
+    half_z = compute_visual_center(obj)["z"]
     renders = []
 
     for view in RenderConfig.ORTHO_VIEWS:
@@ -1734,7 +1932,11 @@ def render_technical_views(obj, output_dir, model_name, platform="square",
 def process_single_model(stl_path, output_dir, mode="turntable", platforms=None,
                          material=None, preset=None, camera_style="standard",
                          color_grade="cinematic"):
-    """Process a single STL file through the render pipeline."""
+    """Process a single STL file through the render pipeline.
+
+    When material or camera_style are not explicitly specified, auto-selects
+    based on product category classification.
+    """
     stl_path = Path(stl_path)
     model_name = stl_path.stem
 
@@ -1760,6 +1962,32 @@ def process_single_model(stl_path, output_dir, mode="turntable", platforms=None,
     print(f"[Render] Dimensions: {dims['x']:.2f} x {dims['y']:.2f} x {dims['z']:.2f}")
     print(f"[Render] Shape: {'tall' if dims['is_tall'] else 'wide' if dims['is_wide'] else 'flat' if dims['is_flat'] else 'standard'}")
 
+    # Auto-select material, lighting, and camera style based on product category
+    try:
+        scripts_dir = Path(__file__).resolve().parent
+        sys.path.insert(0, str(scripts_dir))
+        from product_profiles import (classify_product, get_material_for_model,
+                                       get_lighting_for_model, get_camera_style_for_model)
+        product_profile = classify_product(model_name)
+        category = product_profile["category"]
+        print(f"[Render] Category: {category} (score: {product_profile['match_score']})")
+
+        if material is None:
+            material = get_material_for_model(model_name)
+            print(f"[Render] Auto-material: {material}")
+
+        if camera_style == "standard":
+            auto_style = get_camera_style_for_model(model_name)
+            if auto_style != "standard":
+                camera_style = auto_style
+                print(f"[Render] Auto-camera: {camera_style}")
+
+        auto_lighting = get_lighting_for_model(model_name)
+        print(f"[Render] Auto-lighting: {auto_lighting}")
+    except ImportError:
+        auto_lighting = "studio"
+        category = None
+
     if platforms is None:
         platforms = ["wide"]
 
@@ -1777,7 +2005,8 @@ def process_single_model(stl_path, output_dir, mode="turntable", platforms=None,
                 obj = import_stl(str(stl_path))
                 obj = center_and_normalize(obj)
                 results["renders"][f"turntable_{style}_{platform}"] = render_turntable(
-                    obj, platform_dir, model_name, platform, material, preset, style, color_grade
+                    obj, platform_dir, model_name, platform, material, preset, style,
+                    color_grade, lighting=auto_lighting
                 )
 
         if mode in ("beauty", "all"):
@@ -1785,7 +2014,8 @@ def process_single_model(stl_path, output_dir, mode="turntable", platforms=None,
             obj = import_stl(str(stl_path))
             obj = center_and_normalize(obj)
             results["renders"][f"beauty_{platform}"] = render_beauty_shots(
-                obj, platform_dir, model_name, platform, material, preset, color_grade
+                obj, platform_dir, model_name, platform, material, preset, color_grade,
+                lighting=auto_lighting
             )
 
         if mode in ("dramatic", "all"):

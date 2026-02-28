@@ -33,6 +33,9 @@ from thumbnail_gen import generate_thumbnail_variants, select_hero_image, genera
 from shot_sequence import get_sequence, calculate_total_duration, get_shot_timeline
 from elevenlabs_tts import generate_voiceover, upload_to_catbox, load_config as load_elevenlabs_config
 from creatomate_compose import compose_multi_platform, load_config as load_creatomate_config
+from product_profiles import (classify_product, get_music_for_mood, get_voice_for_category,
+                              get_material_for_model, get_lighting_for_model,
+                              get_camera_style_for_model)
 
 
 # ============================================================================
@@ -331,15 +334,40 @@ def _execute_pipeline(stl_path, model_name, display_name, title, output_base,
               f"Triangles: {analysis.get('triangle_count', 0):,} | "
               f"Est. print: {analysis.get('print_settings', {}).get('estimated_print_time_display', 'N/A')}")
 
-    # STEP 0.5: Ensure brand assets
+    # STEP 0.5: Classify product category
+    product_profile = classify_product(model_name)
+    category = product_profile["category"]
+    log_stage(logger, "analyze", f"Product category: {category} "
+              f"(score: {product_profile['match_score']}, "
+              f"tone: {product_profile.get('tone', '')}, "
+              f"mood: {product_profile.get('music_mood', '')})")
+
+    # Auto-select material if not specified
+    if material is None:
+        material = get_material_for_model(model_name)
+        log_stage(logger, "analyze", f"Auto-material: {material}")
+
+    # Auto-select camera style if default
+    if camera_style == "standard":
+        auto_style = get_camera_style_for_model(model_name)
+        if auto_style != "standard":
+            camera_style = auto_style
+            log_stage(logger, "analyze", f"Auto-camera: {camera_style}")
+
+    # STEP 0.5b: Ensure brand assets
     log_stage(logger, "brand", "Checking brand assets...")
     brand_assets = ensure_brand_assets()
 
-    # Auto-select music based on mood
+    # Auto-select music: prefer category mood over generic mode-based selection
     if music_path is None and brand_assets.get("music_tracks"):
-        music_path = match_music_to_mood(brand_assets["music_tracks"], mode)
+        music_mood = product_profile.get("music_mood")
+        if music_mood:
+            music_path = get_music_for_mood(music_mood, brand_assets["music_tracks"])
+        if not music_path:
+            music_path = match_music_to_mood(brand_assets["music_tracks"], mode)
         if music_path:
-            log_stage(logger, "brand", f"Auto-selected music: {Path(music_path).name}")
+            log_stage(logger, "brand", f"Auto-selected music: {Path(music_path).name} "
+                      f"(mood: {music_mood or 'mode-based'})")
 
     # STEP 1: Render
     log_stage(logger, "render", "STEP 1: Blender rendering")
@@ -439,6 +467,16 @@ def _execute_pipeline(stl_path, model_name, display_name, title, output_base,
         "mode": mode,
         "preset": render_preset,
         "platforms": platforms,
+        "product_category": category,
+        "product_profile": {
+            "category": category,
+            "tone": product_profile.get("tone", ""),
+            "music_mood": product_profile.get("music_mood", ""),
+            "transition_style": product_profile.get("transition_style", ""),
+            "energy_level": product_profile.get("energy_level", ""),
+        },
+        "material": material,
+        "camera_style": camera_style,
         "generated": datetime.now().isoformat(),
         "pipeline_dir": str(pipeline_dir),
         "stl_analysis": analysis,
@@ -477,7 +515,8 @@ def _execute_pipeline(stl_path, model_name, display_name, title, output_base,
 def run_cinematic_pipeline(stl_path, output_base=None, sequence_name="showcase_short",
                            platforms=None, material=None, preset=None,
                            camera_style="standard", color_grade="cinematic",
-                           skip_existing=True, variant_count=3, title=None):
+                           skip_existing=True, variant_count=3, title=None,
+                           fast=False):
     """Run the cinematic V2 pipeline for a single STL file.
 
     This is the upgraded pipeline that produces multi-shot, voiceover-narrated,
@@ -519,7 +558,7 @@ def run_cinematic_pipeline(stl_path, output_base=None, sequence_name="showcase_s
         return _execute_cinematic_pipeline(
             stl_path, model_name, display_name, title, output_base,
             stl_hash, sequence_name, platforms, material, preset,
-            camera_style, color_grade, variant_count
+            camera_style, color_grade, variant_count, fast
         )
     finally:
         release_lock(model_name)
@@ -528,7 +567,8 @@ def run_cinematic_pipeline(stl_path, output_base=None, sequence_name="showcase_s
 def _execute_cinematic_pipeline(stl_path, model_name, display_name, title,
                                  output_base, stl_hash, sequence_name,
                                  platforms, material, preset,
-                                 camera_style, color_grade, variant_count):
+                                 camera_style, color_grade, variant_count,
+                                 fast=False):
     """Internal: execute the cinematic pipeline stages."""
 
     config = load_pipeline_config()
@@ -547,7 +587,7 @@ def _execute_cinematic_pipeline(stl_path, model_name, display_name, title,
     seq = get_sequence(sequence_name)
 
     log_stage(logger, "pipeline", "=" * 60)
-    log_stage(logger, "pipeline", f"FORGEFILES CINEMATIC PIPELINE: {display_name}")
+    log_stage(logger, "pipeline", f"FORGEFILES CINEMATIC PIPELINE V3: {display_name}")
     log_stage(logger, "pipeline", f"Sequence: {seq['name']} ({total_duration}s, {len(seq['shots'])} shots)")
     log_stage(logger, "pipeline", f"Platforms: {', '.join(platforms)}")
     log_stage(logger, "pipeline", f"Preset: {preset or 'default'} | Output: {pipeline_dir}")
@@ -561,15 +601,23 @@ def _execute_cinematic_pipeline(stl_path, model_name, display_name, title,
     log_stage(logger, "analyze", f"Shape: {analysis.get('shape_classification', 'unknown')} | "
               f"Triangles: {analysis.get('triangle_count', 0):,}")
 
-    # STEP 0.5: Brand assets
+    # STEP 0.5: Classify product category
+    product_profile = classify_product(model_name)
+    log_stage(logger, "analyze", f"Product category: {product_profile['category']} "
+              f"(score: {product_profile['match_score']}, "
+              f"mood: {product_profile['music_mood']}, "
+              f"transitions: {product_profile['transition_style']})")
+
+    # STEP 0.5b: Brand assets
     log_stage(logger, "brand", "Checking brand assets...")
     brand_assets = ensure_brand_assets()
 
-    # STEP 1: Generate voiceover script (sequence-aware)
+    # STEP 1: Generate voiceover script (sequence-aware + category-aware)
     log_stage(logger, "caption", "STEP 1: Generating voiceover script")
     captions = generate_all_captions(
         model_name, "turntable", print_specs, print_specs_short,
-        platforms, variant_count, sequence_name=sequence_name
+        platforms, variant_count, sequence_name=sequence_name,
+        product_profile=product_profile,
     )
     voiceover_script = captions.get("voiceover", {}).get("script", "")
     log_stage(logger, "caption", f"Voiceover script: {len(voiceover_script)} chars")
@@ -601,14 +649,30 @@ def _execute_cinematic_pipeline(stl_path, model_name, display_name, title,
     with open(vo_file, 'w', encoding='utf-8') as f:
         f.write(voiceover_script)
 
-    # STEP 2: Generate voiceover audio via ElevenLabs
+    # STEP 2: Generate voiceover audio via ElevenLabs (with category-tuned voice)
     voiceover_url = None
     voiceover_path = captions_dir / f"{model_name}_voiceover.mp3"
     elevenlabs_cfg = load_elevenlabs_config()
 
     if elevenlabs_cfg.get("api_key") and voiceover_script:
         log_stage(logger, "pipeline", "STEP 2: ElevenLabs voiceover generation")
-        vo_result = generate_voiceover(voiceover_script, str(voiceover_path))
+
+        # Get voice settings tuned for this product category
+        voice_cfg = get_voice_for_category(product_profile["category"])
+        voice_settings = {
+            "stability": voice_cfg["stability"],
+            "similarity_boost": voice_cfg["similarity_boost"],
+            "style": voice_cfg["style"],
+            "use_speaker_boost": voice_cfg["use_speaker_boost"],
+        }
+        log_stage(logger, "pipeline", f"Voice tuning: stability={voice_cfg['stability']}, "
+                  f"style={voice_cfg['style']} ({product_profile['category']})")
+
+        vo_result = generate_voiceover(
+            voiceover_script, str(voiceover_path),
+            voice_id=voice_cfg["voice_id"],
+            voice_settings=voice_settings,
+        )
         if vo_result:
             log_stage(logger, "pipeline", f"Voiceover generated: {voiceover_path.name}")
             # Upload to catbox.moe for Creatomate access
@@ -623,8 +687,8 @@ def _execute_cinematic_pipeline(stl_path, model_name, display_name, title,
         log_stage(logger, "pipeline", "STEP 2: Skipping voiceover (no API key or empty script)")
 
     # STEP 3: Render shot sequence in Blender
-    log_stage(logger, "render", f"STEP 3: Blender shot sequence ({sequence_name})")
-    render_preset = preset or "portfolio"
+    render_preset = "social" if fast else (preset or "portfolio")
+    log_stage(logger, "render", f"STEP 3: Blender shot sequence ({sequence_name}){' [FAST]' if fast else ''}")
 
     # Deduce render format from first platform
     platform_format = PLATFORM_RENDER_FORMATS.get(platforms[0], "wide")
@@ -644,8 +708,10 @@ def _execute_cinematic_pipeline(stl_path, model_name, display_name, title,
         cmd.extend(["--material", material])
     if render_preset:
         cmd.extend(["--preset", render_preset])
+    if fast:
+        cmd.append("--fast")
 
-    log_stage(logger, "render", f"Blender: sequence={sequence_name} | format={platform_format}")
+    log_stage(logger, "render", f"Blender: sequence={sequence_name} | format={platform_format} | preset={render_preset}")
 
     try:
         result = subprocess.run(cmd, capture_output=False, timeout=7200)  # 2hr for multi-shot
@@ -690,12 +756,25 @@ def _execute_cinematic_pipeline(stl_path, model_name, display_name, title,
                 log_stage(logger, "pipeline", f"  Upload failed: {clip.name}", level=30)
 
         if clip_urls:
-            # Upload music if available
+            # Select music based on product category mood (not generic "cinematic")
             music_url = None
             if brand_assets.get("music_tracks"):
-                music_path = match_music_to_mood(brand_assets["music_tracks"], "cinematic")
+                music_mood = product_profile.get("music_mood", "chill")
+                music_path = get_music_for_mood(music_mood, brand_assets["music_tracks"])
                 if music_path:
+                    log_stage(logger, "pipeline", f"  Music: {Path(music_path).name} (mood: {music_mood})")
                     music_url = upload_to_catbox(music_path)
+
+            # Upload sound logo if available
+            sound_logo_url = None
+            if brand_assets.get("sound_logo"):
+                sound_logo_url = upload_to_catbox(brand_assets["sound_logo"])
+                if sound_logo_url:
+                    log_stage(logger, "pipeline", f"  Sound logo uploaded: {sound_logo_url}")
+
+            # Get transition style from product profile
+            transition_style = product_profile.get("transition_style", "cinematic")
+            log_stage(logger, "pipeline", f"  Transition style: {transition_style}")
 
             # Compose per platform
             cinematic_results = compose_multi_platform(
@@ -706,6 +785,8 @@ def _execute_cinematic_pipeline(stl_path, model_name, display_name, title,
                 model_name=display_name,
                 print_specs=print_specs_short,
                 output_dir=str(final_dir),
+                transition_style=transition_style,
+                sound_logo_url=sound_logo_url,
             )
 
             for platform, res in cinematic_results.items():
@@ -753,6 +834,14 @@ def _execute_cinematic_pipeline(stl_path, model_name, display_name, title,
             "shot_count": len(seq["shots"]),
             "timeline": get_shot_timeline(sequence_name),
         },
+        "product_category": product_profile["category"],
+        "product_profile": {
+            "category": product_profile["category"],
+            "tone": product_profile.get("tone", ""),
+            "music_mood": product_profile.get("music_mood", ""),
+            "transition_style": product_profile.get("transition_style", ""),
+            "energy_level": product_profile.get("energy_level", ""),
+        },
         "platforms": platforms,
         "generated": datetime.now().isoformat(),
         "pipeline_dir": str(pipeline_dir),
@@ -777,14 +866,17 @@ def _execute_cinematic_pipeline(stl_path, model_name, display_name, title,
 
     # Summary
     log_stage(logger, "pipeline", "=" * 60)
-    log_stage(logger, "pipeline", "CINEMATIC PIPELINE COMPLETE")
+    log_stage(logger, "pipeline", "CINEMATIC PIPELINE V3 COMPLETE")
     log_stage(logger, "pipeline", f"  Model: {display_name}")
+    log_stage(logger, "pipeline", f"  Category: {product_profile['category']} ({product_profile.get('tone', '')})")
     log_stage(logger, "pipeline", f"  Sequence: {seq['name']} ({total_duration}s)")
     log_stage(logger, "pipeline", f"  Shot clips: {len(shot_clips)}")
     log_stage(logger, "pipeline", f"  Final videos: {len(video_outputs)}")
     for p, path in video_outputs.items():
         log_stage(logger, "pipeline", f"    {p}: {path}")
     log_stage(logger, "pipeline", f"  Voiceover: {'yes' if voiceover_url else 'no'}")
+    log_stage(logger, "pipeline", f"  Music mood: {product_profile.get('music_mood', 'N/A')}")
+    log_stage(logger, "pipeline", f"  Transitions: {product_profile.get('transition_style', 'N/A')}")
     log_stage(logger, "pipeline", f"  Manifest: {manifest_path}")
     log_stage(logger, "pipeline", "=" * 60)
 
@@ -924,13 +1016,13 @@ Cinematic V2 pipeline:
     stl_path = Path(args.stl)
 
     if args.cinematic:
-        # V2 Cinematic Pipeline
+        # V3 Cinematic Pipeline
         sequence = args.sequence or "showcase_short"
         run_cinematic_pipeline(
             stl_path, args.output, sequence, platforms,
             args.material, args.preset, args.camera_style,
             args.color_grade, not args.no_skip, args.variants,
-            args.title
+            args.title, fast=args.fast
         )
     elif args.batch or stl_path.is_dir():
         batch_pipeline(
