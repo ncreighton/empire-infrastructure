@@ -1,7 +1,7 @@
-"""ScriptEngine — AI-powered narration script generation.
+"""ScriptEngine — AI-powered narration script generation with anti-slop pipeline.
 
 Supports OpenRouter (DeepSeek/Claude) and direct Anthropic API (Haiku fallback).
-Structured around HOOK-COMMITMENT-VALUE-CTA with retention anchors.
+Framework-aware prompting with deep voice cards, TTS optimization, and post-processing.
 """
 
 import os
@@ -12,6 +12,9 @@ import requests
 from ..models import VideoScript, Storyboard
 from ..knowledge.niche_profiles import get_niche_profile
 from ..knowledge.domain_expertise import get_domain_expertise
+from ..knowledge.script_frameworks import (
+    SCRIPT_FRAMEWORKS, get_framework, get_framework_key,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +37,144 @@ MODELS = {
     },
 }
 
+# ── Anti-Slop: Banned Vocabulary ─────────────────────────────────────────────
+
+BANNED_WORDS = [
+    "furthermore", "moreover", "additionally", "consequently", "nevertheless",
+    "notwithstanding", "henceforth", "whereby", "wherein", "thereof",
+    "delve", "delves", "delving",
+    "crucial", "pivotal", "paramount", "indispensable",
+    "leverage", "leveraging", "leveraged",
+    "utilize", "utilizing", "utilized", "utilization",
+    "facilitate", "facilitating",
+    "comprehensive", "robust", "seamless", "streamline",
+    "paradigm", "synergy", "synergistic",
+    "groundbreaking", "cutting-edge", "state-of-the-art",
+    "revolutionize", "revolutionizing", "revolutionary",
+    "transformative", "disruptive",
+    "empower", "empowering", "empowerment",
+    "navigate", "navigating",
+    "landscape", "realm", "sphere",
+    "embark", "embarking",
+    "bolster", "bolstering",
+    "spearhead", "spearheading",
+    "underpin", "underpinning",
+    "multifaceted", "nuanced",
+    "testament",
+    "myriad",
+    "plethora",
+    "aforementioned",
+    "subsequently",
+    "endeavor", "endeavors",
+]
+
+BANNED_PHRASES = [
+    "it's important to note",
+    "it is important to note",
+    "it's worth noting",
+    "it is worth noting",
+    "it's worth mentioning",
+    "it is worth mentioning",
+    "let me explain",
+    "let me break down",
+    "let me walk you through",
+    "as we delve into",
+    "without further ado",
+    "in today's video",
+    "in this video",
+    "welcome to",
+    "hey guys",
+    "what's up guys",
+    "in the world of",
+    "in the realm of",
+    "in today's digital landscape",
+    "in today's fast-paced world",
+    "in today's busy world",
+    "as technology evolves",
+    "as we navigate",
+    "the key to success",
+    "unlock your potential",
+    "unlock your true potential",
+    "embrace the journey",
+    "on this journey",
+    "it remains to be seen",
+    "only time will tell",
+    "at the end of the day",
+    "having said that",
+    "with that being said",
+    "it goes without saying",
+    "needless to say",
+    "last but not least",
+    "first and foremost",
+    "each and every",
+    "when it comes to",
+    "in terms of",
+    "the fact of the matter is",
+    "in conclusion",
+    "to sum up",
+    "in summary",
+    "as a matter of fact",
+    "it's no secret that",
+    "the bottom line is",
+    "at this point in time",
+    "for all intents and purposes",
+    "a testament to",
+]
+
+# Contraction enforcement map (formal → contraction)
+CONTRACTION_MAP = {
+    "it is": "it's",
+    "it has": "it's",
+    "do not": "don't",
+    "does not": "doesn't",
+    "did not": "didn't",
+    "is not": "isn't",
+    "are not": "aren't",
+    "was not": "wasn't",
+    "were not": "weren't",
+    "have not": "haven't",
+    "has not": "hasn't",
+    "had not": "hadn't",
+    "will not": "won't",
+    "would not": "wouldn't",
+    "could not": "couldn't",
+    "should not": "shouldn't",
+    "can not": "can't",
+    "cannot": "can't",
+    "that is": "that's",
+    "there is": "there's",
+    "here is": "here's",
+    "what is": "what's",
+    "who is": "who's",
+    "you are": "you're",
+    "they are": "they're",
+    "we are": "we're",
+    "I am": "I'm",
+    "I have": "I've",
+    "I will": "I'll",
+    "you will": "you'll",
+    "they will": "they'll",
+    "we will": "we'll",
+    "you have": "you've",
+    "they have": "they've",
+    "we have": "we've",
+    "let us": "let's",
+    "I would": "I'd",
+    "you would": "you'd",
+    "we would": "we'd",
+    "they would": "they'd",
+}
+
+# Content type detection keywords
+_CONTENT_TYPE_KEYWORDS = {
+    "tutorial": ["how to", "guide", "setup", "install", "step by step", "beginner", "learn", "diy"],
+    "review": ["review", "worth it", "honest", "vs", "versus", "comparison", "tested", "best"],
+    "story": ["story", "tale", "legend", "myth", "origin", "history of", "ancient", "folklore", "who was"],
+    "listicle": ["top", "best", "worst", "most", "reasons", "ways", "things", "tips", "hacks", "mistakes"],
+    "news": ["just announced", "breaking", "new release", "update", "launched", "dropped", "announced"],
+    "motivation": ["transform", "changed my life", "secret to", "manifest", "attract", "mindset", "affirmation"],
+}
+
 
 def _load_key_from_file(filepath: str, key_name: str) -> str:
     """Load a key from an env-style file."""
@@ -49,18 +190,16 @@ def _load_key_from_file(filepath: str, key_name: str) -> str:
 
 
 def _get_api_key() -> str:
-    """Get OpenRouter API key from env → configs/api_keys.env → empire config/.env."""
+    """Get OpenRouter API key from env -> configs/api_keys.env -> empire config/.env."""
     key = os.environ.get("OPENROUTER_API_KEY", "")
     if key:
         return key
-    # Check project config
     key = _load_key_from_file(
         os.path.join(os.path.dirname(__file__), "..", "..", "configs", "api_keys.env"),
         "OPENROUTER_API_KEY",
     )
     if key:
         return key
-    # Check empire-wide config
     key = _load_key_from_file(
         os.path.join(os.path.dirname(__file__), "..", "..", "..", "config", ".env"),
         "OPENROUTER_API_KEY",
@@ -69,7 +208,7 @@ def _get_api_key() -> str:
 
 
 def _get_anthropic_key() -> str:
-    """Get Anthropic API key from env → configs/api_keys.env → empire config/.env."""
+    """Get Anthropic API key from env -> configs/api_keys.env -> empire config/.env."""
     key = os.environ.get("ANTHROPIC_API_KEY", "")
     if key:
         return key
@@ -87,7 +226,7 @@ def _get_anthropic_key() -> str:
 
 
 class ScriptEngine:
-    """Generates video narration scripts via OpenRouter API."""
+    """Generates video narration scripts via OpenRouter API with anti-slop pipeline."""
 
     def __init__(self, model_tier: str = "cheap"):
         self.model_tier = model_tier
@@ -97,7 +236,8 @@ class ScriptEngine:
                         model_tier: str = None) -> VideoScript:
         """Generate a narration script from a storyboard.
 
-        Priority: OpenRouter → Anthropic Haiku → storyboard fallback.
+        Priority: OpenRouter -> Anthropic Haiku -> storyboard fallback.
+        Post-processes all AI output to strip slop.
         """
         model = MODELS.get(model_tier or self.model_tier, self.model)
         prompt = self._build_prompt(storyboard)
@@ -117,7 +257,7 @@ class ScriptEngine:
             if result:
                 return result
 
-        logger.info("No API keys available — using storyboard narration as script")
+        logger.info("No API keys available -- using storyboard narration as script")
         return self._fallback_script(storyboard)
 
     def _call_openrouter(self, api_key, model, system, prompt, storyboard):
@@ -135,8 +275,8 @@ class ScriptEngine:
                         {"role": "system", "content": system},
                         {"role": "user", "content": prompt},
                     ],
-                    "max_tokens": 1000,
-                    "temperature": 0.7,
+                    "max_tokens": 1500,
+                    "temperature": 0.85,
                 },
                 timeout=30,
             )
@@ -151,7 +291,8 @@ class ScriptEngine:
             cost = (input_tokens / 1000 * model["cost_per_1k_input"] +
                     output_tokens / 1000 * model["cost_per_1k_output"])
 
-            return self._parse_script(content, storyboard, model["name"], cost)
+            script = self._parse_script(content, storyboard, model["name"], cost)
+            return self._post_process(script)
 
         except Exception as e:
             logger.warning(f"OpenRouter script generation failed: {e}")
@@ -169,7 +310,7 @@ class ScriptEngine:
                 },
                 json={
                     "model": "claude-haiku-4-5-20251001",
-                    "max_tokens": 1000,
+                    "max_tokens": 1500,
                     "system": system,
                     "messages": [
                         {"role": "user", "content": prompt},
@@ -190,7 +331,8 @@ class ScriptEngine:
                     output_tokens / 1_000_000 * 4.00)
 
             logger.info(f"Anthropic Haiku script: {output_tokens} tokens, ${cost:.4f}")
-            return self._parse_script(content, storyboard, "Claude Haiku", cost)
+            script = self._parse_script(content, storyboard, "Claude Haiku", cost)
+            return self._post_process(script)
 
         except Exception as e:
             logger.warning(f"Anthropic script generation failed: {e}")
@@ -207,7 +349,7 @@ class ScriptEngine:
             f"Generate {count} viral video topic ideas for the '{niche}' niche.\n"
             f"Content type: {content_type}\n"
             f"Format: Return ONLY a JSON array of topic strings, no other text.\n"
-            f"Example: [\"topic 1\", \"topic 2\"]\n"
+            f'Example: ["topic 1", "topic 2"]\n'
             f"Make them specific, hook-worthy, and optimized for short-form video."
         )
 
@@ -239,17 +381,35 @@ class ScriptEngine:
             logger.warning(f"Topic generation failed: {e}")
             return [f"{niche} topic idea {i+1}" for i in range(count)]
 
+    # ── Content Type Detection ────────────────────────────────────────────
+
+    def _detect_content_type(self, title: str) -> str:
+        """Detect content type from title keywords."""
+        title_lower = title.lower()
+        scores = {}
+        for content_type, keywords in _CONTENT_TYPE_KEYWORDS.items():
+            score = sum(1 for kw in keywords if kw in title_lower)
+            if score > 0:
+                scores[content_type] = score
+        if scores:
+            return max(scores, key=scores.get)
+        return "educational"
+
+    # ── System Prompt (the main quality lever) ────────────────────────────
+
     def _system_prompt(self, storyboard: Storyboard) -> str:
-        """Build system prompt for script generation with HOOK-COMMITMENT-VALUE-CTA structure."""
+        """Build the system prompt with voice cards, frameworks, TTS rules, and anti-slop."""
         profile = get_niche_profile(storyboard.niche)
         voice = profile.get("voice", {})
-        tone = voice.get("tone", "engaging, clear")
-        vocab = voice.get("vocab", [])
-        avoid = voice.get("avoid", [])
-        vocab_str = ", ".join(vocab[:5]) if vocab else ""
-        avoid_str = ", ".join(avoid[:3]) if avoid else ""
+        voice_card = profile.get("voice_card", {})
+        category = profile.get("category", "tech")
 
-        # Inject domain expertise
+        # Framework selection
+        content_type = self._detect_content_type(storyboard.title)
+        framework_key = get_framework_key(content_type=content_type, category=category)
+        framework = SCRIPT_FRAMEWORKS.get(framework_key, SCRIPT_FRAMEWORKS["hook_problem_solution_cta"])
+
+        # Domain expertise
         expertise = get_domain_expertise(storyboard.niche, storyboard.title)
         expertise_block = ""
         if expertise:
@@ -259,12 +419,11 @@ class ScriptEngine:
             tips_str = "\n".join(f"- {t}" for t in tips[:5]) if tips else "- Use your expertise"
 
             expertise_block = (
-                f"\nDOMAIN EXPERTISE — use these real facts in your script:\n"
+                f"\nDOMAIN EXPERTISE -- use these real facts in your script:\n"
                 f"Key products/tools: {products_str}\n"
                 f"Expert tips:\n{tips_str}\n"
             )
 
-            # Add topic-matched talking point if available
             matched = expertise.get("matched_talking_point")
             if matched:
                 expertise_block += (
@@ -272,32 +431,95 @@ class ScriptEngine:
                     f'- {matched["content"]}\n'
                 )
 
-        return (
-            f"You are an expert {storyboard.niche} content creator making viral short-form videos.\n"
-            f"Platform: {storyboard.platform}. Format: {storyboard.format}. "
-            f"Target duration: {storyboard.total_duration:.0f} seconds.\n\n"
-            f"VOICE: {tone}\n"
-            f"KEY VOCABULARY: {vocab_str}\n"
-            f"NEVER USE: {avoid_str}\n"
-            f"{expertise_block}\n"
-            f"STRUCTURE: HOOK → COMMITMENT → VALUE → CTA\n"
-            f"- HOOK (first 2 seconds): Pattern interrupt using a specific fact or product name.\n"
-            f"- COMMITMENT (next 3 seconds): Tell them exactly what specific things they'll learn.\n"
-            f"- VALUE (body): 3 insights with REAL product names, numbers, or techniques. "
-            f"Each one lands in 1-2 short sentences.\n"
-            f"- CTA (last 3 seconds): Clear, direct call to action.\n\n"
-            f"CRITICAL RULES:\n"
-            f"- Every insight MUST mention a specific product, technique, or fact\n"
-            f"- NEVER be vague — 'this one tool' is banned, name the actual tool\n"
-            f"- Include at least 2 specific product/tool names from the domain expertise\n"
-            f"- NEVER start with 'Welcome to' or 'In this video'\n"
-            f"- NEVER say 'Let me explain' or 'As you can see'\n"
-            f"- Short punchy sentences. 8-12 words max per sentence.\n"
-            f"- Add a retention anchor every 5 seconds ('But here's the thing...', "
-            f"'And it gets better...', 'Watch this...')\n"
-            f"- Conversational tone — like talking to a friend\n"
-            f"- Every sentence must earn the next second of watch time"
+        # Voice card blocks
+        identity = voice_card.get("identity", f"an expert {storyboard.niche} creator")
+        emotional_register = voice_card.get("emotional_register", voice.get("tone", "engaging"))
+        viewer_rel = voice_card.get("viewer_relationship", "sharing knowledge with a friend")
+        speaking_style = voice_card.get("speaking_style", "short punchy sentences, conversational")
+        forbidden_tones = voice_card.get("forbidden_tones", [])
+        signature_phrases = voice_card.get("signature_phrases", [])
+        niche_never_say = voice_card.get("never_say", [])
+        forbidden_str = ", ".join(forbidden_tones) if forbidden_tones else "generic, boring, robotic"
+        signature_str = " / ".join(f'"{p}"' for p in signature_phrases[:4]) if signature_phrases else ""
+
+        # Framework instruction
+        framework_instruction = framework.get("prompt_instruction", "")
+
+        # Build the banned vocabulary block for the prompt
+        banned_words_sample = ", ".join(BANNED_WORDS[:30])
+        banned_phrases_sample = " / ".join(f'"{p}"' for p in BANNED_PHRASES[:15])
+        niche_banned = " / ".join(f'"{p}"' for p in niche_never_say[:5]) if niche_never_say else ""
+
+        sections = []
+
+        # IDENTITY
+        sections.append(
+            f"You are {identity}.\n"
+            f"EMOTIONAL REGISTER: {emotional_register}\n"
+            f"VIEWER RELATIONSHIP: {viewer_rel}\n"
+            f"SPEAKING STYLE: {speaking_style}\n"
+            f"NEVER sound like: {forbidden_str}"
         )
+
+        # SIGNATURE (if available)
+        if signature_str:
+            sections.append(f"USE phrases like: {signature_str}")
+
+        # FRAMEWORK
+        sections.append(
+            f"SCRIPT FRAMEWORK: {framework.get('name', 'Hook-Problem-Solution-CTA')}\n"
+            f"{framework_instruction}"
+        )
+
+        # DOMAIN EXPERTISE
+        if expertise_block:
+            sections.append(expertise_block.strip())
+
+        # TTS WRITING RULES
+        sections.append(
+            "TTS WRITING RULES (your script will be read aloud by a text-to-speech voice):\n"
+            "- Max 20 words per sentence. Shorter is better. Mix lengths: 5, 12, 8, 15, 6.\n"
+            "- Use contractions ALWAYS: 'don't' not 'do not', 'it's' not 'it is', 'you're' not 'you are'.\n"
+            "- Spell out numbers under one hundred: 'thirty' not '30', 'five thousand' not '5,000'.\n"
+            "- Punctuation IS timing: Period = full stop. Dash = dramatic pause. Ellipsis = suspense.\n"
+            "- Start sentences with different words. Never start two consecutive sentences the same way.\n"
+            "- Rhythm pattern: short punch. medium detail. short punch. longer context sentence. short punch."
+        )
+
+        # BANNED VOCABULARY
+        sections.append(
+            f"BANNED VOCABULARY -- never use these words: {banned_words_sample}\n"
+            f"BANNED PHRASES -- never use: {banned_phrases_sample}"
+        )
+        if niche_banned:
+            sections.append(f"NICHE-SPECIFIC BANS: {niche_banned}")
+
+        # RETENTION MECHANICS
+        sections.append(
+            "RETENTION MECHANICS:\n"
+            "- Open a loop in scene one. Don't close it until scene three or four.\n"
+            "- Pattern interrupt every two to three sentences: a question, a surprising fact, a contradiction.\n"
+            "- Power words by category -- curiosity: 'secret, hidden, unknown, bizarre, shocking' / "
+            "urgency: 'now, immediately, before, deadline, running out' / "
+            "fear: 'mistake, avoid, warning, never, danger' / "
+            "authority: 'proven, research, data, expert, tested'.\n"
+            "- Compound hooks: stack two hooks in the first sentence. 'This thirty dollar device replaced my entire security system.'"
+        )
+
+        # CRITICAL RULES
+        sections.append(
+            "CRITICAL RULES:\n"
+            "- SPECIFICITY: Every claim needs a name, number, or concrete detail. No vague language.\n"
+            "- 'This tool' is BANNED. Name the actual tool.\n"
+            "- 'This changes everything' is BANNED. Say what specifically changes.\n"
+            "- No throat-clearing: jump straight into the content. No 'so' or 'well' to start.\n"
+            "- No meta-commentary: never say 'in this video' or 'let me tell you about'.\n"
+            "- Every sentence must earn the next second of watch time.\n"
+            f"- Target duration: {storyboard.total_duration:.0f} seconds. "
+            f"Platform: {storyboard.platform}."
+        )
+
+        return "\n\n".join(sections)
 
     def _build_prompt(self, storyboard: Storyboard) -> str:
         """Build the generation prompt from storyboard."""
@@ -315,19 +537,84 @@ class ScriptEngine:
             f"Hook formula: {storyboard.hook_formula}\n"
             f"CTA: {storyboard.cta_text}\n\n"
             f"Storyboard scenes:\n" + "\n".join(scenes_desc) + "\n\n"
-            f"Write the complete narration with visual directions. Rules:\n"
+            f"Write the complete narration with visual directions.\n"
             f"- One line per scene, format: 'Scene N: [narration] | VISUAL: [image description]'\n"
             f"- The VISUAL must describe what should be shown during this narration\n"
             f"- VISUAL descriptions should be specific subjects/objects, not camera directions\n"
-            f"- VISUAL descriptions MUST be bright and vivid — use well-lit scenes, vibrant colors, clear subjects against clean backgrounds. NEVER use dark, shadowy, silhouette, or dimly-lit descriptions\n"
-            f"- Example: 'Scene 3: The Echo Dot costs just thirty dollars. | VISUAL: Amazon Echo Dot smart speaker on a white countertop, blue LED ring glowing'\n"
-            f"- Target ~{target_words} words total (narration only, not counting VISUAL descriptions)\n"
-            f"- Scene 1 must be an immediate hook — no setup, no intro\n"
-            f"- Use short, punchy sentences (8-12 words)\n"
-            f"- Include at least 2 retention anchors ('But here's the thing...', etc.)\n"
-            f"- End with a specific, actionable CTA\n"
+            f"- VISUAL descriptions MUST be bright and vivid -- well-lit scenes, vibrant colors, clear subjects against clean backgrounds. NEVER dark, shadowy, or dimly-lit.\n"
+            f"- Target ~{target_words} words total (narration only)\n"
+            f"- Scene 1: immediate hook, no setup\n"
             f"- Make every word count. Cut any filler."
         )
+
+    # ── Post-Processing Pipeline ──────────────────────────────────────────
+
+    def _post_process(self, script: VideoScript) -> VideoScript:
+        """Run the anti-slop post-processing pipeline on a VideoScript."""
+        script.full_text = self._clean_text(script.full_text)
+        script.hook = self._clean_text(script.hook)
+        script.cta = self._clean_text(script.cta)
+        script.body_segments = [self._clean_text(s) for s in script.body_segments]
+        script.word_count = len(script.full_text.split())
+        script.estimated_duration = script.word_count / 2.5
+        return script
+
+    def _clean_text(self, text: str) -> str:
+        """Full cleaning pipeline for a text string."""
+        if not text:
+            return text
+        text = self._strip_markdown(text)
+        text = self._strip_banned_phrases(text)
+        text = self._strip_banned_words(text)
+        text = self._enforce_contractions(text)
+        # Clean up extra whitespace
+        text = re.sub(r"  +", " ", text).strip()
+        return text
+
+    @staticmethod
+    def _strip_banned_phrases(text: str) -> str:
+        """Remove banned phrases (case-insensitive)."""
+        for phrase in BANNED_PHRASES:
+            pattern = re.compile(re.escape(phrase), re.IGNORECASE)
+            text = pattern.sub("", text)
+        return text
+
+    @staticmethod
+    def _strip_banned_words(text: str) -> str:
+        """Remove banned words at word boundaries (case-insensitive)."""
+        for word in BANNED_WORDS:
+            pattern = re.compile(r"\b" + re.escape(word) + r"\b", re.IGNORECASE)
+            text = pattern.sub("", text)
+        return text
+
+    @staticmethod
+    def _enforce_contractions(text: str) -> str:
+        """Replace formal forms with contractions."""
+        for formal, contraction in CONTRACTION_MAP.items():
+            pattern = re.compile(r"\b" + re.escape(formal) + r"\b", re.IGNORECASE)
+            # Preserve original case for first char
+            def _replace(m, c=contraction):
+                matched = m.group(0)
+                if matched[0].isupper():
+                    return c[0].upper() + c[1:]
+                return c
+            text = pattern.sub(_replace, text)
+        return text
+
+    @staticmethod
+    def _strip_markdown(text: str) -> str:
+        """Remove markdown bold/italic markers."""
+        # **bold** -> bold
+        text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
+        # *italic* -> italic
+        text = re.sub(r"\*(.+?)\*", r"\1", text)
+        # __bold__ -> bold
+        text = re.sub(r"__(.+?)__", r"\1", text)
+        # _italic_ -> italic
+        text = re.sub(r"_(.+?)_", r"\1", text)
+        return text
+
+    # ── Parsing ───────────────────────────────────────────────────────────
 
     def _parse_script(self, content: str, storyboard: Storyboard,
                       model_name: str, cost: float) -> VideoScript:

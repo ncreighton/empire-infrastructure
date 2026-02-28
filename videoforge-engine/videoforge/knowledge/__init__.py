@@ -13,6 +13,10 @@ from .niche_profiles import NICHE_PROFILES, get_niche_profile
 from .trending_formats import TRENDING_FORMATS, get_trending_formats
 from .audio_library import AUDIO_SOURCES, get_music_source
 from .domain_expertise import DOMAIN_EXPERTISE, get_domain_expertise, get_style_suffix
+from .script_frameworks import (
+    SCRIPT_FRAMEWORKS, CONTENT_TYPE_TO_FRAMEWORK, NICHE_FRAMEWORK_RANKING,
+    get_framework, get_framework_for_niche, get_framework_key,
+)
 
 __all__ = [
     "SHOT_TYPES", "get_shot_type", "get_shots_for_mood",
@@ -28,4 +32,6 @@ __all__ = [
     "TRENDING_FORMATS", "get_trending_formats",
     "AUDIO_SOURCES", "get_music_source",
     "DOMAIN_EXPERTISE", "get_domain_expertise", "get_style_suffix",
+    "SCRIPT_FRAMEWORKS", "CONTENT_TYPE_TO_FRAMEWORK", "NICHE_FRAMEWORK_RANKING",
+    "get_framework", "get_framework_for_niche", "get_framework_key",
 ]
