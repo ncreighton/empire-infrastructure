@@ -746,9 +746,13 @@ def setup_gradient_background(top_color=(0.18, 0.18, 0.20), bottom_color=(0.06, 
 # GROUND PLANE & ENVIRONMENT
 # ============================================================================
 
-def create_ground_plane(size=12, material="shadow_catcher"):
-    """Ground plane with shadow catching or reflective surface."""
-    bpy.ops.mesh.primitive_plane_add(size=size, location=(0, 0, 0))
+def create_ground_plane(size=50, material="shadow_catcher"):
+    """Ground plane with shadow catching or reflective surface.
+
+    Placed slightly below z=0 to avoid z-fighting with model base vertices.
+    Size=50 ensures edges are never visible from any camera angle.
+    """
+    bpy.ops.mesh.primitive_plane_add(size=size, location=(0, 0, -0.005))
     plane = bpy.context.active_object
     plane.name = "GroundPlane"
 
@@ -760,11 +764,12 @@ def create_ground_plane(size=12, material="shadow_catcher"):
             mat = create_material("ground_shadow", (0.05, 0.05, 0.05, 1.0), roughness=1.0)
             plane.data.materials.append(mat)
     elif material == "reflective":
-        mat = create_material("ground_reflective", (0.08, 0.08, 0.09, 1.0),
-                              roughness=0.03, metallic=0.0, specular=0.8)
+        # Subtle dark reflective floor — high roughness to avoid mirror-like hotspots
+        mat = create_material("ground_reflective", (0.03, 0.03, 0.035, 1.0),
+                              roughness=0.35, metallic=0.0, specular=0.5)
         plane.data.materials.append(mat)
     elif material == "matte":
-        mat = create_material("ground_matte", (0.12, 0.12, 0.14, 1.0), roughness=0.95)
+        mat = create_material("ground_matte", (0.08, 0.08, 0.10, 1.0), roughness=0.95)
         plane.data.materials.append(mat)
 
     return plane
