@@ -132,15 +132,22 @@ class VideoForgeEngine:
                 if i < len(all_segments) and all_segments[i]:
                     scene.narration = all_segments[i]
                     scene.subtitle_text = all_segments[i]
-            # Recalculate scene durations with new narration
+            # Re-sync scene durations with actual word counts from AI script
+            # using voice-specific WPM for accurate timing
             from .knowledge.pacing import get_pacing
+            from .assembly.audio_engine import _VOICE_WPM
+            from .voice import get_voice
             pacing = get_pacing(platform=platform, niche=niche)
+            voice_profile = get_voice(niche)
+            voice_name = voice_profile.get("elevenlabs_voice_name", "")
+            voice_wpm = _VOICE_WPM.get(voice_name, _VOICE_WPM["default"])
+            pacing["word_rate_wpm"] = voice_wpm
             self.smith._calculate_scene_durations(plan.storyboard.scenes, pacing)
             plan.storyboard.total_duration = sum(
                 s.duration_seconds for s in plan.storyboard.scenes
             )
             plan.status = "scripted"
-            logger.info(f"AI script applied: {script.model_used}, {script.word_count} words")
+            logger.info(f"AI script applied: {script.model_used}, {script.word_count} words, {voice_name} @ {voice_wpm} WPM")
 
         # [6.5] Update visual prompts from AI visual directions
         if script.visual_directions:

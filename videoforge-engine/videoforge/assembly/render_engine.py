@@ -9,6 +9,7 @@ import os
 import sys
 import json
 import time
+import hashlib
 import logging
 import requests
 from ..models import VideoPlan, Storyboard, SubtitleTrack, CostBreakdown
@@ -128,6 +129,56 @@ KEN_BURNS_VARIANTS = [
              "x_anchor": "50%", "y_anchor": "50%", "start_scale": "110%", "end_scale": "145%"},
         ],
     },
+    {  # 13. Slow drift right — gentle horizontal pan, cinematic slow
+        "name": "slow_drift_right",
+        "animations": [
+            {"time": "start", "type": "pan", "scope": "element", "easing": "linear",
+             "start_x": "40%", "end_x": "60%", "start_y": "50%", "end_y": "50%"},
+            {"time": "start", "type": "scale", "scope": "element", "easing": "linear",
+             "x_anchor": "50%", "y_anchor": "50%", "start_scale": "115%", "end_scale": "115%"},
+        ],
+    },
+    {  # 14. Tilt up reveal — vertical tilt from bottom
+        "name": "tilt_up_reveal",
+        "animations": [
+            {"time": "start", "type": "pan", "scope": "element", "easing": "cubic-out",
+             "start_x": "50%", "end_x": "50%", "start_y": "70%", "end_y": "30%"},
+            {"time": "start", "type": "scale", "scope": "element", "easing": "linear",
+             "x_anchor": "50%", "y_anchor": "50%", "start_scale": "120%", "end_scale": "120%"},
+        ],
+    },
+    {  # 15. Orbital zoom — combined pan + zoom for circular feel
+        "name": "orbital_zoom",
+        "animations": [
+            {"time": "start", "type": "pan", "scope": "element", "easing": "quadratic-in-out",
+             "start_x": "35%", "end_x": "65%", "start_y": "55%", "end_y": "45%"},
+            {"time": "start", "type": "scale", "scope": "element", "easing": "quadratic-in-out",
+             "x_anchor": "50%", "y_anchor": "50%", "start_scale": "105%", "end_scale": "150%"},
+        ],
+    },
+    {  # 16. Breathe — subtle scale pulse, meditative
+        "name": "breathe",
+        "animations": [
+            {"time": "start", "type": "scale", "scope": "element", "easing": "quadratic-in-out",
+             "x_anchor": "50%", "y_anchor": "50%", "start_scale": "100%", "end_scale": "115%"},
+        ],
+    },
+    {  # 17. Rack focus push — fast push in, documentary style
+        "name": "rack_focus_push",
+        "animations": [
+            {"time": "start", "type": "scale", "scope": "element", "easing": "cubic-in",
+             "x_anchor": "50%", "y_anchor": "45%", "start_scale": "100%", "end_scale": "180%"},
+        ],
+    },
+    {  # 18. Parallax drift — diagonal with scale change
+        "name": "parallax_drift",
+        "animations": [
+            {"time": "start", "type": "pan", "scope": "element", "easing": "cubic-in-out",
+             "start_x": "30%", "end_x": "55%", "start_y": "60%", "end_y": "40%"},
+            {"time": "start", "type": "scale", "scope": "element", "easing": "linear",
+             "x_anchor": "45%", "y_anchor": "50%", "start_scale": "110%", "end_scale": "130%"},
+        ],
+    },
 ]
 
 # Image entrance animations — applied ON TOP of Ken Burns for dramatic scene entries.
@@ -144,6 +195,18 @@ IMAGE_ENTRANCE_ANIMATIONS = [
      "easing": "quadratic-out"},
     {"type": "wipe", "time": "start", "duration": 0.6, "direction": "0°",
      "easing": "cubic-out"},
+    # New: blur-in — blur + fade entrance
+    {"type": "fade", "time": "start", "duration": 0.6,
+     "easing": "quadratic-out"},
+    # New: rotate-in — slight rotation entrance
+    {"type": "spin", "time": "start", "duration": 0.5,
+     "easing": "back-out", "fade": True},
+    # New: slide from top
+    {"type": "slide", "time": "start", "duration": 0.5, "direction": "270°",
+     "distance": "5%", "easing": "back-out", "fade": True},
+    # New: scale from large — overshoot entrance
+    {"type": "scale", "time": "start", "duration": 0.5, "easing": "back-out",
+     "start_scale": "120%", "end_scale": "100%", "fade": True},
 ]
 
 # Image exit animations — smooth outgoing transitions
@@ -152,6 +215,15 @@ IMAGE_EXIT_ANIMATIONS = [
      "easing": "quadratic-in"},
     {"type": "scale", "time": "end", "duration": 0.4, "reversed": True,
      "easing": "quadratic-in", "end_scale": "105%", "fade": True},
+    # New: slide-out
+    {"type": "slide", "time": "end", "duration": 0.3, "reversed": True,
+     "direction": "180°", "distance": "5%", "easing": "quadratic-in"},
+    # New: blur-out — fade out
+    {"type": "fade", "time": "end", "duration": 0.3, "reversed": True,
+     "easing": "cubic-in"},
+    # New: scale-out — shrink and fade
+    {"type": "scale", "time": "end", "duration": 0.3, "reversed": True,
+     "easing": "quadratic-in", "end_scale": "80%", "fade": True},
 ]
 
 # Text animation styles — rotated across scenes for variety
@@ -176,6 +248,18 @@ SUBTITLE_ANIMATION_STYLES = [
     [{"type": "text-wave", "time": "start", "duration": 0.6,
       "split": "word", "easing": "sinusoid-out"},
      {"type": "fade", "time": "end", "duration": 0.3, "reversed": True}],
+    # 5: text-typewriter — character-by-character reveal
+    [{"type": "text-slide", "time": "start", "duration": 0.6,
+      "scope": "split-clip", "split": "letter", "direction": "0°", "easing": "linear"},
+     {"type": "fade", "time": "end", "duration": 0.3, "reversed": True}],
+    # 6: text-bounce — spring effect per word
+    [{"type": "text-scale", "time": "start", "duration": 0.5,
+      "split": "word", "easing": "back-out", "start_scale": "0%"},
+     {"type": "fade", "time": "end", "duration": 0.3, "reversed": True}],
+    # 7: text-appear — instant word-by-word, no motion (fast-paced scenes)
+    [{"type": "text-fly", "time": "start", "duration": 0.2,
+      "split": "word", "easing": "linear"},
+     {"type": "fade", "time": "end", "duration": 0.2, "reversed": True}],
 ]
 
 # Hook/CTA text overlay animation styles — more dramatic
@@ -193,6 +277,12 @@ OVERLAY_ANIMATION_STYLES = [
     [{"type": "text-slide", "time": "start", "duration": 0.6,
       "scope": "split-clip", "split": "line", "direction": "90°",
       "easing": "cubic-out"}],
+    # 4: text-reveal — center, dramatic reveal
+    [{"type": "text-reveal", "time": "start", "duration": 0.7,
+      "easing": "cubic-out"}],
+    # 5: text-wave — word undulation, dramatic
+    [{"type": "text-wave", "time": "start", "duration": 0.7,
+      "split": "word", "easing": "back-out"}],
 ]
 
 # Transition type → Creatomate animation config (with easing)
@@ -214,6 +304,10 @@ TRANSITION_MAP = {
     "spin": {"type": "spin", "duration": 0.5, "easing": "cubic-in-out"},
     "color_wipe": {"type": "color-wipe", "duration": 0.6, "color": "rgba(0,0,0,0.9)", "easing": "cubic-in-out"},
     "film_roll": {"type": "film-roll", "duration": 0.5, "direction": "270°", "easing": "cubic-out"},
+    "blur": {"type": "fade", "duration": 0.4, "easing": "quadratic-in-out"},
+    "bounce": {"type": "scale", "duration": 0.3, "easing": "back-out", "start_scale": "60%", "fade": True},
+    "squash": {"type": "film-roll", "duration": 0.4, "direction": "90°", "easing": "back-out"},
+    "rotate": {"type": "spin", "duration": 0.4, "easing": "cubic-in-out"},
 }
 
 
@@ -452,19 +546,25 @@ class RenderEngine:
                 "height": "100%",
                 "fit": "cover",
             }
-            # Ken Burns animation (cycle through 12 variants)
-            kb_variant = KEN_BURNS_VARIANTS[scene_index % len(KEN_BURNS_VARIANTS)]
+            # Ken Burns animation — content-hash for deterministic but varied selection
+            content_seed = scene.narration or scene.visual_prompt or f"scene_{scene_index}"
+            h = int(hashlib.md5(content_seed.encode()).hexdigest(), 16)
+            kb_variant = KEN_BURNS_VARIANTS[h % len(KEN_BURNS_VARIANTS)]
             animations = [dict(a) for a in kb_variant["animations"]]
 
-            # Add entrance animation (cycle through styles)
-            entrance = IMAGE_ENTRANCE_ANIMATIONS[scene_index % len(IMAGE_ENTRANCE_ANIMATIONS)]
+            # Entrance animation — offset hash for independent selection
+            entrance = IMAGE_ENTRANCE_ANIMATIONS[(h >> 8) % len(IMAGE_ENTRANCE_ANIMATIONS)]
             animations.append(dict(entrance))
 
-            # Add exit animation (subtle fade/scale out)
-            exit_anim = IMAGE_EXIT_ANIMATIONS[scene_index % len(IMAGE_EXIT_ANIMATIONS)]
+            # Exit animation — further offset
+            exit_anim = IMAGE_EXIT_ANIMATIONS[(h >> 16) % len(IMAGE_EXIT_ANIMATIONS)]
             animations.append(dict(exit_anim))
 
             visual_el["animations"] = animations
+
+            # Apply niche-specific color grading (subtle accent overlay + contrast)
+            self._apply_color_grade(visual_el, color)
+
             elements.append(visual_el)
         else:
             # No real image — use gradient background with subtle color variation
@@ -503,11 +603,12 @@ class RenderEngine:
             if audio_el:
                 elements.append(audio_el)
 
-        # Sync composition duration with audio — no padding, tight cuts
+        # Sync composition duration with audio + 0.3s safety buffer
+        # to prevent overlapping narration at end of video
         comp_duration = scene.duration_seconds
         if audio_data and audio_data.get("duration_estimate"):
             audio_dur = audio_data["duration_estimate"]
-            comp_duration = max(comp_duration, audio_dur)
+            comp_duration = max(comp_duration, audio_dur + 0.3)
 
         # Build the composition — track 2 ensures scenes auto-sequence
         composition = {
@@ -560,10 +661,11 @@ class RenderEngine:
         """Build a large centered text overlay for hook/CTA scenes.
 
         Text readability via heavy stroke + dual shadows (no gradient overlay needed).
-        Animation style rotates per scene for variety.
+        Animation style selected via content hash for variety.
         """
-        # Pick animation style based on scene index
-        anim_style = OVERLAY_ANIMATION_STYLES[scene_index % len(OVERLAY_ANIMATION_STYLES)]
+        # Pick animation style via content hash for varied but deterministic selection
+        h = int(hashlib.md5(text.encode()).hexdigest(), 16)
+        anim_style = OVERLAY_ANIMATION_STYLES[h % len(OVERLAY_ANIMATION_STYLES)]
         animations = [dict(a) for a in anim_style]
 
         return {
@@ -592,14 +694,15 @@ class RenderEngine:
 
         Uses heavy stroke + shadow + semi-transparent background pill for
         readability on any image. No full-screen gradient needed.
-        Animation style rotates per scene for variety.
+        Animation style selected via content hash for variety.
         """
         # Truncate at word boundary around 80 chars
         if len(text) > 80:
             text = text[:80].rsplit(" ", 1)[0] + "..."
 
-        # Pick animation style based on scene index
-        anim_style = SUBTITLE_ANIMATION_STYLES[scene_index % len(SUBTITLE_ANIMATION_STYLES)]
+        # Pick animation style via content hash for varied but deterministic selection
+        h = int(hashlib.md5(text.encode()).hexdigest(), 16)
+        anim_style = SUBTITLE_ANIMATION_STYLES[h % len(SUBTITLE_ANIMATION_STYLES)]
         animations = [dict(a) for a in anim_style]
 
         return {
@@ -626,7 +729,11 @@ class RenderEngine:
         }
 
     def _get_transition_animation(self, transition_key: str) -> dict:
-        """Convert a transition key to a Creatomate animation dict."""
+        """Convert a transition key to a Creatomate animation dict.
+
+        Checks TRANSITION_MAP first (pre-configured), then falls back
+        to the knowledge base transitions module.
+        """
         anim = TRANSITION_MAP.get(transition_key)
         if anim:
             return dict(anim)
@@ -643,6 +750,9 @@ class RenderEngine:
         if "direction" in t_data:
             direction_map = {"left": "180°", "right": "0°", "up": "270°", "down": "90°"}
             result["direction"] = direction_map.get(t_data["direction"], "0°")
+        # Add easing if not present
+        if "easing" not in result:
+            result["easing"] = "cubic-out"
 
         return result
 
@@ -656,6 +766,8 @@ class RenderEngine:
         3. None (skip narration)
         """
         # 1. Pre-hosted audio URL (most reliable — uses our own ElevenLabs key)
+        #    If we have a pre-hosted URL, use it and SKIP Creatomate TTS entirely
+        #    to prevent dual audio sources causing overlapping voices.
         if audio_data and audio_data.get("url") and audio_data["url"].startswith("http"):
             return {
                 "type": "audio",
@@ -664,6 +776,7 @@ class RenderEngine:
             }
 
         # 2. Creatomate's built-in ElevenLabs TTS (requires integration in project settings)
+        #    Only used when no pre-hosted URL is available.
         el_voice = get_elevenlabs_voice(niche) if niche else {}
         voice_id = el_voice.get("voice_id", "")
 
@@ -720,15 +833,50 @@ class RenderEngine:
             s.duration_seconds for s in plan.storyboard.scenes
         ) if plan.storyboard else 0
 
-        return {
+        base_vol = int(plan.audio_plan.music_volume * 100)
+        duck_vol = max(base_vol // 2, 5)  # Duck to ~50% of base during narration
+
+        music_el = {
             "type": "audio",
             "track": 1,
             "source": hosted_url,
             "duration": total_duration,
-            "volume": f"{int(plan.audio_plan.music_volume * 100)}%",
+            "volume": f"{base_vol}%",
             "audio_fade_in": 1,
             "audio_fade_out": 2,
         }
+
+        # Music ducking: lower volume during narration, raise between scenes
+        if plan.storyboard and plan.storyboard.scenes:
+            keyframes = []
+            current_time = 0.0
+            for scene in plan.storyboard.scenes:
+                has_narration = bool(scene.narration)
+                if has_narration:
+                    # Duck at scene start
+                    keyframes.append({
+                        "time": round(current_time, 2),
+                        "value": f"{duck_vol}%",
+                        "easing": "quadratic-out",
+                    })
+                    # Stay ducked until 0.3s before scene end
+                    scene_end = current_time + scene.duration_seconds - 0.3
+                    keyframes.append({
+                        "time": round(max(scene_end, current_time + 0.1), 2),
+                        "value": f"{duck_vol}%",
+                    })
+                    # Raise back at scene end
+                    keyframes.append({
+                        "time": round(current_time + scene.duration_seconds, 2),
+                        "value": f"{base_vol}%",
+                        "easing": "quadratic-in",
+                    })
+                current_time += scene.duration_seconds
+
+            if keyframes:
+                music_el["volume"] = keyframes
+
+        return music_el
 
     def _rehost_music(self, source_url: str, mood_key: str) -> str:
         """Download music from source and re-upload to catbox.moe.

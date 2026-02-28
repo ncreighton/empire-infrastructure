@@ -122,12 +122,32 @@ class TestMusicMoods:
 
 class TestColorGrades:
     def test_has_color_grades(self):
-        assert len(COLOR_GRADES) >= 10
+        assert len(COLOR_GRADES) >= 20  # 16 original + 4 new
 
     def test_each_has_hex_colors(self):
         for key, cg in COLOR_GRADES.items():
             assert cg["primary"].startswith("#"), f"{key} primary not hex"
             assert cg["accent"].startswith("#"), f"{key} accent not hex"
+
+    def test_new_color_grades_exist(self):
+        for key in ["cyberpunk", "golden_hour", "moonlight", "vintage_film"]:
+            assert key in COLOR_GRADES, f"Missing new color grade: {key}"
+
+    def test_cyberpunk_grade(self):
+        cg = COLOR_GRADES["cyberpunk"]
+        assert cg["accent"] == "#FF00AA"
+        assert cg["contrast"] == 1.5
+
+    def test_moonlight_grade(self):
+        cg = COLOR_GRADES["moonlight"]
+        assert cg["warmth"] < 0  # Cool tone
+
+    def test_niche_alt_grades(self):
+        from videoforge.knowledge.color_grades import NICHE_ALT_GRADES
+        assert len(NICHE_ALT_GRADES) >= 5
+        for niche, alts in NICHE_ALT_GRADES.items():
+            for alt in alts:
+                assert alt in COLOR_GRADES, f"Alt grade {alt} for {niche} not in COLOR_GRADES"
 
     def test_get_by_niche(self):
         result = get_color_grade(niche="witchcraftforbeginners")
@@ -137,8 +157,8 @@ class TestColorGrades:
 # ── Subtitle Styles ──
 
 class TestSubtitleStyles:
-    def test_has_5_styles(self):
-        assert len(SUBTITLE_STYLES) >= 5
+    def test_has_8_styles(self):
+        assert len(SUBTITLE_STYLES) >= 8  # 5 original + 3 new
 
     def test_hormozi_is_centered(self):
         h = get_subtitle_style("hormozi")
@@ -152,6 +172,21 @@ class TestSubtitleStyles:
     def test_each_has_creatomate_settings(self):
         for key, s in SUBTITLE_STYLES.items():
             assert "creatomate_settings" in s, f"{key} missing creatomate_settings"
+
+    def test_neon_glow_style(self):
+        s = get_subtitle_style("neon_glow")
+        assert s["name"] == "Neon Glow"
+        assert s["position"] == "center"
+
+    def test_typewriter_style(self):
+        s = get_subtitle_style("typewriter")
+        assert s["name"] == "Typewriter"
+        assert s["font"] == "Courier New"
+
+    def test_bold_impact_style(self):
+        s = get_subtitle_style("bold_impact")
+        assert s["name"] == "Bold Impact"
+        assert s["max_words_per_segment"] == 2
 
 
 # ── Platform Specs ──

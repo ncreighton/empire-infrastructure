@@ -177,12 +177,56 @@ COLOR_GRADES = {
         "vignette": 0.15,
         "description": "Financial green, wealth and growth",
     },
+    "cyberpunk": {
+        "name": "Cyberpunk",
+        "primary": "#0D0015",
+        "accent": "#FF00AA",
+        "text": "#FFFFFF",
+        "saturation": 1.3,
+        "contrast": 1.5,
+        "warmth": -0.2,
+        "vignette": 0.35,
+        "description": "Deep purple primary, hot pink accent, high contrast cyberpunk",
+    },
+    "golden_hour": {
+        "name": "Golden Hour",
+        "primary": "#1A1005",
+        "accent": "#F59E0B",
+        "text": "#FFF8E1",
+        "saturation": 0.65,
+        "contrast": 0.95,
+        "warmth": 0.35,
+        "vignette": 0.2,
+        "description": "Warm amber primary, soft gold accent, lifestyle warmth",
+    },
+    "moonlight": {
+        "name": "Moonlight",
+        "primary": "#050A18",
+        "accent": "#C0C0C0",
+        "text": "#E0E8FF",
+        "saturation": 0.55,
+        "contrast": 1.15,
+        "warmth": -0.25,
+        "vignette": 0.4,
+        "description": "Deep blue primary, silver accent, cool moonlit tone",
+    },
+    "vintage_film": {
+        "name": "Vintage Film",
+        "primary": "#1A150E",
+        "accent": "#B8860B",
+        "text": "#F5E6C8",
+        "saturation": 0.4,
+        "contrast": 1.05,
+        "warmth": 0.3,
+        "vignette": 0.35,
+        "description": "Sepia-toned, warm grain effect, vintage cinema",
+    },
 }
 
 # Niche ID -> default color grade
 NICHE_COLOR_MAP = {
     "witchcraftforbeginners": "witchcraft_dark",
-    "moonrituallibrary": "witchcraft_dark",
+    "moonrituallibrary": "moonlight",
     "manifestandalign": "manifestation_glow",
     "mythicalarchives": "mythology_epic",
     "smarthomewizards": "tech_clean",
@@ -190,13 +234,26 @@ NICHE_COLOR_MAP = {
     "pulsegearreviews": "fitness_intense",
     "wearablegearreviews": "tech_neon",
     "aidiscoverydigest": "ai_futuristic",
-    "aiinactionhub": "tech_clean",
+    "aiinactionhub": "cyberpunk",
     "clearainews": "news_urgent",
     "wealthfromai": "money_green",
     "bulletjournals": "journal_cozy",
-    "theconnectedhaven": "lifestyle_warm",
+    "theconnectedhaven": "golden_hour",
     "familyflourish": "lifestyle_pastel",
     "celebrationseason": "celebration_festive",
+}
+
+# Alternate grades per niche for variety (used by smart selection)
+NICHE_ALT_GRADES = {
+    "witchcraftforbeginners": ["witchcraft_earthy", "moonlight"],
+    "moonrituallibrary": ["witchcraft_dark", "witchcraft_earthy"],
+    "mythicalarchives": ["mythology_ancient", "vintage_film"],
+    "smarthomewizards": ["tech_neon", "cyberpunk"],
+    "aidiscoverydigest": ["cyberpunk", "tech_neon"],
+    "aiinactionhub": ["tech_clean", "ai_futuristic"],
+    "theconnectedhaven": ["lifestyle_warm", "lifestyle_pastel"],
+    "familyflourish": ["golden_hour", "lifestyle_warm"],
+    "bulletjournals": ["vintage_film", "golden_hour"],
 }
 
 

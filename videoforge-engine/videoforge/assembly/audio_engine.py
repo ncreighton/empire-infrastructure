@@ -16,6 +16,25 @@ logger = logging.getLogger(__name__)
 
 ELEVENLABS_BASE = "https://api.elevenlabs.io/v1"
 
+# Voice-specific words-per-minute — calibrated from actual ElevenLabs output.
+# Slower voices accumulate timing errors if we assume a flat 150 WPM.
+_VOICE_WPM = {
+    "Drew": 140,
+    "Dave": 135,
+    "Brian": 155,
+    "Henry": 150,
+    "Daniel": 148,
+    "Giovanni": 138,
+    "Alice": 142,
+    "Adam": 160,
+    "Patrick": 152,
+    "Harry": 150,
+    "Rachel": 145,
+    "Glinda": 138,
+    "Grace": 142,
+    "default": 150,
+}
+
 
 def _get_elevenlabs_key() -> str:
     key = os.environ.get("ELEVENLABS_API_KEY", "")
@@ -210,6 +229,7 @@ class AudioEngine:
         os.makedirs(output_dir, exist_ok=True)
 
         voice = get_voice(niche)
+        voice_name = voice.get("elevenlabs_voice_name", "")
         results = []
 
         for scene in storyboard.scenes:
@@ -237,14 +257,23 @@ class AudioEngine:
             if path and os.path.exists(path):
                 audio_url = self.upload_to_temp_host(path)
 
+            # Measure actual duration from generated MP3 (most accurate),
+            # falling back to voice-specific WPM estimate
+            actual_duration = self.measure_mp3_duration(path) if path else 0.0
+            if actual_duration <= 0:
+                actual_duration = self.estimate_tts_duration(
+                    scene.narration, voice_name=voice_name
+                )
+
             results.append({
                 "scene_number": scene.scene_number,
                 "path": path,
                 "text": scene.narration,
                 "voice_id": voice["voice_id"],
+                "voice_name": voice_name,
                 "url": audio_url,
                 "base64_data": base64_data,
-                "duration_estimate": self.estimate_tts_duration(scene.narration),
+                "duration_estimate": actual_duration,
                 "provider": "elevenlabs" if _get_elevenlabs_key() else "edge_tts",
             })
 
@@ -272,8 +301,38 @@ class AudioEngine:
             "url": music_url,
         }
 
-    def estimate_tts_duration(self, text: str, wpm: int = 150) -> float:
-        """Estimate TTS duration in seconds from text."""
+    def measure_mp3_duration(self, file_path: str) -> float:
+        """Measure actual MP3 duration in seconds using frame header parsing.
+
+        Falls back to estimation if parsing fails.
+        """
+        if not file_path or not os.path.exists(file_path):
+            return 0.0
+
+        try:
+            # Try mutagen first (most accurate)
+            from mutagen.mp3 import MP3
+            audio = MP3(file_path)
+            return audio.info.length
+        except Exception:
+            pass
+
+        try:
+            # Fallback: estimate from file size and bitrate (128kbps typical)
+            file_size = os.path.getsize(file_path)
+            bitrate = 128_000  # 128 kbps in bits/s
+            return (file_size * 8) / bitrate
+        except Exception:
+            return 0.0
+
+    def estimate_tts_duration(self, text: str, wpm: int = None,
+                               voice_name: str = "") -> float:
+        """Estimate TTS duration in seconds from text.
+
+        Uses voice-specific WPM when voice_name is provided for better accuracy.
+        """
+        if wpm is None:
+            wpm = _VOICE_WPM.get(voice_name, _VOICE_WPM["default"])
         word_count = len(text.split())
         return (word_count / wpm) * 60
 

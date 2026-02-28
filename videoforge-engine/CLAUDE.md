@@ -91,10 +91,15 @@ ENRICH → EXPAND → FORTIFY → ANTICIPATE → OPTIMIZE → VALIDATE
   - NO full-screen gradient overlay — text readability via heavy stroke + shadow + background pill
   - Hook/CTA scenes: large centered text overlay (8 vmin, varied animations: text-fly/text-spin/text-scale/text-slide)
   - Other scenes: bottom subtitle (82%, stroke + shadow + rounded bg, varied animations: text-fly/text-slide/text-scale/text-reveal/text-wave)
-  - 12 Ken Burns variants with easing + 6 entrance animations (fade/scale/slide/circular-wipe/wipe) + 2 exit animations
-  - Color grading per niche (accent overlay 8% + contrast filter)
-  - Scene transitions with easing: crossfade, slide, fade, flash, whip_pan, circular_wipe, spin, color_wipe, film_roll
-  - Voice-driven scene durations (word count / WPM, no buffer)
+  - 18 Ken Burns variants with easing + 10 entrance animations + 5 exit animations
+  - 8 subtitle animation styles + 6 hook/overlay animation styles
+  - Color grading per niche (accent overlay 8% + contrast filter) — now auto-applied to all images
+  - 21 scene transitions with easing (incl. blur, bounce, squash, rotate)
+  - Music ducking: volume keyframes lower music during narration, raise between scenes
+  - Voice-specific WPM timing (Drew=140, Dave=135, Brian=155, etc.) — prevents audio overlap
+  - 0.3s safety buffer on all scene compositions to prevent narration bleed
+  - Content-hash-based animation selection for deterministic variety (replaces pure cycling)
+  - MP3 actual duration measurement (mutagen) replaces estimation for precise scene timing
 
 ## Voice Profiles (16 niches)
 
@@ -134,7 +139,7 @@ cd videoforge-engine
 python -m pytest tests/ -v
 ```
 
-272 tests covering all modules.
+290+ tests covering all modules.
 
 ## Dependencies
 
