@@ -1,0 +1,130 @@
+{
+  "name": "Empire Brain - Opportunity Finder",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{"field": "cronExpression", "expression": "0 8 * * *"}]
+        }
+      },
+      "id": "daily-trigger",
+      "name": "Daily at 8 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT p.slug, p.name, p.category, p.health_score, p.skill_count, p.function_count, p.endpoint_count, COALESCE(l.learning_count, 0) as learnings, COALESCE(o.opp_count, 0) as open_opps FROM brain_projects p LEFT JOIN (SELECT source, COUNT(*) as learning_count FROM brain_learnings GROUP BY source) l ON p.slug = l.source LEFT JOIN (SELECT unnest(string_to_array(affected_projects, ',')) as proj, COUNT(*) as opp_count FROM brain_opportunities WHERE status = 'open' GROUP BY proj) o ON p.slug = o.proj ORDER BY p.health_score ASC, p.skill_count DESC",
+        "options": {}
+      },
+      "id": "pg-get-projects",
+      "name": "Get All Projects + Metrics",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [520, 200],
+      "credentials": {
+        "postgres": {
+          "id": "existing-empire-postgres",
+          "name": "Empire Architect Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT p1.slug as project1, p2.slug as project2, p1.category, p2.category as category2, p1.tech_stack FROM brain_projects p1 CROSS JOIN brain_projects p2 WHERE p1.id < p2.id AND p1.category = p2.category AND p1.slug NOT IN (SELECT from_project FROM brain_cross_references WHERE to_project = p2.slug) LIMIT 20",
+        "options": {}
+      },
+      "id": "pg-find-cross-links",
+      "name": "Find Cross-Link Opportunities",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [520, 400],
+      "credentials": {
+        "postgres": {
+          "id": "existing-empire-postgres",
+          "name": "Empire Architect Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT p.slug, p.name, p.category, CASE WHEN p.endpoint_count = 0 AND p.function_count > 20 THEN 'Add API layer' WHEN p.skill_count = 0 THEN 'Create skills' WHEN p.health_score < 50 THEN 'Health critical' WHEN p.compliance_score < 70 THEN 'Compliance fix needed' ELSE 'Optimize further' END as suggestion, p.health_score, p.compliance_score FROM brain_projects p WHERE p.health_score < 80 OR p.skill_count = 0 OR p.endpoint_count = 0 ORDER BY p.health_score ASC",
+        "options": {}
+      },
+      "id": "pg-find-gaps",
+      "name": "Find Capability Gaps",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [520, 600],
+      "credentials": {
+        "postgres": {
+          "id": "existing-empire-postgres",
+          "name": "Empire Architect Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO brain_opportunities (title, opportunity_type, description, affected_projects, estimated_impact, estimated_effort, priority_score) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING",
+        "options": {}
+      },
+      "id": "pg-store-opportunities",
+      "name": "Store New Opportunities",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [800, 400],
+      "credentials": {
+        "postgres": {
+          "id": "existing-empire-postgres",
+          "name": "Empire Architect Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO brain_events (event_type, data, source) VALUES ('opportunity.scan.completed', $1::jsonb, 'opportunity-finder')",
+        "options": {}
+      },
+      "id": "pg-log-scan",
+      "name": "Log Scan Completion",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1080, 400],
+      "credentials": {
+        "postgres": {
+          "id": "existing-empire-postgres",
+          "name": "Empire Architect Postgres"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily at 8 AM": {
+      "main": [
+        [
+          {"node": "Get All Projects + Metrics", "type": "main", "index": 0},
+          {"node": "Find Cross-Link Opportunities", "type": "main", "index": 0},
+          {"node": "Find Capability Gaps", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Find Cross-Link Opportunities": {
+      "main": [[{"node": "Store New Opportunities", "type": "main", "index": 0}]]
+    },
+    "Find Capability Gaps": {
+      "main": [[{"node": "Store New Opportunities", "type": "main", "index": 0}]]
+    },
+    "Store New Opportunities": {
+      "main": [[{"node": "Log Scan Completion", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {"executionOrder": "v1"},
+  "tags": [{"name": "empire-brain"}]
+}

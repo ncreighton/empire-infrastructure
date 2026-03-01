@@ -588,6 +588,255 @@ QUICK_PRACTICE_POOLS: dict[str, list[str]] = {
 # Challenge pools (for AMPLIFY anticipate stage)
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Spell title pools: 5 templates per spell type, use {intention}
+# ---------------------------------------------------------------------------
+
+SPELL_TITLE_POOLS: dict[str, list[str]] = {
+    "candle": [
+        "{intention} Candle Spell",
+        "Flame of {intention}",
+        "{intention} by Candlelight",
+        "Sacred Flame for {intention}",
+        "The {intention} Candle Rite",
+    ],
+    "jar": [
+        "{intention} Spell Jar",
+        "Jar of {intention}",
+        "Sealed {intention} Vessel",
+        "The {intention} Bottle Charm",
+        "{intention} in a Jar",
+    ],
+    "sachet": [
+        "{intention} Sachet Spell",
+        "{intention} Charm Bag",
+        "Pouch of {intention}",
+        "The {intention} Mojo Bag",
+        "Herbal {intention} Sachet",
+    ],
+    "knot": [
+        "{intention} Knot Spell",
+        "Binding Knots of {intention}",
+        "The {intention} Cord Rite",
+        "Nine Knots for {intention}",
+        "Threaded {intention} Spell",
+    ],
+    "bath": [
+        "{intention} Ritual Bath",
+        "Waters of {intention}",
+        "Sacred Bath for {intention}",
+        "The {intention} Immersion Rite",
+        "Cleansing {intention} Soak",
+    ],
+    "incantation": [
+        "{intention} Incantation",
+        "Words of {intention}",
+        "The {intention} Chant",
+        "Spoken {intention} Spell",
+        "Voice of {intention}",
+    ],
+    "sigil": [
+        "{intention} Sigil Spell",
+        "Sigil of {intention}",
+        "The {intention} Glyph Rite",
+        "Inscribed {intention} Seal",
+        "Mark of {intention}",
+    ],
+    "mirror": [
+        "{intention} Mirror Spell",
+        "Reflection of {intention}",
+        "The {intention} Looking Glass Rite",
+        "Mirror Magick for {intention}",
+        "Scrying {intention} Spell",
+    ],
+}
+
+# ---------------------------------------------------------------------------
+# Spell description pools: 5 templates, use {opening}, {type}, {intention}
+# ---------------------------------------------------------------------------
+
+SPELL_DESCRIPTION_POOLS: list[str] = [
+    "{opening} this {type} channels the energy of {intention} through focused intention and carefully chosen correspondences.",
+    "{opening} weave the power of {intention} into reality with this {type}, guided by ancient wisdom and personal will.",
+    "{opening} this {type} draws upon the deep currents of {intention}, shaping unseen forces into tangible change.",
+    "{opening} through this {type}, the energy of {intention} is gathered, concentrated, and released toward your goal.",
+    "{opening} ignite your connection to {intention} with this {type}, blending tradition with your unique magical signature.",
+]
+
+# ---------------------------------------------------------------------------
+# Ritual title pools: 6 templates, use {intention}
+# ---------------------------------------------------------------------------
+
+RITUAL_TITLE_POOLS: list[str] = [
+    "{intention} Ritual",
+    "Rite of {intention}",
+    "Sacred {intention} Ceremony",
+    "The {intention} Working",
+    "{intention} Circle Rite",
+    "Ritual for {intention}",
+]
+
+# ---------------------------------------------------------------------------
+# Sabbat ritual title pools: 4 templates, use {occasion}, {intention}
+# ---------------------------------------------------------------------------
+
+SABBAT_RITUAL_TITLE_POOLS: list[str] = [
+    "{occasion} {intention} Ritual",
+    "{occasion} Rite of {intention}",
+    "Sacred {occasion} {intention} Ceremony",
+    "{intention} for {occasion}",
+]
+
+# ---------------------------------------------------------------------------
+# Ritual altar setup pools: 5 templates, use {colors}, {crystals}, {herbs}, {intention}
+# ---------------------------------------------------------------------------
+
+RITUAL_ALTAR_POOLS: list[str] = [
+    "Cover your altar or working surface with a {colors} cloth. Place {crystals} at the center alongside a candle. Arrange dried {herbs} around the base. Add any personal items that connect you to your intention of {intention}.",
+    "Lay a {colors} cloth across your sacred space. Set {crystals} as the focal point, flanked by candles. Scatter {herbs} in a circle around them. Include a symbol or token that represents {intention} to you.",
+    "Prepare your altar with a {colors} covering. Position {crystals} where they catch the light, with {herbs} bundled or loose nearby. A single candle anchors the center. Let each item remind you of {intention}.",
+    "Dress your working surface in {colors}. Arrange {crystals} in a triangle at the center with a candle between them. Place {herbs} at the four corners. Bring one personal object that embodies your {intention}.",
+    "Begin with a clean surface draped in {colors}. Let {crystals} and {herbs} share the center space beside an unlit candle. Arrange them in whatever pattern feels right — your intuition is part of the {intention}.",
+]
+
+# ---------------------------------------------------------------------------
+# Ritual opening invocation pools: 5 templates, use {opening}, {intention}
+# ---------------------------------------------------------------------------
+
+RITUAL_OPENING_POOLS: list[str] = [
+    "{opening} I stand in sacred space to honor the energy of {intention}. I call upon the elements, the ancestors, and all benevolent forces that support my highest good. May this ritual be blessed and protected.",
+    "{opening} I open this circle in the name of {intention}. Earth below, sky above, fire within — I invite the guardians of each direction to witness and bless this working.",
+    "{opening} I claim this space as sacred ground for {intention}. I call to the spirits of the land, the wisdom of the stars, and the strength of my own will. So mote it be.",
+    "{opening} with reverence and intention, I step into sacred space. The energy of {intention} gathers around me. I invite all helpful forces to join me in this working.",
+    "{opening} I kindle this ritual in honor of {intention}. May the old ones hear my call. May the elements lend their power. May this circle hold firm and true.",
+]
+
+# ---------------------------------------------------------------------------
+# Ritual body step pools: 4 templates, use {phase_name}, {duration}, {phase_desc}, {intention}
+# ---------------------------------------------------------------------------
+
+RITUAL_BODY_STEP_POOLS: list[str] = [
+    "{phase_name} ({duration} min): {phase_desc}. Hold your intention of {intention} clearly in your heart.",
+    "{phase_name} ({duration} min): {phase_desc}. Let every breath deepen your connection to {intention}.",
+    "{phase_name} ({duration} min): {phase_desc}. Feel the energy of {intention} building with each passing moment.",
+    "{phase_name} ({duration} min): {phase_desc}. Remain centered in {intention} — the power is already moving.",
+]
+
+# ---------------------------------------------------------------------------
+# Ritual closing pools: 5 templates, use {closing}
+# ---------------------------------------------------------------------------
+
+RITUAL_CLOSING_POOLS: list[str] = [
+    "Thank all energies, spirits, and elements you have invoked. Release the circle if one was cast (walk counterclockwise). Declare: 'The circle is open but never broken.' {closing}",
+    "Offer gratitude to every force that attended your ritual. If a circle was cast, walk widdershins to release it. Whisper: 'What was begun is now complete.' {closing}",
+    "Bow to each direction and thank the guardians who held space. Release the circle gently. Speak: 'I carry this energy with me. The rite is done.' {closing}",
+    "One by one, thank the elements, ancestors, and spirits who witnessed your work. Open the circle counterclockwise. Affirm: 'The magick is sealed. So mote it be.' {closing}",
+    "Express your gratitude silently or aloud to every presence that supported you. Release the circle and extinguish your candle. Know that the work continues beyond this moment. {closing}",
+]
+
+# ---------------------------------------------------------------------------
+# Ritual preparation pools: 4 sets of 4
+# ---------------------------------------------------------------------------
+
+RITUAL_PREPARATION_POOLS: list[list[str]] = [
+    [
+        "Cleanse your space with smoke, sound, or salt water.",
+        "Set up your altar with the materials listed above.",
+        "Bathe or wash your hands with intention before beginning.",
+        "Silence your phone and minimize distractions.",
+    ],
+    [
+        "Open a window briefly to invite fresh energy into the space.",
+        "Arrange your altar with care — the act of preparation is itself a ritual.",
+        "Take a ritual bath or shower, imagining mundane energy washing away.",
+        "Commit to being fully present — close the door and set aside your schedule.",
+    ],
+    [
+        "Sweep the floor or wipe down surfaces to physically cleanse the space.",
+        "Light a purifying candle or diffuse cleansing essential oils.",
+        "Dress in comfortable clothing or ritual garments that feel special to you.",
+        "Stand quietly for a moment and feel the energy of the room settle.",
+    ],
+    [
+        "Ring a bell or clap three times to break up stale energy.",
+        "Lay out all materials within easy reach so you won't break focus.",
+        "Ground yourself: feet flat on the floor, three slow breaths.",
+        "Set a clear intention in your mind before touching any tools.",
+    ],
+]
+
+# ---------------------------------------------------------------------------
+# Meditation title pools: 6 templates, use {intention}
+# ---------------------------------------------------------------------------
+
+MEDITATION_TITLE_POOLS: list[str] = [
+    "{intention} Guided Meditation",
+    "Journey into {intention}",
+    "Meditation for {intention}",
+    "The {intention} Inner Voyage",
+    "Deep {intention} Meditation",
+    "Sacred {intention} Visualization",
+]
+
+# ---------------------------------------------------------------------------
+# Meditation grounding pools: 5 fallback grounding scripts
+# ---------------------------------------------------------------------------
+
+MEDITATION_GROUNDING_POOLS: list[str] = [
+    "Close your eyes and take three deep breaths. Feel your body heavy and supported by the earth beneath you.",
+    "Settle into stillness. Breathe in through your nose for four counts, hold for four, exhale for four. Feel gravity anchoring you.",
+    "Let your eyelids fall closed. With each exhale, release tension from your shoulders, your jaw, your hands. The earth holds you.",
+    "Find your center. Breathe deeply and imagine roots growing from the base of your spine down into warm, dark soil.",
+    "Close your eyes. Place one hand on your heart and one on your belly. Breathe until both hands rise and fall in rhythm.",
+]
+
+# ---------------------------------------------------------------------------
+# Meditation peak experience pools: per-intention + _default, 4 templates each
+# ---------------------------------------------------------------------------
+
+MEDITATION_PEAK_POOLS: dict[str, list[str]] = {
+    "_default": [
+        "Rest here in the fullness of {intention}. This energy is yours. It has always been yours.",
+        "You have arrived at the heart of {intention}. Let it fill every cell, every thought, every breath.",
+        "This is the summit of your journey. The energy of {intention} radiates from your center in all directions.",
+        "Be still and know that {intention} lives within you. It does not need to be chased — only remembered.",
+    ],
+    "protection": [
+        "You are enclosed in an impenetrable sphere of light. Nothing unwanted can reach you here. Rest in total safety.",
+        "Your shield blazes with power. Feel its warmth surrounding you — a fortress of your own creation. You are untouchable.",
+        "Every boundary you have set glows with golden fire. You are sovereign in this space. Rest in your strength.",
+        "The armor of light fits perfectly. It was always yours. Feel its weight — not as burden, but as certainty.",
+    ],
+    "love": [
+        "Your heart is a sun, radiating warmth in every direction. Love flows from you and returns to you effortlessly.",
+        "Feel the warmth of unconditional love filling your chest. You are both the giver and the receiver.",
+        "In this moment, you are pure love. Every cell hums with it. Let it overflow — there is always more.",
+        "The love you seek already lives within you. Feel it now, whole and complete, needing nothing external.",
+    ],
+    "healing": [
+        "Healing light pours through every fiber of your being. Where there was pain, warmth now glows. You are being restored.",
+        "Your body remembers wholeness. Feel that memory awakening in every cell — a gentle, persistent mending.",
+        "A wave of restorative energy washes through you from crown to root, dissolving what no longer serves your health.",
+        "You are held in the arms of healing. Let go of the need to do anything. Simply receive.",
+    ],
+}
+
+# ---------------------------------------------------------------------------
+# Meditation return journey pools: 5 fallback return scripts
+# ---------------------------------------------------------------------------
+
+MEDITATION_RETURN_POOLS: list[str] = [
+    "Gently begin to return to your body. Wiggle your fingers and toes. Take three grounding breaths. Open your eyes when you are ready.",
+    "Slowly bring your awareness back to the room around you. Feel the surface beneath you. Move your hands gently. Return at your own pace.",
+    "The journey is complete. Begin to notice sounds around you. Stretch gently. Take a deep breath and open your eyes with gratitude.",
+    "Let the meditation fade like a gentle dawn. Feel your body, the weight of your limbs. Breathe deeply three times and return to the present.",
+    "Carry this peace with you as you return. Wiggle your toes, roll your shoulders, and when you are ready, gently open your eyes.",
+]
+
+# ---------------------------------------------------------------------------
+# Challenge pools (for AMPLIFY anticipate stage)
+# ---------------------------------------------------------------------------
+
 CHALLENGE_POOLS: list[dict[str, str]] = [
     {"challenge": "Candle won't stay lit", "solution": "Try a draft-free location. Cup your hands around the flame gently. An LED candle is an equally valid substitute — the intention matters, not the flame."},
     {"challenge": "Mind keeps wandering during meditation or visualization", "solution": "This is completely normal. Gently return your focus without judgment each time. Wandering is not failure; noticing it is awareness."},

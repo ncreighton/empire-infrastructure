@@ -3,12 +3,25 @@
 import datetime
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from grimoire import GrimoireEngine
 from grimoire.models import PracticeEntry, TarotReading
+from grimoire.knowledge.correspondences import (
+    HERBS, CRYSTALS, COLORS, ELEMENTS, INTENTION_MAP,
+)
+from grimoire.knowledge.tarot import MAJOR_ARCANA, MINOR_ARCANA, SPREADS, draw_cards
+from grimoire.knowledge.moon_phases import MOON_PHASES, MOON_IN_SIGNS
+from grimoire.knowledge.wheel_of_year import (
+    SABBATS, get_current_sabbat, get_next_sabbat,
+)
+from grimoire.knowledge.planetary_hours import (
+    PLANET_CORRESPONDENCES, get_current_planetary_hour,
+    get_all_hours_for_day, get_day_ruler,
+)
+from grimoire.knowledge.spell_templates import SPELL_TYPES, RITUAL_STRUCTURE
 
 
 # ── Pydantic request/response models ──────────────────────────────────────
@@ -58,6 +71,7 @@ class TarotLogRequest(BaseModel):
 
 class TarotSpreadRequest(BaseModel):
     intention: str = Field(default="general guidance")
+    spread_type: str = Field(default="three_card")
 
 
 # ── App setup ──────────────────────────────────────────────────────────────
@@ -108,6 +122,10 @@ def root():
             "/craft/spell", "/craft/ritual", "/craft/meditation",
             "/daily", "/log", "/journey",
             "/tarot/spread", "/tarot/log",
+            "/knowledge/herbs", "/knowledge/crystals", "/knowledge/colors",
+            "/knowledge/elements", "/knowledge/intentions", "/knowledge/tarot",
+            "/knowledge/moon-phases", "/knowledge/sabbats",
+            "/knowledge/planetary-hours", "/knowledge/spell-types",
         ],
     }
 
@@ -228,8 +246,54 @@ def journey():
 @app.post("/tarot/spread")
 def tarot_spread(req: TarotSpreadRequest):
     try:
-        spread = engine.smith.generate_tarot_spread(req.intention)
-        return spread
+        # Look up spread template
+        spread_template = SPREADS.get(req.spread_type)
+        if not spread_template:
+            raise HTTPException(status_code=400, detail=f"Unknown spread type: {req.spread_type}")
+
+        spread_name = spread_template["name"]
+        positions = spread_template["positions"]
+        card_count = spread_template["card_count"]
+
+        # Draw actual random cards
+        drawn = draw_cards(card_count)
+
+        # Pair each drawn card with its position
+        cards = []
+        for i, card in enumerate(drawn):
+            position_name = positions[i] if i < len(positions) else f"Card {i + 1}"
+            orientation = card.get("orientation", "upright")
+            is_reversed = orientation == "reversed"
+
+            # Pick meaning based on orientation
+            if is_reversed:
+                meaning = card.get("reversed_meaning", "")
+                keywords = card.get("keywords_reversed", [])
+            else:
+                meaning = card.get("upright_meaning", "")
+                keywords = card.get("keywords_upright", [])
+
+            cards.append({
+                "position": position_name,
+                "card_name": card.get("name", ""),
+                "orientation": orientation,
+                "element": card.get("element", ""),
+                "meaning": meaning,
+                "keywords": keywords,
+                "advice": card.get("advice", ""),
+                "journal_prompt": card.get("journal_prompt", ""),
+                "correspondences": card.get("correspondences", {}),
+            })
+
+        return {
+            "spread_name": spread_name,
+            "spread_type": req.spread_type,
+            "intention": req.intention,
+            "card_count": card_count,
+            "cards": cards,
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -248,6 +312,117 @@ def tarot_log(req: TarotLogRequest):
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Knowledge Endpoints ───────────────────────────────────────────────────
+
+
+def _filter_dict(data: dict, query: str | None) -> dict:
+    """Filter a dict of items by name or properties matching query."""
+    if not query:
+        return data
+    q = query.lower()
+    result = {}
+    for key, val in data.items():
+        if q in key.lower():
+            result[key] = val
+        elif isinstance(val, dict):
+            name = val.get("name", "")
+            props = val.get("magical_properties", [])
+            if q in name.lower() or any(q in p.lower() for p in props):
+                result[key] = val
+    return result
+
+
+@app.get("/knowledge/herbs")
+def knowledge_herbs(q: str | None = Query(default=None)):
+    return {"count": len(HERBS) if not q else None, "items": _filter_dict(HERBS, q)}
+
+
+@app.get("/knowledge/crystals")
+def knowledge_crystals(q: str | None = Query(default=None)):
+    return {"count": len(CRYSTALS) if not q else None, "items": _filter_dict(CRYSTALS, q)}
+
+
+@app.get("/knowledge/colors")
+def knowledge_colors():
+    return {"count": len(COLORS), "items": COLORS}
+
+
+@app.get("/knowledge/elements")
+def knowledge_elements():
+    return {"count": len(ELEMENTS), "items": ELEMENTS}
+
+
+@app.get("/knowledge/intentions")
+def knowledge_intentions():
+    return {"count": len(INTENTION_MAP), "items": INTENTION_MAP}
+
+
+@app.get("/knowledge/tarot")
+def knowledge_tarot(q: str | None = Query(default=None)):
+    major = MAJOR_ARCANA
+    minor = MINOR_ARCANA
+    if q:
+        ql = q.lower()
+        major = [c for c in major if ql in c.get("name", "").lower()
+                 or any(ql in kw.lower() for kw in c.get("keywords_upright", []))]
+        filtered_minor = {}
+        for suit, data in minor.items():
+            cards = [c for c in data.get("cards", [])
+                     if ql in c.get("name", "").lower()
+                     or any(ql in kw.lower() for kw in c.get("keywords_upright", []))]
+            if cards:
+                filtered_minor[suit] = {**data, "cards": cards}
+        minor = filtered_minor
+    return {
+        "major_arcana": major,
+        "minor_arcana": minor,
+        "spreads": SPREADS,
+    }
+
+
+@app.get("/knowledge/moon-phases")
+def knowledge_moon_phases():
+    return {
+        "phases": MOON_PHASES,
+        "moon_in_signs": MOON_IN_SIGNS,
+    }
+
+
+@app.get("/knowledge/sabbats")
+def knowledge_sabbats():
+    now = datetime.datetime.now()
+    current = get_current_sabbat(now.month, now.day)
+    next_name, next_data, days_until = get_next_sabbat(now.month, now.day)
+    return {
+        "sabbats": SABBATS,
+        "current": current,
+        "next": {"name": next_name, "data": next_data, "days_until": days_until},
+    }
+
+
+@app.get("/knowledge/planetary-hours")
+def knowledge_planetary_hours():
+    now = datetime.datetime.now()
+    weekday = now.weekday()
+    current_hour = get_current_planetary_hour(weekday, now.hour)
+    all_hours = get_all_hours_for_day(weekday)
+    day_ruler = get_day_ruler(weekday)
+    return {
+        "current_hour": current_hour,
+        "day_ruler": day_ruler,
+        "all_hours": all_hours,
+        "planets": PLANET_CORRESPONDENCES,
+    }
+
+
+@app.get("/knowledge/spell-types")
+def knowledge_spell_types():
+    return {
+        "spell_types": SPELL_TYPES,
+        "ritual_structures": RITUAL_STRUCTURE,
+    }
 
 
 # ── Run directly ───────────────────────────────────────────────────────────

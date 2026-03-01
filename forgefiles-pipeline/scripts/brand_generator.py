@@ -38,7 +38,7 @@ BRAND_DIR = PIPELINE_ROOT / "brand_assets"
 BRAND = {
     "name": "ForgeFiles",
     "tagline": "Premium 3D Printable Designs",
-    "website": "forgefiles.com",
+    "website": "",
     "colors": {
         "primary": (255, 255, 255),       # white
         "secondary": (0, 180, 216),       # teal/cyan

@@ -1,0 +1,144 @@
+{
+  "name": "Empire Brain - Morning Briefing",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{"field": "cronExpression", "expression": "0 6 * * *"}]
+        }
+      },
+      "id": "morning-trigger",
+      "name": "Daily at 6 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*) as total_projects, SUM(skill_count) as total_skills, SUM(function_count) as total_functions, SUM(endpoint_count) as total_endpoints, AVG(health_score) as avg_health, MIN(health_score) as min_health FROM brain_projects",
+        "options": {}
+      },
+      "id": "pg-empire-stats",
+      "name": "Get Empire Stats",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [520, 100],
+      "credentials": {
+        "postgres": {
+          "id": "existing-empire-postgres",
+          "name": "Empire Architect Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT title, opportunity_type, estimated_impact, priority_score FROM brain_opportunities WHERE status = 'open' ORDER BY priority_score DESC LIMIT 5",
+        "options": {}
+      },
+      "id": "pg-top-opportunities",
+      "name": "Top 5 Opportunities",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [520, 300],
+      "credentials": {
+        "postgres": {
+          "id": "existing-empire-postgres",
+          "name": "Empire Architect Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT slug, name, health_score FROM brain_projects WHERE health_score < 60 ORDER BY health_score ASC LIMIT 5",
+        "options": {}
+      },
+      "id": "pg-health-alerts",
+      "name": "Health Alerts",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [520, 500],
+      "credentials": {
+        "postgres": {
+          "id": "existing-empire-postgres",
+          "name": "Empire Architect Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT event_type, COUNT(*) as cnt FROM brain_events WHERE timestamp > NOW() - INTERVAL '24 hours' GROUP BY event_type ORDER BY cnt DESC",
+        "options": {}
+      },
+      "id": "pg-yesterday-activity",
+      "name": "Yesterday's Activity",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [520, 700],
+      "credentials": {
+        "postgres": {
+          "id": "existing-empire-postgres",
+          "name": "Empire Architect Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*) as new_learnings FROM brain_learnings WHERE created_at > NOW() - INTERVAL '24 hours'",
+        "options": {}
+      },
+      "id": "pg-new-learnings",
+      "name": "New Learnings Count",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [520, 900],
+      "credentials": {
+        "postgres": {
+          "id": "existing-empire-postgres",
+          "name": "Empire Architect Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO brain_briefings (date, summary, content, opportunities_count, alerts_count) VALUES (CURRENT_DATE, $1, $2::jsonb, $3, $4)",
+        "options": {}
+      },
+      "id": "pg-store-briefing",
+      "name": "Store Briefing",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1080, 400],
+      "credentials": {
+        "postgres": {
+          "id": "existing-empire-postgres",
+          "name": "Empire Architect Postgres"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily at 6 AM": {
+      "main": [
+        [
+          {"node": "Get Empire Stats", "type": "main", "index": 0},
+          {"node": "Top 5 Opportunities", "type": "main", "index": 0},
+          {"node": "Health Alerts", "type": "main", "index": 0},
+          {"node": "Yesterday's Activity", "type": "main", "index": 0},
+          {"node": "New Learnings Count", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Get Empire Stats": {
+      "main": [[{"node": "Store Briefing", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {"executionOrder": "v1"},
+  "tags": [{"name": "empire-brain"}]
+}

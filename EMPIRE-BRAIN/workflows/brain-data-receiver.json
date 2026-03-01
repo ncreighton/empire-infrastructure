@@ -1,0 +1,169 @@
+{
+  "name": "Empire Brain - Data Receiver",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "brain/projects",
+        "responseMode": "onReceived",
+        "responseData": "allEntries"
+      },
+      "id": "webhook-projects",
+      "name": "Webhook - Projects",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 100]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "brain/skills",
+        "responseMode": "onReceived",
+        "responseData": "allEntries"
+      },
+      "id": "webhook-skills",
+      "name": "Webhook - Skills",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "brain/patterns",
+        "responseMode": "onReceived",
+        "responseData": "allEntries"
+      },
+      "id": "webhook-patterns",
+      "name": "Webhook - Patterns",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 500]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "brain/learnings",
+        "responseMode": "onReceived",
+        "responseData": "allEntries"
+      },
+      "id": "webhook-learnings",
+      "name": "Webhook - Learnings",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 700]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "brain/query",
+        "responseMode": "lastNode",
+        "responseData": "allEntries"
+      },
+      "id": "webhook-query",
+      "name": "Webhook - Query",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 900]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO brain_projects (slug, name, path, category, health_score, skill_count, function_count, endpoint_count, last_scanned) SELECT slug, name, path, category, COALESCE(health_score,0), COALESCE(skill_count,0), COALESCE(function_count,0), COALESCE(endpoint_count,0), NOW() FROM json_populate_recordset(null::brain_projects, $1::json) ON CONFLICT (slug) DO UPDATE SET name=EXCLUDED.name, category=EXCLUDED.category, health_score=EXCLUDED.health_score, skill_count=EXCLUDED.skill_count, function_count=EXCLUDED.function_count, endpoint_count=EXCLUDED.endpoint_count, last_scanned=NOW(), updated_at=NOW()",
+        "options": {}
+      },
+      "id": "pg-upsert-projects",
+      "name": "PostgreSQL - Upsert Projects",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [520, 100],
+      "credentials": {
+        "postgres": {
+          "id": "existing-empire-postgres",
+          "name": "Empire Architect Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO brain_learnings (content, source, category, confidence, content_hash) VALUES ($1, $2, $3, $4, md5($1)) ON CONFLICT (content_hash) DO UPDATE SET times_referenced = brain_learnings.times_referenced + 1, updated_at = NOW()",
+        "options": {}
+      },
+      "id": "pg-upsert-learnings",
+      "name": "PostgreSQL - Upsert Learnings",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [520, 700],
+      "credentials": {
+        "postgres": {
+          "id": "existing-empire-postgres",
+          "name": "Empire Architect Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO brain_events (event_type, data, source) VALUES ($1, $2::jsonb, 'brain-receiver')",
+        "options": {}
+      },
+      "id": "pg-log-event",
+      "name": "PostgreSQL - Log Event",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [800, 500],
+      "credentials": {
+        "postgres": {
+          "id": "existing-empire-postgres",
+          "name": "Empire Architect Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM brain_learnings WHERE content ILIKE '%' || $1 || '%' ORDER BY confidence DESC, times_referenced DESC LIMIT 20",
+        "options": {}
+      },
+      "id": "pg-query-brain",
+      "name": "PostgreSQL - Query Brain",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [520, 900],
+      "credentials": {
+        "postgres": {
+          "id": "existing-empire-postgres",
+          "name": "Empire Architect Postgres"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook - Projects": {
+      "main": [
+        [{"node": "PostgreSQL - Upsert Projects", "type": "main", "index": 0}]
+      ]
+    },
+    "Webhook - Learnings": {
+      "main": [
+        [{"node": "PostgreSQL - Upsert Learnings", "type": "main", "index": 0}]
+      ]
+    },
+    "Webhook - Query": {
+      "main": [
+        [{"node": "PostgreSQL - Query Brain", "type": "main", "index": 0}]
+      ]
+    },
+    "PostgreSQL - Upsert Projects": {
+      "main": [
+        [{"node": "PostgreSQL - Log Event", "type": "main", "index": 0}]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [{"name": "empire-brain"}]
+}

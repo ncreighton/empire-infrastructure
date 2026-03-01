@@ -45,6 +45,106 @@ PLATFORM_SPECS = {
     "reddit": {"width": 1080, "height": 1080, "name": "Reddit"},
 }
 
+# ============================================================================
+# TRANSITION STYLE PRESETS
+# ============================================================================
+
+TRANSITION_STYLES = {
+    "cinematic": [
+        {"type": "fade", "duration": 1.0, "easing": "linear"},
+        {"type": "slide", "duration": 0.8, "easing": "quadratic-out", "direction": "right"},
+    ],
+    "dynamic": [
+        {"type": "slide", "duration": 0.6, "easing": "back-out", "direction": "right"},
+        {"type": "slide", "duration": 0.6, "easing": "back-out", "direction": "up"},
+        {"type": "fade", "duration": 0.5, "easing": "linear"},
+    ],
+    "clean": [
+        {"type": "fade", "duration": 0.6, "easing": "linear"},
+    ],
+    "dramatic": [
+        {"type": "fade", "duration": 1.2, "easing": "linear"},
+        {"type": "wipe", "duration": 0.8, "easing": "quadratic-in-out", "direction": "right"},
+    ],
+    "atmospheric": [
+        {"type": "fade", "duration": 1.5, "easing": "linear"},
+        {"type": "fade", "duration": 1.0, "easing": "quadratic-out"},
+    ],
+    "elegant": [
+        {"type": "fade", "duration": 1.0, "easing": "quadratic-in-out"},
+        {"type": "slide", "duration": 0.8, "easing": "quadratic-out", "direction": "left"},
+    ],
+    "fun": [
+        {"type": "slide", "duration": 0.5, "easing": "back-out", "direction": "up"},
+        {"type": "slide", "duration": 0.5, "easing": "back-out", "direction": "right"},
+        {"type": "slide", "duration": 0.5, "easing": "back-out", "direction": "down"},
+    ],
+    "organic": [
+        {"type": "fade", "duration": 1.2, "easing": "quadratic-out"},
+        {"type": "fade", "duration": 0.8, "easing": "linear"},
+    ],
+}
+
+# ============================================================================
+# TEXT ANIMATION VARIANTS
+# ============================================================================
+
+TEXT_ANIMATION_STYLES = {
+    "hero_title": [
+        [  # text-fly (default)
+            {"type": "text-fly", "time": "start", "duration": 0.8,
+             "split": "word", "easing": "back-out"},
+            {"type": "fade", "time": "end", "duration": 0.5, "reversed": True},
+        ],
+        [  # text-scale
+            {"type": "text-scale", "time": "start", "duration": 0.7,
+             "split": "word", "easing": "back-out"},
+            {"type": "fade", "time": "end", "duration": 0.5, "reversed": True},
+        ],
+        [  # text-slide
+            {"type": "text-slide", "time": "start", "duration": 0.8,
+             "split": "word", "easing": "quadratic-out"},
+            {"type": "fade", "time": "end", "duration": 0.5, "reversed": True},
+        ],
+    ],
+    "specs_text": [
+        [  # fade in
+            {"type": "fade", "time": "start", "duration": 0.6},
+            {"type": "fade", "time": "end", "duration": 0.5, "reversed": True},
+        ],
+        [  # slide up
+            {"type": "slide", "time": "start", "duration": 0.6,
+             "direction": "up", "easing": "quadratic-out"},
+            {"type": "fade", "time": "end", "duration": 0.5, "reversed": True},
+        ],
+    ],
+}
+
+# ============================================================================
+# KEN BURNS SCALE ANIMATIONS (subtle motion on video clips)
+# ============================================================================
+
+KEN_BURNS_PRESETS = [
+    {"x_scale": "100%", "y_scale": "100%", "animations": [
+        {"type": "scale", "time": "start", "duration": None, "easing": "linear",
+         "start_scale": "100%", "end_scale": "105%"}]},
+    {"x_scale": "105%", "y_scale": "105%", "animations": [
+        {"type": "scale", "time": "start", "duration": None, "easing": "linear",
+         "start_scale": "105%", "end_scale": "100%"}]},
+    {"x_scale": "100%", "y_scale": "100%", "animations": [
+        {"type": "scale", "time": "start", "duration": None, "easing": "linear",
+         "start_scale": "100%", "end_scale": "103%"}]},
+    {"x_scale": "103%", "y_scale": "103%", "animations": [
+        {"type": "scale", "time": "start", "duration": None, "easing": "linear",
+         "start_scale": "103%", "end_scale": "100%"}]},
+    {"x_scale": "100%", "y_scale": "100%", "animations": [
+        {"type": "scale", "time": "start", "duration": None, "easing": "quadratic-in-out",
+         "start_scale": "100%", "end_scale": "104%"}]},
+    {"x_scale": "102%", "y_scale": "102%", "animations": [
+        {"type": "scale", "time": "start", "duration": None, "easing": "quadratic-in-out",
+         "start_scale": "102%", "end_scale": "100%"}]},
+]
+
 
 # ============================================================================
 # CONFIGURATION
@@ -133,169 +233,245 @@ def _download_file(url, output_path, timeout=600):
 # RENDERSCRIPT BUILDER
 # ============================================================================
 
+def _get_transition_for_clip(clip_index, transition_style="cinematic"):
+    """Get the transition config for a given clip index, cycling through the style's presets."""
+    presets = TRANSITION_STYLES.get(transition_style, TRANSITION_STYLES["cinematic"])
+    preset = presets[(clip_index - 1) % len(presets)]  # clip_index starts at 1 (first transition)
+    return {k: v for k, v in preset.items() if k != "direction"}, preset.get("direction")
+
+
+def _get_ken_burns_for_clip(clip_index):
+    """Get Ken Burns scale animation for a video clip, cycling through presets."""
+    preset = KEN_BURNS_PRESETS[clip_index % len(KEN_BURNS_PRESETS)]
+    return preset
+
+
 def build_renderscript(shot_clip_urls, voiceover_url=None, music_url=None,
                        platform="youtube", model_name="Model",
                        print_specs="", transition_duration=0.8,
-                       music_volume=0.25, watermark_text="ForgeFiles"):
-    """Build a Creatomate RenderScript from shot clips and audio.
+                       music_volume=0.25, watermark_text="",
+                       shot_durations=None, transition_style="cinematic",
+                       sound_logo_url=None):
+    """Build a Creatomate RenderScript using composition-based architecture.
 
-    The RenderScript uses a composition-based approach:
-    - Track 1: Video clips sequenced with crossfade transitions
-    - Track 2: Voiceover audio (synced to video start)
-    - Track 3: Background music (looped, reduced volume, fade-out)
-    - Track 4: Text overlays (product name, specs, CTA)
-    - Track 5: Watermark (persistent)
+    Structure:
+    - Track 1: Background music (spans full video, ducked when voiceover present)
+    - Track 2: Scene compositions (auto-sequenced, one per clip)
+      Each composition wraps: video (with Ken Burns) + gradient overlay + text + watermark
+    - Track 3: Voiceover audio (spans full video)
+    - Track 4: Sound logo (2s at start, optional)
+
+    Transitions cycle through the chosen transition_style preset.
+    Text animations are randomly selected from TEXT_ANIMATION_STYLES.
+
+    Args:
+        shot_clip_urls: List of public URLs for shot clips
+        voiceover_url: Public URL for voiceover MP3
+        music_url: Public URL for background music
+        platform: Target platform (youtube, tiktok, etc.)
+        model_name: Display name for the model
+        print_specs: Brief print specifications text
+        transition_duration: Base seconds for transitions between clips
+        music_volume: 0.0-1.0 base volume for background music
+        watermark_text: Watermark text (empty to disable)
+        shot_durations: List of durations in seconds per clip (optional)
+        transition_style: Key into TRANSITION_STYLES (cinematic, dynamic, etc.)
+        sound_logo_url: Public URL for 2s sound logo audio (optional)
 
     Returns:
         dict — Creatomate RenderScript JSON
     """
+    import random as _rand
+
     specs = PLATFORM_SPECS.get(platform, PLATFORM_SPECS["youtube"])
     width = specs["width"]
     height = specs["height"]
     is_vertical = height > width
 
-    # Calculate total video duration from clips
-    # Each clip plays its full duration; transitions overlap
     n_clips = len(shot_clip_urls)
-    # We don't know clip durations without probing, so we use the source duration
-    # Creatomate handles this automatically with "duration": null (use source duration)
 
-    # --- Build elements ---
+    # Use provided durations or let Creatomate detect from source
+    has_durations = shot_durations and len(shot_durations) == n_clips
+    if has_durations:
+        total_duration = sum(shot_durations)
+    else:
+        total_duration = None
+
+    # Audio ducking: lower music when voiceover is present
+    effective_music_volume = music_volume
+    if voiceover_url and music_url:
+        effective_music_volume = 0.15  # Duck to 15% during voiceover
+
+    # Pick text animation variants for this render
+    hero_anim = _rand.choice(TEXT_ANIMATION_STYLES["hero_title"])
+    specs_anim = _rand.choice(TEXT_ANIMATION_STYLES["specs_text"])
+
     elements = []
 
-    # Track 1: Video clips with transitions
+    # --- Track 1: Background music (spans full video) ---
+    if music_url:
+        music_el = {
+            "type": "audio",
+            "track": 1,
+            "source": music_url,
+            "volume": f"{int(effective_music_volume * 100)}%",
+            "audio_fade_in": 1,
+            "audio_fade_out": 2,
+        }
+        if total_duration:
+            music_el["duration"] = total_duration
+        elements.append(music_el)
+
+    # --- Track 4: Sound logo (2s at start) ---
+    if sound_logo_url:
+        elements.append({
+            "type": "audio",
+            "track": 4,
+            "source": sound_logo_url,
+            "duration": 2,
+            "volume": "60%",
+            "audio_fade_out": 0.5,
+        })
+
+    # --- Track 2: Scene compositions (one per clip, auto-sequenced) ---
     for i, clip_url in enumerate(shot_clip_urls):
-        clip_element = {
+        comp_elements = []
+
+        # 1. Video clip with Ken Burns subtle scale animation
+        kb = _get_ken_burns_for_clip(i)
+        video_el = {
             "type": "video",
             "source": clip_url,
+            "x": "50%",
+            "y": "50%",
+            "width": "100%",
+            "height": "100%",
             "fit": "cover",
         }
+        # Apply Ken Burns scale via animations on the video element
+        kb_anims = []
+        for anim in kb.get("animations", []):
+            a = dict(anim)
+            # Set duration to clip duration if known, otherwise let it span
+            if has_durations:
+                a["duration"] = shot_durations[i]
+            else:
+                a.pop("duration", None)
+            kb_anims.append(a)
+        if kb_anims:
+            video_el["animations"] = kb_anims
+        comp_elements.append(video_el)
 
-        # Add crossfade transition between clips (not on first clip)
+        # 2. Gradient overlay — dark vignette for text readability
+        comp_elements.append({
+            "type": "shape",
+            "x": "50%",
+            "y": "50%",
+            "width": "100%",
+            "height": "100%",
+            "path": "M 0% 0% L 100% 0% L 100% 100% L 0% 100% Z",
+            "fill_color": [
+                {"offset": "0%", "color": "rgba(0,0,0,0)"},
+                {"offset": "60%", "color": "rgba(0,0,0,0.15)"},
+                {"offset": "100%", "color": "rgba(0,0,0,0.6)"},
+            ],
+            "fill_mode": "linear",
+        })
+
+        # 3. Text overlays — placed contextually based on clip position
+        #    First clip: model name (hero title) with randomized animation
+        if i == 0:
+            name_size = "7 vmin" if is_vertical else "5 vmin"
+            comp_elements.append({
+                "type": "text",
+                "text": model_name,
+                "x": "50%",
+                "y": "45%",
+                "width": "85%",
+                "x_alignment": "50%",
+                "y_alignment": "50%",
+                "font_family": "Montserrat",
+                "font_weight": "800",
+                "font_size": name_size,
+                "fill_color": "#ffffff",
+                "stroke_color": "rgba(0,0,0,0.8)",
+                "stroke_width": "0.15 vmin",
+                "shadow_color": "rgba(0,0,0,0.5)",
+                "shadow_blur": 8,
+                "animations": hero_anim,
+            })
+
+        #    Second clip: print specs subtitle with randomized animation
+        elif i == 1 and print_specs:
+            specs_size = "4 vmin" if is_vertical else "3 vmin"
+            comp_elements.append({
+                "type": "text",
+                "text": print_specs,
+                "x": "50%",
+                "y": "82%",
+                "width": "85%",
+                "x_alignment": "50%",
+                "y_alignment": "50%",
+                "font_family": "Montserrat",
+                "font_weight": "500",
+                "font_size": specs_size,
+                "fill_color": "#e0e0e0",
+                "background_color": "rgba(0,0,0,0.4)",
+                "background_x_padding": "12%",
+                "background_y_padding": "8%",
+                "background_border_radius": 8,
+                "animations": specs_anim,
+            })
+
+        # 4. Watermark — persistent on every clip
+        if watermark_text:
+            wm_size = "2.5 vmin" if is_vertical else "2 vmin"
+            comp_elements.append({
+                "type": "text",
+                "text": watermark_text,
+                "x": "95%",
+                "y": "5%",
+                "x_alignment": "100%",
+                "y_alignment": "0%",
+                "font_family": "Montserrat",
+                "font_weight": "500",
+                "font_size": wm_size,
+                "fill_color": "rgba(255,255,255,0.35)",
+            })
+
+        # Build composition — track 2 auto-sequences clips
+        composition = {
+            "type": "composition",
+            "track": 2,
+            "elements": comp_elements,
+        }
+
+        # Set duration from shot_durations if available
+        if has_durations:
+            composition["duration"] = shot_durations[i]
+
+        # Transition on clips 2+ — cycle through transition style presets
         if i > 0 and transition_duration > 0:
-            clip_element["transition"] = {
-                "type": "crossfade",
-                "duration": transition_duration,
+            trans_cfg, trans_dir = _get_transition_for_clip(i, transition_style)
+            trans_anim = {
+                "type": trans_cfg.get("type", "fade"),
+                "duration": trans_cfg.get("duration", transition_duration),
+                "easing": trans_cfg.get("easing", "linear"),
+                "transition": True,
             }
+            if trans_dir:
+                trans_anim["direction"] = trans_dir
+            composition["animations"] = [trans_anim]
 
-        elements.append(clip_element)
+        elements.append(composition)
 
-    # Track 2: Voiceover audio
+    # --- Track 3: Voiceover audio (spans full video) ---
     if voiceover_url:
         elements.append({
             "type": "audio",
+            "track": 3,
             "source": voiceover_url,
             "volume": "100%",
-        })
-
-    # Track 3: Background music
-    if music_url:
-        elements.append({
-            "type": "audio",
-            "source": music_url,
-            "volume": f"{int(music_volume * 100)}%",
-            "audio_fade_out": 3.0,
-            "duration": None,  # Match video duration
-        })
-
-    # Track 4: Text overlays
-    # Product name — slides in at the start
-    name_font_size = "7 vmin" if is_vertical else "5 vmin"
-    elements.append({
-        "type": "text",
-        "text": model_name,
-        "font_family": "Montserrat",
-        "font_weight": "700",
-        "font_size": name_font_size,
-        "fill_color": "#ffffff",
-        "shadow_color": "rgba(0,0,0,0.6)",
-        "shadow_blur": 8,
-        "x_alignment": "50%",
-        "y_alignment": "85%",
-        "width": "80%",
-        "x_anchor": "50%",
-        "y_anchor": "50%",
-        "time": 0.5,
-        "duration": 4.0,
-        "enter": {
-            "type": "text-slide",
-            "duration": 0.8,
-        },
-        "exit": {
-            "type": "text-slide",
-            "reversed": True,
-            "duration": 0.6,
-        },
-    })
-
-    # Print specs — fades in mid-video
-    if print_specs:
-        specs_font_size = "4 vmin" if is_vertical else "3 vmin"
-        elements.append({
-            "type": "text",
-            "text": print_specs,
-            "font_family": "Montserrat",
-            "font_weight": "400",
-            "font_size": specs_font_size,
-            "fill_color": "#e0e0e0",
-            "shadow_color": "rgba(0,0,0,0.5)",
-            "shadow_blur": 6,
-            "x_alignment": "50%",
-            "y_alignment": "80%",
-            "width": "75%",
-            "x_anchor": "50%",
-            "y_anchor": "50%",
-            "time": 5.0,
-            "duration": 4.0,
-            "enter": {
-                "type": "fade",
-                "duration": 0.8,
-            },
-            "exit": {
-                "type": "fade",
-                "duration": 0.6,
-            },
-        })
-
-    # CTA at end
-    cta_text = "forgefiles.com" if platform != "tiktok" else "Link in bio"
-    cta_font_size = "5 vmin" if is_vertical else "3.5 vmin"
-    elements.append({
-        "type": "text",
-        "text": cta_text,
-        "font_family": "Montserrat",
-        "font_weight": "600",
-        "font_size": cta_font_size,
-        "fill_color": "#00b4d8",
-        "shadow_color": "rgba(0,0,0,0.5)",
-        "shadow_blur": 6,
-        "x_alignment": "50%",
-        "y_alignment": "90%",
-        "width": "80%",
-        "x_anchor": "50%",
-        "y_anchor": "50%",
-        "time": "90%",  # Last 10% of video
-        "duration": None,  # Until end
-        "enter": {
-            "type": "fade",
-            "duration": 0.6,
-        },
-    })
-
-    # Track 5: Watermark
-    if watermark_text:
-        wm_font_size = "2.5 vmin" if is_vertical else "2 vmin"
-        elements.append({
-            "type": "text",
-            "text": watermark_text,
-            "font_family": "Montserrat",
-            "font_weight": "500",
-            "font_size": wm_font_size,
-            "fill_color": "rgba(255,255,255,0.35)",
-            "x_alignment": "95%",
-            "y_alignment": "5%",
-            "x_anchor": "100%",
-            "y_anchor": "0%",
         })
 
     # Assemble RenderScript
@@ -306,6 +482,9 @@ def build_renderscript(shot_clip_urls, voiceover_url=None, music_url=None,
         "fps": 30,
         "elements": elements,
     }
+
+    if total_duration:
+        renderscript["duration"] = total_duration
 
     return renderscript
 
@@ -353,7 +532,7 @@ def submit_render(renderscript, api_key=None):
     return renders
 
 
-def poll_render(render_id, api_key=None, timeout=600, poll_interval=5):
+def poll_render(render_id, api_key=None, timeout=1800, poll_interval=5):
     """Poll a render job until completion.
 
     Returns:
@@ -364,6 +543,7 @@ def poll_render(render_id, api_key=None, timeout=600, poll_interval=5):
 
     start_time = time.time()
     last_status = None
+    last_log_time = start_time
 
     while time.time() - start_time < timeout:
         result = _api_request(f"/renders/{render_id}", api_key=api_key)
@@ -373,15 +553,23 @@ def poll_render(render_id, api_key=None, timeout=600, poll_interval=5):
             return None
 
         status = result.get("status", "unknown")
+        elapsed = int(time.time() - start_time)
+
         if status != last_status:
-            print(f"[Creatomate] Render {render_id}: {status}")
+            print(f"[Creatomate] Render {render_id}: {status} ({elapsed}s elapsed)")
             last_status = status
+            last_log_time = time.time()
+        elif time.time() - last_log_time >= 60:
+            # Log every 60s while waiting
+            print(f"[Creatomate] Render {render_id}: still {status} ({elapsed}s elapsed)")
+            last_log_time = time.time()
 
         if status == "succeeded":
+            print(f"[Creatomate] Render completed in {elapsed}s")
             return result
         elif status in ("failed", "error"):
             error = result.get("error_message", "Unknown error")
-            print(f"[Creatomate] Render failed: {error}")
+            print(f"[Creatomate] Render failed after {elapsed}s: {error}")
             return None
 
         time.sleep(poll_interval)
@@ -396,7 +584,8 @@ def poll_render(render_id, api_key=None, timeout=600, poll_interval=5):
 
 def compose_showcase(shot_clips, voiceover_url=None, music_url=None,
                      platform="youtube", model_name="Model",
-                     print_specs="", output_dir=None, api_key=None):
+                     print_specs="", output_dir=None, api_key=None,
+                     transition_style="cinematic", sound_logo_url=None):
     """Full pipeline: build RenderScript, submit, poll, download.
 
     Args:
@@ -408,6 +597,8 @@ def compose_showcase(shot_clips, voiceover_url=None, music_url=None,
         print_specs: Brief print specifications text
         output_dir: Where to download the final video
         api_key: Creatomate API key
+        transition_style: Key into TRANSITION_STYLES (cinematic, dynamic, etc.)
+        sound_logo_url: Public URL for sound logo audio (optional)
 
     Returns:
         Dict with 'video_path', 'render_id', 'url' on success, None on failure
@@ -433,6 +624,8 @@ def compose_showcase(shot_clips, voiceover_url=None, music_url=None,
         print_specs=print_specs,
         transition_duration=config["transition_duration"],
         music_volume=config["music_volume"],
+        transition_style=transition_style,
+        sound_logo_url=sound_logo_url,
     )
 
     # Submit render
@@ -485,7 +678,8 @@ def compose_showcase(shot_clips, voiceover_url=None, music_url=None,
 
 def compose_multi_platform(shot_clips, voiceover_url=None, music_url=None,
                            platforms=None, model_name="Model",
-                           print_specs="", output_dir=None, api_key=None):
+                           print_specs="", output_dir=None, api_key=None,
+                           transition_style="cinematic", sound_logo_url=None):
     """Compose final videos for multiple platforms.
 
     Returns:
@@ -506,6 +700,8 @@ def compose_multi_platform(shot_clips, voiceover_url=None, music_url=None,
             print_specs=print_specs,
             output_dir=output_dir,
             api_key=api_key,
+            transition_style=transition_style,
+            sound_logo_url=sound_logo_url,
         )
         if result:
             results[platform] = result
@@ -586,11 +782,13 @@ def main():
         clips = args.clips or ["https://example.com/shot_01.mp4", "https://example.com/shot_02.mp4"]
         script = build_renderscript(
             shot_clip_urls=clips,
-            voiceover_url=args.voiceover,
-            music_url=args.music,
+            voiceover_url=args.voiceover or "https://example.com/voiceover.mp3",
+            music_url=args.music or "https://example.com/music.mp3",
             platform=args.platform,
             model_name=args.name,
             print_specs=args.specs,
+            transition_style=getattr(args, "transition_style", "cinematic"),
+            sound_logo_url=getattr(args, "sound_logo", None),
         )
         print(json.dumps(script, indent=2))
         return

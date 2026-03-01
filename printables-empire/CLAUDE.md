@@ -1,118 +1,118 @@
-# Printables Empire — Claude Code Project Instructions
+<!-- MESH:START -->
 
-## What This Is
-AI-powered content generation pipeline for Printables.com. Generates articles, reviews, community posts, and model listing descriptions — all with natural voice, SEO optimization, branded images, and automated publishing.
+# -----------------------------------------------------------
+# PROJECT MESH v2.0   AUTO-GENERATED CONTEXT
+# Project: Printables Empire
+# Category: ecommerce
+# Priority: normal
+# Compiled: 2026-03-01 13:35
+# -----------------------------------------------------------
 
-## Project Location
-```
-D:\Claude Code Projects\printables-empire\
-```
+# EMPIRE GLOBAL RULES
+> These rules apply to EVERY project. No exceptions.
 
-## Quick Commands
+## Core Principles
+1. **Never hardcode API keys, webhook URLs, or secrets** — Use environment variables
+2. **Always use shared-core systems when available** — Check the registry first
+3. **All API calls must use retry logic** — Use the api-retry shared system
+4. **Images must be optimized before upload** — Use image-optimization system
+5. **Content must pass SEO validation** — Use seo-toolkit system
+6. **Never reference deprecated methods** — Check BLACKLIST.md below
 
-```bash
-# Generate article (dry run)
-python forge.py article "How to Print in Vase Mode" --dry-run
+## Technical Standards
+- All WordPress sites use Blocksy or Astra themes on Hostinger
+- All automation runs through n8n (ZimmWriter is DEPRECATED)
+- All content generation uses Claude API (never GPT)
+- All sites use LiteSpeed cache
+- All affiliate links use affiliate-link-manager system
 
-# Generate + publish article
-python forge.py article "How to Print in Vase Mode" --publish
+## Quality Standards
+- Content demonstrates E-E-A-T signals
+- Target featured snippets where applicable
+- Proper schema markup on every page
+- Images have alt text with target keywords
+- Internal linking follows topical cluster strategy
 
-# Generate product review
-python forge.py review "Bambu Lab A1 Mini" --product-id bambu_a1_mini --publish
+## Brand Voice
+- Each site has its own voice (see category context below)
+- Never use generic AI-sounding language
+- Never reference being AI-generated
+- Content must feel human-written and authentic
 
-# Generate listing description
-python forge.py listing "Gothic Altar Bowl" --niche witchcraft --publish
+## n8n Automation
+- All content pipelines run through n8n workflows
+- Use Steel.dev for browser automation with 10min keep-alive pings
+- BrowserUse as fallback when Steel.dev fails
+- All webhooks use environment variables, never hardcoded URLs
 
-# Generate community post
-python forge.py post "5 Tips for First Layers" --publish
+# DEPRECATED METHODS — NEVER USE THESE
 
-# Batch generation
-python forge.py batch --type article --count 5 --publish
-python forge.py batch --type post --count 3 --dry-run
+> This file is auto-included in every project's CLAUDE.md.
+> Updated: 2026-02-28
 
-# View calendar & topics
-python forge.py calendar
-python forge.py topics --type article --count 20
+## Content Generation
+### ❌ NEVER use ZimmWriter or ZimmWriter API
+- **Replacement**: n8n content pipeline + Claude API
+- **Reason**: Deprecated in favor of Claude-native workflows
+- **Stage**: REMOVED
 
-# Session management
-python forge.py login
-python forge.py status
-```
+### ❌ NEVER use GPT/OpenAI for content generation
+- **Replacement**: Claude API (Anthropic)
+- **Reason**: All content uses Claude for consistency and quality
 
-## Architecture
+## API Patterns
+### ❌ NEVER hardcode webhook URLs
+- **Replacement**: Use environment variables or config.get('webhooks.name')
+- **Reason**: Security risk and maintenance nightmare
 
-```
-forge.py (CLI) → pipeline/ → content/ + intelligence/ + images/ → printables/
-```
+### ❌ NEVER make API calls without retry logic
+- **Replacement**: Use shared-core/api-retry system
+- **Reason**: APIs fail. Always retry with exponential backoff.
 
-### Pipeline Flow
-```
-Topic → Intelligence (research + SEO + seasonal) →
-Writer (Anthropic API) → Scorer (quality gate) →
-Images (Pillow) → Publisher (Playwright + GraphQL)
-```
+### ❌ NEVER use fetch() directly for external APIs
+- **Replacement**: Use the api-retry wrapper which handles retries, timeouts, and error logging
+- **Reason**: Raw fetch has no retry, no timeout, no error handling
 
-### Content Types
-| Type | Words | Model | max_tokens | Cost |
-|------|-------|-------|-----------|------|
-| Article | 1500-2500 | Sonnet | 4096 | ~$0.10 |
-| Review | 1200-2000 | Sonnet | 3000 | ~$0.08 |
-| Listing | 200-500 | Sonnet | 1000 | ~$0.04 |
-| Post | 100-300 | Sonnet | 500 | ~$0.02 |
-| Classification | - | Haiku | 100 | ~$0.001 |
-| Tags | - | Haiku | 200 | ~$0.001 |
+## WordPress
+### ❌ NEVER use Yoast SEO plugin
+- **Replacement**: RankMath
+- **Reason**: Standardized across all sites on RankMath
 
-## API Cost Rules (MANDATORY)
+### ❌ NEVER edit theme files directly
+- **Replacement**: Use child theme or Blocksy customizer
+- **Reason**: Updates will overwrite direct edits
 
-- **Default model**: `claude-sonnet-4-20250514` for all writing
-- **Haiku** (`claude-haiku-4-5-20251001`) for: classification, tags, titles
-- **Never use Opus** for content generation
-- **Prompt caching**: All system prompts >2048 tokens get `cache_control: {"type": "ephemeral"}`
-- **Weekly budget**: ~$0.25-$0.40 for a full week of content
+## Substack
+### ❌ NEVER use witchcraftforbeginners.substack.com
+- **Replacement**: witchcraftb.substack.com
+- **Reason**: Correct URL is witchcraftb.substack.com
 
-## Quality Gate
+## Browser Automation
+### ❌ NEVER use Puppeteer directly
+- **Replacement**: Steel.dev with BrowserUse fallback
+- **Reason**: Standardized on Steel.dev for session management
+- **Note**: Steel.dev sessions expire after 15min idle — implement keep-alive pings
 
-Scoring: Readability (30%) + SEO (25%) + Technical (25%) + Engagement (20%)
-- Score ≥80: PUBLISH
-- Score 60-79: IMPROVE (auto-iterate up to 3 times)
-- Score <60: REWORK
 
-## Key Files
+## Shared Systems (Current Versions)
 
-| File | Purpose |
-|------|---------|
-| `forge.py` | CLI entry point |
-| `content/writer.py` | Anthropic API wrapper (cost-optimized) |
-| `content/voice.py` | Voice profile loader |
-| `intelligence/engine/content_intelligence.py` | Master orchestrator |
-| `intelligence/engine/content_scorer.py` | Quality scoring |
-| `images/hero_generator.py` | Pillow hero images |
-| `printables/client.py` | Playwright + GraphQL client |
-| `printables/publisher.py` | Publish to Printables |
-| `config/voice_profiles.yaml` | Writing personalities |
-| `config/topic_database.yaml` | 50+ pre-researched topics |
-| `config/printer_profiles.yaml` | 12+ printer specs |
+| System | Version | Criticality | Usage |
+|--------|---------|-------------|-------|
+| api-retry | 1.0.0 [OK] | high | hourly |
 
-## Voice System
 
-Three profiles: `maker_mentor` (articles), `gear_reviewer` (reviews), `community_voice` (posts).
-Anti-AI-slop rules enforced globally — banned phrases like "dive into", "it's worth noting", etc.
+## Self-Check Before Starting Work
+Before writing any code or content for Printables Empire:
+1. [OK] Am I using the latest shared systems? (Check version table above)
+2. [OK] Am I avoiding ALL deprecated methods? (Check blacklist above)  
+3. [OK] Am I using the correct brand voice for ecommerce vertical?
+4. [OK] Am I using api-retry for all external API calls?
+5. [OK] Am I using environment variables for secrets/webhooks?
 
-## Brand
+<!-- MESH:END -->
 
-ForgeFiles — blue (#1E88E5) / orange (#FF6D00), dark gradient background, grid+circuit pattern.
+# Printables Empire   Project Context
 
-## Dependencies
-```bash
-pip install anthropic playwright Pillow pyyaml pydantic
-playwright install chromium
-```
+> Add your project-specific instructions below this line.
+> The mesh context above is auto-generated and will be updated by `mesh compile`.
 
-## Environment Variables
-- `ANTHROPIC_API_KEY` — Required for content generation
-
-## Testing
-```bash
-cd printables-empire
-python -m pytest tests/ -v
-```

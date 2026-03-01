@@ -145,7 +145,7 @@ CTAS = {
     "pinterest": [
         "Click through to download the STL file.",
         "Visit ForgeFiles for the print-ready download.",
-        "Get this design at forgefiles.com",
+        "Get this design — link in bio.",
     ],
     "reddit": [],  # Reddit hates CTAs — keep it organic
 }
@@ -290,7 +290,7 @@ ABOUT THIS DESIGN:
 The {name} is a high-detail 3D printable model designed for both FDM and resin printers. Every surface has been optimized for clean prints with minimal supports.
 
 ABOUT FORGEFILES:
-ForgeFiles creates premium 3D printable designs — every file is tested and print-ready. Browse our full catalog at forgefiles.com
+ForgeFiles creates premium 3D printable designs — every file is tested and print-ready. Browse our full catalog — link in the description.
 
 ---
 
@@ -358,7 +358,7 @@ def generate_pinterest_metadata(model_name, mode="turntable", print_specs="", va
         "{name} — a premium 3D printable design available for instant download. "
         "Works with PLA, ABS, PETG, and resin. "
         "Every detail optimized for beautiful prints. "
-        "Visit ForgeFiles for the STL file.\n\n"
+        "Visit ForgeFiles for the STL file — link in bio.\n\n"
         "{tags}",
 
         "Looking for your next print project? The {name} is a show-stopping design "
@@ -480,169 +480,166 @@ def generate_shorts_captions(model_name, mode="turntable", specs_short="", varia
 
 
 # ============================================================================
-# VOICEOVER SCRIPT GENERATION
+# VOICEOVER SCRIPT GENERATION (V3 — product-profile aware)
 # ============================================================================
 
-def generate_voiceover_script(model_name, print_specs="", duration_seconds=15,
-                               sequence_name=None):
-    """Generate a natural-sounding narration script for YouTube videos.
-    Output as text ready to feed into ElevenLabs or similar TTS.
+# Generic retention anchors used as fallbacks when no profile is provided
+RETENTION_ANCHORS = [
+    "But here's what really sets it apart.",
+    "And it gets even better.",
+    "Wait — look at this part.",
+    "This is where it gets interesting.",
+    "Now watch this.",
+    "Here's the detail most people miss.",
+    "And that's not even the best part.",
+    "Pay attention to this next angle.",
+]
 
-    When sequence_name is provided, the script is timed to match the
-    shot sequence for cinematic videos.
+
+def generate_voiceover_script(model_name, print_specs="", duration_seconds=15,
+                               sequence_name=None, product_profile=None):
+    """Generate a natural-sounding narration script for YouTube videos.
+
+    Uses HOOK → VALUE → CTA structure when a product_profile is provided,
+    producing category-specific scripts that sound different per product type.
+
+    Args:
+        model_name: Raw model name (underscore-separated)
+        print_specs: Print specs string for spoken narration
+        duration_seconds: Target duration (used for non-sequence fallback)
+        sequence_name: Shot sequence name (showcase_short, showcase_full, hero_video)
+        product_profile: Dict from product_profiles.classify_product() (optional)
+
+    Returns:
+        str — voiceover script text
     """
     display = _display_name(model_name)
 
-    # Sequence-aware scripts that match cinematic shot timings
-    if sequence_name == "showcase_short":
-        # 15-20s: dramatic reveal → turntable → close-up → hero spin
-        scripts = [
-            f"Check out the {display}. "
-            f"Designed for home 3D printers, every detail optimized for clean prints. "
-            f"Look at that surface quality. "
-            f"Grab the STL — link in bio.",
-
-            f"Introducing the {display}. "
-            f"Let's take a closer look at this print-ready design. "
-            f"The detail speaks for itself. "
-            f"Download link below.",
-
-            f"The {display} — our latest drop. "
-            f"Watch how the light catches every surface. "
-            f"This one prints beautifully in PLA or resin. "
-            f"STL available now.",
+    # Pull profile data or use generic fallbacks
+    if product_profile:
+        hooks = product_profile.get("hooks", [])
+        anchors = product_profile.get("mid_roll_anchors", RETENTION_ANCHORS[:3])
+        ctas = product_profile.get("cta_variants", ["STL link in the description."])
+    else:
+        hooks = [
+            f"Check out the {display}.",
+            f"You need to see this {display}.",
+            f"New design just dropped — the {display}.",
         ]
-        return random.choice(scripts)
+        anchors = RETENTION_ANCHORS[:3]
+        ctas = ["STL link in the description.", "Download link below."]
+
+    # Format hooks with display name
+    hook = random.choice(hooks).format(name=display)
+    anchor = random.choice(anchors)
+    cta = random.choice(ctas)
+    specs_spoken = print_specs or _default_print_specs_spoken()
+
+    # --- Sequence-aware scripts with HOOK → VALUE → CTA structure ---
+
+    if sequence_name == "showcase_short":
+        # 15-20s: HOOK (0-3s) → VALUE (3-12s) → CTA (12-18s)
+        value_lines = [
+            f"Every surface is designed for clean prints — "
+            f"FDM or resin, this file delivers.",
+
+            f"The detail holds up at every angle. "
+            f"Designed to print with minimal supports.",
+
+            f"Look at that surface quality. "
+            f"Optimized geometry, zero wasted polygons.",
+        ]
+        value = random.choice(value_lines)
+        return f"{hook} {value} {anchor} {cta}"
 
     if sequence_name == "showcase_full":
-        # 30-45s: reveal → orbital → wireframe → close-ups → pedestal → hero
-        scripts = [
-            f"Welcome to ForgeFiles. This is the {display}. "
-            f"Let's start with the full design, rotating around to see every angle. "
-            f"Notice the geometry — optimized for both form and printability. "
-            f"Here's how the wireframe translates to the finished surface. "
-            f"Up close, you can see the level of detail in every curve. "
-            f"{print_specs or _default_print_specs_spoken()} "
-            f"The STL file is ready for download — link in the description.",
-
-            f"Today we're showcasing the {display}. "
-            f"As we orbit around, pay attention to how the surfaces catch the light. "
-            f"From wireframe to solid — every polygon serves a purpose. "
-            f"The detail holds up even at this close range. "
-            f"Print settings: {print_specs or _default_print_specs_spoken()} "
-            f"Grab the file from the link below. Happy printing.",
+        # 30-45s: HOOK → COMMITMENT → VALUE + anchor → SPECS → CTA
+        commitments = [
+            "Let me show you why this stands out.",
+            "Let me walk you through this one.",
+            "Here's what makes this design special.",
         ]
-        return random.choice(scripts)
+        commitment = random.choice(commitments)
+
+        value_blocks = [
+            f"As we orbit around, notice how every surface catches the light. "
+            f"The geometry isn't just decorative — it's built for printability. "
+            f"{anchor} "
+            f"Up close, the detail is even more impressive.",
+
+            f"Watch the full rotation — every angle reveals new detail. "
+            f"This was designed polygon by polygon for printing. "
+            f"{anchor} "
+            f"The surface quality speaks for itself.",
+        ]
+        value = random.choice(value_blocks)
+
+        return (
+            f"{hook} {commitment} "
+            f"{value} "
+            f"Print settings: {specs_spoken}. "
+            f"{cta}"
+        )
 
     if sequence_name == "hero_video":
-        # 60-90s: reveal → slow turntable → close-ups → wireframe → material carousel → orbital → hero
-        scripts = [
-            f"Welcome to ForgeFiles. Today we're diving deep into the {display}. "
-            f"Let's take a slow 360 to appreciate the full design. "
-            f"Every surface has been carefully sculpted and tested for printing. "
-            f"\n\n"
-            f"Now let's get up close. Notice the fine detail work here — "
-            f"the ridges, the curves, the texture. All designed to print cleanly "
-            f"with minimal supports. "
-            f"\n\n"
-            f"Watch how the wireframe reveals the underlying geometry. "
-            f"This is what makes a good print — clean topology and intentional edges. "
-            f"\n\n"
-            f"And here's one of our favorite parts — the material showcase. "
-            f"See how this design looks in different finishes. "
-            f"Standard PLA, silk silver, and crystal clear resin. "
-            f"Each one brings out different aspects of the design. "
-            f"\n\n"
-            f"Print specifications: {print_specs or _default_print_specs_spoken()} "
-            f"\n\n"
-            f"The STL file is available for download right now. "
-            f"Link is in the description below. "
-            f"If you print this, tag us — we'd love to see your results. "
-            f"Subscribe for new designs every week.",
+        # 60-90s: HOOK → COMMITMENT → VALUE rotation → ANCHOR → VALUE close-ups
+        #          → SPECS narrative → CTA + closer
+        commitments = [
+            "Let me take you through every detail.",
+            "Let's break down what makes this design work.",
+        ]
+        commitment = random.choice(commitments)
 
-            f"This is the {display} from ForgeFiles. "
-            f"Let me walk you through every detail of this design. "
-            f"Starting with the overall form — you can see the proportions "
-            f"are balanced for both aesthetics and printability. "
+        anchor_2 = random.choice([a for a in anchors if a != anchor] or anchors)
+
+        return (
+            f"{hook} {commitment} "
             f"\n\n"
-            f"Zooming in now — the surface detail is something we're really proud of. "
-            f"It's designed to look great at any layer height. "
+            f"Starting with the full form — the proportions are balanced "
+            f"for both aesthetics and printability. "
+            f"As we rotate, you can see how the design reads from every angle. "
+            f"{anchor} "
             f"\n\n"
-            f"The wireframe view shows the clean topology underneath. "
+            f"Now let's get up close. The fine detail work here — "
+            f"the ridges, the curves, the texture — all designed to print cleanly "
+            f"with minimal supports. "
+            f"{anchor_2} "
+            f"\n\n"
+            f"The wireframe shows clean topology underneath. "
             f"No wasted geometry, no problematic overhangs. "
             f"\n\n"
-            f"Let's see the material options. "
-            f"Gray PLA gives you the classic maker look. "
-            f"Silk silver adds that premium metallic finish. "
-            f"And clear resin really makes the details pop. "
+            f"Here's how it looks in different materials. "
+            f"Standard PLA, silk silver, and crystal clear resin — "
+            f"each finish brings out different aspects of the design. "
             f"\n\n"
-            f"Here are the recommended settings: "
-            f"{print_specs or _default_print_specs_spoken()} "
+            f"Print specs: {specs_spoken}. "
             f"\n\n"
-            f"Download the STL from the link in the description. "
-            f"Happy printing!",
-        ]
-        return random.choice(scripts)
+            f"{cta} "
+            f"If you print this, tag us — we'd love to see your results. "
+            f"Subscribe for new designs every week."
+        )
 
-    # Non-sequence scripts (original behavior)
-    short_scripts = [
-        f"Take a look at the {display}. "
-        f"Every detail is designed with printing in mind. "
-        f"This model works great with both FDM and resin printers. "
-        f"Download the STL and see for yourself.",
-
-        f"Here's our latest design — the {display}. "
-        f"Rotating it around so you can see every angle. "
-        f"This one prints clean with minimal supports. "
-        f"Link in the description if you want the file.",
-
-        f"The {display}. "
-        f"A detailed, print-ready design built for home printers. "
-        f"Whether you're running PLA, PETG, or resin, this file is optimized for quality. "
-        f"Check the description for the download.",
-    ]
-
-    long_scripts = [
-        f"Welcome to ForgeFiles. Today we're showcasing the {display}. "
-        f"Let's take a full 360-degree look at this design. "
-        f"You can see the level of detail in every surface — "
-        f"this isn't just a model, it's built specifically for 3D printing. "
-        f"\n\n"
-        f"Here are the recommended print settings: "
-        f"{print_specs or _default_print_specs_spoken()} "
-        f"\n\n"
-        f"The STL file is available for download — "
-        f"link is in the description below. "
-        f"If you print this, we'd love to see your results. "
-        f"Drop a photo in the comments. Happy printing.",
-
-        f"This is the {display} from ForgeFiles. "
-        f"Let me walk you through this design. "
-        f"As you can see from the turntable, every angle has been considered. "
-        f"The geometry is optimized for clean FDM prints "
-        f"and the detail really shines in resin. "
-        f"\n\n"
-        f"Print specs are in the description, "
-        f"but here's the quick version: "
-        f"{print_specs or _default_print_specs_spoken()} "
-        f"\n\n"
-        f"Grab the file from the link below. "
-        f"Subscribe for more designs every week.",
-    ]
-
+    # --- Non-sequence fallback scripts ---
     if duration_seconds <= 20:
-        script = random.choice(short_scripts)
-    else:
-        script = random.choice(long_scripts)
+        return f"{hook} {random.choice(anchors)} {cta}"
 
-    return script
+    return (
+        f"Welcome to ForgeFiles. {hook} "
+        f"{random.choice(commitments if 'commitments' in dir() else ['Let me show you this design.'])} "
+        f"Every surface is built for printing — FDM or resin, it delivers. "
+        f"{anchor} "
+        f"\n\n"
+        f"Print settings: {specs_spoken}. "
+        f"\n\n"
+        f"{cta} Happy printing."
+    )
 
 
 # ============================================================================
 # UTM / TRACKING
 # ============================================================================
 
-def generate_tracking_links(model_name, base_url="https://forgefiles.com", platforms=None):
+def generate_tracking_links(model_name, base_url="", platforms=None):
     """Generate UTM-tagged links for each platform and content variant."""
     if platforms is None:
         platforms = ["tiktok", "reels", "youtube", "pinterest", "reddit"]
@@ -713,16 +710,30 @@ def generate_schedule_metadata():
 
 def generate_all_captions(model_name, mode="turntable", print_specs="",
                           print_specs_short="", platforms=None, variant_count=3,
-                          sequence_name=None):
+                          sequence_name=None, product_profile=None):
     """Master function: generate all caption variants for all platforms.
     Returns a structured dict ready for the pipeline manifest.
 
     Args:
         sequence_name: If provided, generates sequence-aware voiceover scripts
                        matching the shot sequence timing.
+        product_profile: Dict from product_profiles.classify_product() for
+                         category-aware voiceover scripts.
     """
     if platforms is None:
         platforms = ["tiktok", "reels", "youtube", "shorts", "pinterest", "reddit"]
+
+    # Build voice recommendations from profile if available
+    voice_recs = {
+        "elevenlabs": {"voice": "George", "voice_id": "JBFqnCBsd6RMkjVDRZzb",
+                       "stability": 0.5, "similarity_boost": 0.75},
+        "style": "conversational, warm, confident — not salesy",
+    }
+    if product_profile:
+        vs = product_profile.get("voice_settings", {})
+        voice_recs["elevenlabs"]["stability"] = vs.get("stability", 0.5)
+        voice_recs["elevenlabs"]["similarity_boost"] = vs.get("similarity_boost", 0.75)
+        voice_recs["tone"] = product_profile.get("tone", "")
 
     result = {
         "model": model_name,
@@ -732,13 +743,10 @@ def generate_all_captions(model_name, mode="turntable", print_specs="",
         "tracking": generate_tracking_links(model_name, platforms=platforms),
         "voiceover": {
             "script": generate_voiceover_script(
-                model_name, print_specs, sequence_name=sequence_name
+                model_name, print_specs, sequence_name=sequence_name,
+                product_profile=product_profile,
             ),
-            "voice_recommendations": {
-                "elevenlabs": {"voice": "George", "voice_id": "JBFqnCBsd6RMkjVDRZzb",
-                               "stability": 0.5, "similarity_boost": 0.75},
-                "style": "conversational, warm, confident — not salesy",
-            },
+            "voice_recommendations": voice_recs,
             "sequence": sequence_name,
         },
         "schedule": generate_schedule_metadata(),

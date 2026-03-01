@@ -119,7 +119,7 @@ def create_default_config():
         "brand": {
             "name": "ForgeFiles",
             "tagline": "Premium 3D Printable Designs",
-            "website": "forgefiles.com",
+            "website": "",
             "colors": {
                 "primary": "#ffffff",
                 "secondary": "#00b4d8",

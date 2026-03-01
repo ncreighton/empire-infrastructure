@@ -18,6 +18,19 @@ from grimoire.forge.variation_engine import (
     TIMING_ADVICE_POOLS,
     DAILY_SUGGESTION_POOLS,
     QUICK_PRACTICE_POOLS,
+    SPELL_TITLE_POOLS,
+    SPELL_DESCRIPTION_POOLS,
+    RITUAL_TITLE_POOLS,
+    SABBAT_RITUAL_TITLE_POOLS,
+    RITUAL_ALTAR_POOLS,
+    RITUAL_OPENING_POOLS,
+    RITUAL_BODY_STEP_POOLS,
+    RITUAL_CLOSING_POOLS,
+    RITUAL_PREPARATION_POOLS,
+    MEDITATION_TITLE_POOLS,
+    MEDITATION_GROUNDING_POOLS,
+    MEDITATION_PEAK_POOLS,
+    MEDITATION_RETURN_POOLS,
 )
 from grimoire.models import (
     GeneratedSpell,
@@ -413,16 +426,22 @@ class SpellSmith:
                 random.choice(tips) if tips else get_encouragement()
             )
 
-        # 9. Title
+        # 9. Title — select from variant pool
         type_display = template.get("name", spell_type.replace("_", " ").title())
-        title = f"{intention.title()} {type_display}"
+        title_pool = SPELL_TITLE_POOLS.get(spell_type, SPELL_TITLE_POOLS.get("candle", ["{intention} " + type_display]))
+        title = self.variation.pick(
+            f"spell_title_{spell_type}", title_pool
+        ).format(intention=intention.title())
 
-        # 10. Description
+        # 10. Description — select from variant pool
         opening = get_opening()
+        desc_template = self.variation.pick("spell_description", SPELL_DESCRIPTION_POOLS)
         description = apply_voice(
-            f"{opening} this {type_display.lower()} channels the energy of "
-            f"{intention_lower} through focused intention and carefully "
-            f"chosen correspondences."
+            desc_template.format(
+                opening=opening,
+                type=type_display.lower(),
+                intention=intention_lower,
+            )
         )
 
         # 11. Closing
@@ -512,33 +531,42 @@ class SpellSmith:
         crystals = corr.get("crystals", ["clear quartz", "amethyst"])[:5]
         colors = corr.get("colors", ["white"])[:3]
 
-        # 3. Altar setup
+        # 3. Altar setup — select from variant pool
         altar_herbs = ", ".join(herbs[:3]) if herbs else "rosemary and sage"
         altar_crystals = ", ".join(crystals[:3]) if crystals else "clear quartz"
         altar_colors = " and ".join(colors[:2]) if colors else "white"
+        altar_template = self.variation.pick("ritual_altar", RITUAL_ALTAR_POOLS)
         altar_setup = apply_voice(
-            f"Cover your altar or working surface with a {altar_colors} cloth. "
-            f"Place {altar_crystals} at the center alongside a candle. "
-            f"Arrange dried {altar_herbs} around the base. Add any personal "
-            f"items that connect you to your intention of {intention_lower}."
+            altar_template.format(
+                colors=altar_colors,
+                crystals=altar_crystals,
+                herbs=altar_herbs,
+                intention=intention_lower,
+            )
         )
 
-        # 4. Opening invocation
+        # 4. Opening invocation — select from variant pool
+        opening_template = self.variation.pick("ritual_opening", RITUAL_OPENING_POOLS)
         opening_text = apply_voice(
-            f"{get_opening()} I stand in sacred space to honor the energy of "
-            f"{intention_lower}. I call upon the elements, the ancestors, and "
-            f"all benevolent forces that support my highest good. "
-            f"May this ritual be blessed and protected."
+            opening_template.format(
+                opening=get_opening(),
+                intention=intention_lower,
+            )
         )
 
-        # 5. Body steps from structure phases
+        # 5. Body steps from structure phases — select from variant pool
         body_steps = []
         for phase in structure.get("phases", []):
             phase_name = phase["name"]
             phase_desc = phase["description"]
+            body_template = self.variation.pick("ritual_body_step", RITUAL_BODY_STEP_POOLS)
             personalized = apply_voice(
-                f"{phase_name} ({phase.get('duration', 5)} min): {phase_desc}. "
-                f"Hold your intention of {intention_lower} clearly in your heart."
+                body_template.format(
+                    phase_name=phase_name,
+                    duration=phase.get("duration", 5),
+                    phase_desc=phase_desc,
+                    intention=intention_lower,
+                )
             )
             body_steps.append(personalized)
 
@@ -567,20 +595,19 @@ class SpellSmith:
             f"radiating from your center outward."
         )
 
-        # 7. Closing & aftercare
+        # 7. Closing — select from variant pool
+        closing_template = self.variation.pick("ritual_closing", RITUAL_CLOSING_POOLS)
         closing_text = apply_voice(
-            f"Thank all energies, spirits, and elements you have invoked. "
-            f"Release the circle if one was cast (walk counterclockwise). "
-            f"Declare: 'The circle is open but never broken.' "
-            f"{get_closing()}"
+            closing_template.format(closing=get_closing())
         )
 
-        aftercare = [
-            apply_voice("Ground yourself thoroughly — eat, drink, touch the earth."),
-            apply_voice("Journal about your experience while it is fresh."),
-            apply_voice("Leave any offerings undisturbed for at least 24 hours."),
-            apply_voice(get_encouragement()),
-        ]
+        # Aftercare — select from variant pool
+        aftercare_set = self.variation.pick(
+            "aftercare_ritual",
+            [str(i) for i in range(len(AFTERCARE_POOLS))],
+        )
+        aftercare_idx = int(aftercare_set) if aftercare_set.isdigit() else 0
+        aftercare = [apply_voice(line) for line in AFTERCARE_POOLS[aftercare_idx]]
 
         # 8. Timing & safety
         timing_notes = apply_voice(self._build_timing_notes(intention_lower))
@@ -594,11 +621,16 @@ class SpellSmith:
         # 9. Duration
         duration_minutes = structure.get("duration_minutes", 30)
 
-        # 10. Title
+        # 10. Title — select from variant pool
         if is_sabbat:
-            title = f"{occasion.title()} {intention.title()} Ritual"
+            title_template = self.variation.pick("sabbat_ritual_title", SABBAT_RITUAL_TITLE_POOLS)
+            title = title_template.format(
+                occasion=occasion.title(),
+                intention=intention.title(),
+            )
         else:
-            title = f"{intention.title()} Ritual"
+            title_template = self.variation.pick("ritual_title", RITUAL_TITLE_POOLS)
+            title = title_template.format(intention=intention.title())
 
         # 11. Description
         description = apply_voice(
@@ -607,13 +639,13 @@ class SpellSmith:
             f"and ancestral wisdom."
         )
 
-        # 12. Preparation
-        preparation = [
-            apply_voice("Cleanse your space with smoke, sound, or salt water."),
-            apply_voice("Set up your altar with the materials listed above."),
-            apply_voice("Bathe or wash your hands with intention before beginning."),
-            apply_voice("Silence your phone and minimize distractions."),
-        ]
+        # 12. Preparation — select from variant pool
+        prep_set = self.variation.pick(
+            "preparation_ritual",
+            [str(i) for i in range(len(RITUAL_PREPARATION_POOLS))],
+        )
+        prep_idx = int(prep_set) if prep_set.isdigit() else 0
+        preparation = [apply_voice(line) for line in RITUAL_PREPARATION_POOLS[prep_idx]]
 
         return GeneratedRitual(
             title=title,
@@ -710,8 +742,9 @@ class SpellSmith:
         intention_prompt = f"How did the meditation connect me to my intention of {intention_lower}?"
         journal_prompts.append(apply_voice(intention_prompt))
 
-        # 6. Title
-        title = f"{intention.title()} Guided Meditation"
+        # 6. Title — select from variant pool
+        title_template = self.variation.pick("meditation_title", MEDITATION_TITLE_POOLS)
+        title = title_template.format(intention=intention.title())
 
         # 7. Description
         description = apply_voice(
@@ -720,27 +753,37 @@ class SpellSmith:
             f"your guide. Duration: approximately {duration} minutes."
         )
 
-        # 8. Grounding
+        # 8. Grounding — fallback uses variant pool
         grounding_raw = best_framework.get("grounding_script", "")
-        grounding = apply_voice(grounding_raw) if grounding_raw else apply_voice(
-            "Close your eyes and take three deep breaths. Feel your body "
-            "heavy and supported by the earth beneath you."
-        )
+        if grounding_raw:
+            grounding = apply_voice(grounding_raw)
+        else:
+            grounding = apply_voice(
+                self.variation.pick("meditation_grounding", MEDITATION_GROUNDING_POOLS)
+            )
 
-        # 9. Peak experience
+        # 9. Peak experience — fallback uses variant pool
         peak_raw = best_framework.get("peak_experience", "")
-        peak_experience = apply_voice(peak_raw) if peak_raw else apply_voice(
-            f"Rest here in the fullness of {intention_lower}. "
-            f"This energy is yours. It has always been yours."
-        )
+        if peak_raw:
+            peak_experience = apply_voice(peak_raw)
+        else:
+            peak_pool = MEDITATION_PEAK_POOLS.get(
+                intention_lower,
+                MEDITATION_PEAK_POOLS["_default"],
+            )
+            peak_template = self.variation.pick(f"meditation_peak_{intention_lower}", peak_pool)
+            peak_experience = apply_voice(
+                peak_template.format(intention=intention_lower)
+            )
 
-        # 10. Return journey
+        # 10. Return journey — fallback uses variant pool
         return_raw = best_framework.get("return_script", "")
-        return_journey = apply_voice(return_raw) if return_raw else apply_voice(
-            "Gently begin to return to your body. Wiggle your fingers "
-            "and toes. Take three grounding breaths. Open your eyes "
-            "when you are ready."
-        )
+        if return_raw:
+            return_journey = apply_voice(return_raw)
+        else:
+            return_journey = apply_voice(
+                self.variation.pick("meditation_return", MEDITATION_RETURN_POOLS)
+            )
 
         # 11. Closing
         closing = apply_voice(get_closing())

@@ -55,7 +55,7 @@ class AudioEngine:
 
     def generate_narration(self, text: str, niche: str = "",
                            voice_id: str = "", rate: str = "0%",
-                           pitch: str = "0st", output_path: str = None) -> str:
+                           pitch: str = "+0Hz", output_path: str = None) -> str:
         """Generate TTS narration. Tries ElevenLabs first, falls back to Edge TTS.
 
         Returns path to generated audio file.
@@ -242,7 +242,7 @@ class AudioEngine:
                 niche=niche,
                 voice_id=voice["voice_id"],
                 rate=voice.get("rate", "0%"),
-                pitch=voice.get("pitch", "0st"),
+                pitch=voice.get("pitch", "+0Hz"),
                 output_path=output_path,
             )
 

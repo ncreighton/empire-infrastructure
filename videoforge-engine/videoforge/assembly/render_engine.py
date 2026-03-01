@@ -858,14 +858,17 @@ class RenderEngine:
             if audio_el:
                 elements.append(audio_el)
 
-        # Sync composition duration with actual audio — audio is the source of truth.
-        # Niche-aware safety buffer + scene-role visual hold time.
+        # Sync composition duration with actual audio.
+        # Use the LONGER of storyboard duration vs audio duration — audio can extend
+        # scenes (ElevenLabs tends to be slower) but should never shrink them
+        # (Edge TTS speaks faster than storyboard estimates).
         comp_duration = scene.duration_seconds
         if audio_data and audio_data.get("duration_estimate"):
             audio_dur = audio_data["duration_estimate"]
             safety = NICHE_SCENE_BUFFER.get(niche_category, 0.15)
             hold = SCENE_VISUAL_HOLD.get(role, 0.15)
-            comp_duration = audio_dur + safety + hold
+            audio_based = audio_dur + safety + hold
+            comp_duration = max(comp_duration, audio_based)
 
         # Build the composition — track 2 ensures scenes auto-sequence
         composition = {
@@ -921,12 +924,19 @@ class RenderEngine:
             visual_el["color_filter"] = "contrast"
             visual_el["color_filter_value"] = f"{round(capped * 100)}%"
 
-        # Niche saturation boost — stacks with contrast via Creatomate filter array
+        # Niche vibrancy boost — saturate isn't a valid Creatomate filter,
+        # so use brighten for vivid niches and a stronger color overlay instead.
         sat_pct = NICHE_SATURATION.get(niche_category)
         if sat_pct and sat_pct > 100:
             if "color_filter" not in visual_el:
-                visual_el["color_filter"] = "saturate"
-                visual_el["color_filter_value"] = f"{sat_pct}%"
+                # Use brighten to add vibrancy (105-110% range)
+                brighten_pct = min(100 + (sat_pct - 100) // 2, 110)
+                visual_el["color_filter"] = "brighten"
+                visual_el["color_filter_value"] = f"{brighten_pct}%"
+            # Also bump the color overlay slightly for saturation-heavy niches
+            if accent and sat_pct >= 115:
+                r, g, b = self._hex_to_rgb(accent)
+                visual_el["color_overlay"] = f"rgba({r},{g},{b},0.12)"
 
     @staticmethod
     def _hex_to_rgb(hex_color: str) -> tuple:

@@ -1,0 +1,44 @@
+# EMPIRE-BRAIN 3.0 — Docker Services for Contabo VPS
+# Deploy: scp to VPS, then `docker compose up -d`
+
+version: "3.8"
+
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: empire-qdrant
+    ports:
+      - "6333:6333"   # REST API
+      - "6334:6334"   # gRPC
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: empire-postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=empire_architect
+      - POSTGRES_USER=empire_architect
+      - POSTGRES_PASSWORD=Trondheim3!
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.25"
+
+volumes:
+  qdrant_data:
+  postgres_data:

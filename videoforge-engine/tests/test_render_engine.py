@@ -397,7 +397,9 @@ class TestColorGrading:
         assert len(graded) >= 1, "At least some images should have color_overlay"
         for img in graded:
             assert "rgba(" in img["color_overlay"], "color_overlay should be rgba format"
-            assert "0.08)" in img["color_overlay"], "Overlay should be 8% opacity"
+            # 8% base, or 12% for high-saturation niches (witchcraft, mythology)
+            assert ("0.08)" in img["color_overlay"] or "0.12)" in img["color_overlay"]), \
+                "Overlay should be 8% or 12% opacity"
 
 
 class TestTransitionMap:
@@ -667,13 +669,18 @@ class TestNicheAnimationBias:
 class TestStrongerColorGrading:
     """Test enhanced color grading — 8% overlay, saturation, higher contrast caps."""
 
-    def test_overlay_is_8_percent(self):
-        """Color overlay should be 8% opacity, not 3%."""
+    def test_overlay_opacity(self):
+        """Color overlay should be 8% base, or 12% for high-saturation niches."""
         engine = RenderEngine()
         el = {"type": "image"}
         color = {"accent": "#E0B0FF", "contrast": 1.0}
         engine._apply_color_grade(el, color, "witchcraft")
-        assert "0.08)" in el["color_overlay"]
+        # Witchcraft has sat >= 115, so overlay bumps to 12%
+        assert "0.12)" in el["color_overlay"]
+        # Tech niche stays at 8%
+        el2 = {"type": "image"}
+        engine._apply_color_grade(el2, color, "tech")
+        assert "0.08)" in el2["color_overlay"]
 
     def test_mythology_contrast_cap_115(self):
         """Mythology niches should allow contrast up to 115%."""
@@ -697,14 +704,17 @@ class TestStrongerColorGrading:
         assert NICHE_SATURATION.get("mythology") == 120
         assert NICHE_SATURATION.get("lifestyle") == 110
 
-    def test_saturation_applied_when_no_contrast(self):
-        """When contrast is neutral, saturation filter should be applied."""
+    def test_brighten_applied_when_no_contrast(self):
+        """When contrast is neutral, brighten filter should be applied for vivid niches."""
         engine = RenderEngine()
         el = {"type": "image"}
         color = {"accent": "#E0B0FF", "contrast": 1.0}
         engine._apply_color_grade(el, color, "witchcraft")
-        assert el.get("color_filter") == "saturate"
-        assert el.get("color_filter_value") == "115%"
+        assert el.get("color_filter") == "brighten"
+        # witchcraft saturation 115 → brighten 107%
+        assert "%" in el.get("color_filter_value", "")
+        # Should also bump overlay for sat >= 115
+        assert "0.12)" in el.get("color_overlay", "")
 
 
 class TestExitAnimationsExpanded:

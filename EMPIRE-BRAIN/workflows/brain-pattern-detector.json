@@ -1,0 +1,112 @@
+{
+  "name": "Empire Brain - Pattern Detector",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{"field": "hours", "hoursInterval": 6}]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule - Every 6 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT name, COUNT(DISTINCT project_slug) as project_count, array_agg(DISTINCT project_slug) as projects FROM (SELECT unnest(string_to_array(used_by_projects, ',')) as project_slug, name FROM brain_patterns) sub GROUP BY name HAVING COUNT(DISTINCT project_slug) >= 2 ORDER BY project_count DESC LIMIT 20",
+        "options": {}
+      },
+      "id": "pg-detect-cross-project",
+      "name": "Detect Cross-Project Patterns",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [520, 200],
+      "credentials": {
+        "postgres": {
+          "id": "existing-empire-postgres",
+          "name": "Empire Architect Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT category, COUNT(*) as learning_count, AVG(confidence) as avg_confidence, SUM(times_referenced) as total_refs FROM brain_learnings GROUP BY category ORDER BY learning_count DESC",
+        "options": {}
+      },
+      "id": "pg-analyze-learnings",
+      "name": "Analyze Learning Distribution",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [520, 400],
+      "credentials": {
+        "postgres": {
+          "id": "existing-empire-postgres",
+          "name": "Empire Architect Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT slug, name, health_score, compliance_score, skill_count, function_count, last_scanned, EXTRACT(DAY FROM NOW() - last_scanned) as days_since_scan FROM brain_projects WHERE health_score < 60 OR last_scanned < NOW() - INTERVAL '7 days' ORDER BY health_score ASC",
+        "options": {}
+      },
+      "id": "pg-detect-health-issues",
+      "name": "Detect Health Issues",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [520, 600],
+      "credentials": {
+        "postgres": {
+          "id": "existing-empire-postgres",
+          "name": "Empire Architect Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO brain_events (event_type, data, source) VALUES ('pattern.detection.completed', $1::jsonb, 'pattern-detector')",
+        "options": {}
+      },
+      "id": "pg-log-detection",
+      "name": "Log Detection Results",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [800, 400],
+      "credentials": {
+        "postgres": {
+          "id": "existing-empire-postgres",
+          "name": "Empire Architect Postgres"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule - Every 6 Hours": {
+      "main": [
+        [
+          {"node": "Detect Cross-Project Patterns", "type": "main", "index": 0},
+          {"node": "Analyze Learning Distribution", "type": "main", "index": 0},
+          {"node": "Detect Health Issues", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Detect Cross-Project Patterns": {
+      "main": [[{"node": "Log Detection Results", "type": "main", "index": 0}]]
+    },
+    "Analyze Learning Distribution": {
+      "main": [[{"node": "Log Detection Results", "type": "main", "index": 0}]]
+    },
+    "Detect Health Issues": {
+      "main": [[{"node": "Log Detection Results", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {"executionOrder": "v1"},
+  "tags": [{"name": "empire-brain"}]
+}
