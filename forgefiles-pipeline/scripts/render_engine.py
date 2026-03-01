@@ -234,7 +234,12 @@ def import_stl(filepath):
 
 
 def center_and_normalize(obj, target_size=2.0):
-    """Center object at origin, scale to fit target_size, sit on ground plane."""
+    """Center object at origin, scale to fit target_size, sit on ground plane.
+
+    If the model has a flat rectangular base/pedestal, the model is lowered
+    so the base hides below the ground plane (z=0), keeping only the
+    interesting geometry visible.
+    """
     bpy.context.view_layer.objects.active = obj
     obj.select_set(True)
     bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='BOUNDS')
@@ -267,6 +272,17 @@ def center_and_normalize(obj, target_size=2.0):
     bbox_min_z = min(v.co.z for v in obj.data.vertices)
     obj.location.z = -bbox_min_z
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+
+    # Detect base/pedestal and sink it below the ground plane
+    base_top_z = _detect_base_height(obj, obj.matrix_world)
+    if base_top_z is not None and base_top_z > 0.01:
+        # Lower the model so the base top sits at ground level (z=0)
+        # Leave a tiny offset so the base-to-model junction is visible
+        sink = base_top_z * 0.85  # hide 85% of the base, keep transition visible
+        obj.location.z = -sink
+        bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+        print(f"[Render] Base hidden: sank model {sink:.3f} units "
+              f"(base height: {base_top_z:.3f})")
 
     return obj
 
@@ -1011,6 +1027,11 @@ def frames_to_video(frame_pattern, output_path, fps=None):
     if fps is None:
         fps = RenderConfig.FPS
 
+    # Resolve to absolute path — Blender 5.0 writes frames to its own resolved
+    # absolute path, so we must search there (not a relative working-dir path)
+    frame_pattern = os.path.abspath(frame_pattern)
+    output_path = os.path.abspath(output_path)
+
     # Blender outputs frames as name0001.png, name0002.png, etc.
     # Convert to ffmpeg input pattern
     frame_dir = os.path.dirname(frame_pattern)
@@ -1052,7 +1073,11 @@ def frames_to_video(frame_pattern, output_path, fps=None):
         output_path
     ]
 
-    result = sp.run(cmd, capture_output=True, text=True)
+    try:
+        result = sp.run(cmd, capture_output=True, text=True)
+    except FileNotFoundError:
+        print("[Render] FFmpeg not found — skipping MP4 assembly. Frames preserved as PNGs.")
+        return None
     if result.returncode != 0:
         print(f"[Render] FFmpeg assembly failed: {result.stderr[:300]}")
         return None
@@ -1363,7 +1388,7 @@ def render_wireframe_reveal(obj, output_dir, model_name, platform="wide",
 
     # Apply easing to transition keyframes
     for action in bpy.data.actions:
-        for fcurve in action.fcurves:
+        for fcurve in _get_fcurves(action):
             if "default_value" in fcurve.data_path:
                 for kfp in fcurve.keyframe_points:
                     kfp.interpolation = 'BEZIER'
@@ -1657,7 +1682,7 @@ def render_material_carousel(obj, output_dir, model_name, platform="wide",
 
     # Apply easing to all transition keyframes
     for action in bpy.data.actions:
-        for fcurve in action.fcurves:
+        for fcurve in _get_fcurves(action):
             if "default_value" in fcurve.data_path:
                 for kfp in fcurve.keyframe_points:
                     kfp.interpolation = 'BEZIER'
@@ -1770,8 +1795,9 @@ def render_shot_sequence(stl_path, output_dir, sequence_name, model_name=None,
         print(f"[Render] ERROR: Unknown sequence '{sequence_name}'")
         return []
 
-    stl_path = Path(stl_path)
+    stl_path = Path(stl_path).resolve()
     model_name = model_name or stl_path.stem
+    output_dir = os.path.abspath(output_dir)
 
     print(f"[Render] Shot sequence: {seq['name']} ({len(seq['shots'])} shots)")
     os.makedirs(output_dir, exist_ok=True)
@@ -1942,9 +1968,12 @@ def process_single_model(stl_path, output_dir, mode="turntable", platforms=None,
     When material or camera_style are not explicitly specified, auto-selects
     based on product category classification.
     """
-    stl_path = Path(stl_path)
+    stl_path = Path(stl_path).resolve()
     model_name = stl_path.stem
 
+    # Resolve to absolute path — Blender resolves relative paths from its own
+    # CWD (often C:\), not from the Python script's working directory
+    output_dir = os.path.abspath(output_dir)
     model_output = os.path.join(output_dir, model_name)
     os.makedirs(model_output, exist_ok=True)
 
@@ -2055,6 +2084,31 @@ def process_single_model(stl_path, output_dir, mode="turntable", platforms=None,
                 obj, platform_dir, model_name, platform, preset
             )
 
+        if mode in ("close_up", "all"):
+            clean_scene()
+            obj = import_stl(str(stl_path))
+            obj = center_and_normalize(obj)
+            results["renders"][f"close_up_{platform}"] = render_close_up(
+                obj, platform_dir, model_name, platform, material, preset, color_grade
+            )
+
+        if mode in ("carousel", "all"):
+            clean_scene()
+            obj = import_stl(str(stl_path))
+            obj = center_and_normalize(obj)
+            results["renders"][f"carousel_{platform}"] = render_material_carousel(
+                obj, platform_dir, model_name, platform, preset=preset
+            )
+
+        if mode in ("hero", "all"):
+            clean_scene()
+            obj = import_stl(str(stl_path))
+            obj = center_and_normalize(obj)
+            results["renders"][f"hero_{platform}"] = render_beauty_hero(
+                obj, platform_dir, model_name, platform, material, preset, color_grade,
+                lighting=auto_lighting
+            )
+
     # Save render manifest
     manifest_path = os.path.join(model_output, "render_manifest.json")
     with open(manifest_path, 'w') as f:
@@ -2109,7 +2163,8 @@ def parse_args():
                        help="Output directory")
     parser.add_argument("--mode", "-m", default="turntable",
                        choices=["turntable", "beauty", "wireframe", "material",
-                               "dramatic", "technical", "all", "batch"])
+                               "dramatic", "technical", "close_up", "carousel",
+                               "hero", "all", "batch"])
     parser.add_argument("--platform", "-p", nargs="+", default=["wide"],
                        choices=list(RenderConfig.RESOLUTIONS.keys()))
     parser.add_argument("--material", default=None,
