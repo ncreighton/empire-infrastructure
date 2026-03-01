@@ -3,7 +3,12 @@ Smart Import   Cross-project import resolver.
 Allows projects to import canonical shared implementations.
 
 Usage in any project:
+    from core.smart_import import install
+    install()
+
     from mesh.shared import api_retry, image_optimization
+    # or
+    from mesh.shared.api_retry import with_retry, RetryConfig
 
 This resolves to the canonical shared-core version,
 with fallback to local override if present.
@@ -12,6 +17,9 @@ with fallback to local override if present.
 import sys
 import json
 import importlib
+import importlib.abc
+import importlib.machinery
+import importlib.util
 import logging
 from pathlib import Path
 from types import ModuleType
@@ -23,81 +31,93 @@ HUB_PATH = Path(r"D:\Claude Code Projects\project-mesh-v2-omega")
 CANONICAL_REGISTRY = HUB_PATH / "registry" / "canonical_registry.json"
 SHARED_CORE = HUB_PATH / "shared-core" / "systems"
 
+# Map shared-core directory names to their main source files
+_SYSTEM_MAP = {
+    "api_retry": "api-retry",
+    "content_pipeline": "content-pipeline",
+    "image_optimization": "image-optimization",
+    "seo_toolkit": "seo-toolkit",
+    "wordpress_automation": "wordpress-automation",
+    "affiliate_link_manager": "affiliate-link-manager",
+    "forge_amplify_pipeline": "forge-amplify-pipeline",
+    "elevenlabs_tts": "elevenlabs-tts",
+    "fal_image_gen": "fal-image-gen",
+    "creatomate_render": "creatomate-render",
+    "openrouter_llm": "openrouter-llm",
+    "fastapi_service": "fastapi-service",
+    "sqlite_codex": "sqlite-codex",
+    "brand_config": "brand-config",
+}
 
-class MeshImporter:
-    """Custom import hook that resolves mesh.shared.* imports."""
 
-    def __init__(self):
-        self._registry = None
+class _MeshFinder(importlib.abc.MetaPathFinder):
+    """Modern MetaPathFinder for mesh.shared.* imports."""
 
-    def _load_registry(self):
-        if self._registry is not None:
-            return self._registry
-        if CANONICAL_REGISTRY.exists():
-            try:
-                data = json.loads(CANONICAL_REGISTRY.read_text("utf-8"))
-                self._registry = data.get("capabilities", {})
-            except Exception:
-                self._registry = {}
-        else:
-            self._registry = {}
-        return self._registry
-
-    def find_module(self, fullname, path=None):
-        if fullname.startswith("mesh.shared"):
-            return self
-        return None
-
-    def load_module(self, fullname):
-        if fullname in sys.modules:
-            return sys.modules[fullname]
-
+    def find_spec(self, fullname, path, target=None):
         parts = fullname.split(".")
+        if parts[0] != "mesh":
+            return None
 
         if fullname == "mesh":
-            mod = ModuleType("mesh")
-            mod.__path__ = [str(HUB_PATH)]
-            sys.modules["mesh"] = mod
-            return mod
-
+            return importlib.machinery.ModuleSpec(
+                "mesh", loader=_MeshLoader("mesh"), is_package=True
+            )
         if fullname == "mesh.shared":
-            mod = ModuleType("mesh.shared")
-            mod.__path__ = [str(SHARED_CORE)]
-            sys.modules["mesh.shared"] = mod
-            return mod
-
-        # mesh.shared.<system_name>
-        if len(parts) == 3 and parts[0] == "mesh" and parts[1] == "shared":
+            return importlib.machinery.ModuleSpec(
+                "mesh.shared", loader=_MeshLoader("mesh.shared"), is_package=True
+            )
+        if len(parts) == 3 and parts[1] == "shared":
             system_name = parts[2]
-            return self._load_shared_system(system_name, fullname)
+            src_file = _resolve_system_file(system_name)
+            if src_file:
+                return importlib.util.spec_from_file_location(
+                    fullname, str(src_file),
+                    submodule_search_locations=[]
+                )
+        return None
 
-        raise ImportError(f"Cannot import {fullname}")
 
-    def _load_shared_system(self, system_name: str, fullname: str) -> ModuleType:
-        """Load a shared system module."""
-        # Try shared-core first
-        system_dir = SHARED_CORE / system_name / "src"
-        if system_dir.exists():
-            # Find the main .py file
-            py_files = list(system_dir.glob("*.py"))
-            if py_files:
-                main_file = py_files[0]
-                spec = importlib.util.spec_from_file_location(fullname, str(main_file))
-                if spec and spec.loader:
-                    mod = importlib.util.module_from_spec(spec)
-                    sys.modules[fullname] = mod
-                    spec.loader.exec_module(mod)
-                    return mod
+class _MeshLoader(importlib.abc.Loader):
+    """Loader for namespace packages (mesh, mesh.shared)."""
 
-        raise ImportError(f"Shared system not found: {system_name}")
+    def __init__(self, name):
+        self._name = name
+
+    def create_module(self, spec):
+        mod = ModuleType(self._name)
+        mod.__path__ = [str(SHARED_CORE) if self._name == "mesh.shared" else str(HUB_PATH)]
+        mod.__package__ = self._name
+        mod.__spec__ = spec
+        return mod
+
+    def exec_module(self, module):
+        pass
+
+
+def _resolve_system_file(system_name: str) -> Optional[Path]:
+    """Resolve a system name to its main .py file in shared-core."""
+    dir_name = _SYSTEM_MAP.get(system_name, system_name)
+    system_dir = SHARED_CORE / dir_name / "src"
+    if system_dir.exists():
+        py_files = list(system_dir.glob("*.py"))
+        if py_files:
+            return py_files[0]
+    # Try exact name as directory
+    system_dir = SHARED_CORE / system_name / "src"
+    if system_dir.exists():
+        py_files = list(system_dir.glob("*.py"))
+        if py_files:
+            return py_files[0]
+    return None
 
 
 def install():
     """Install the mesh import hook. Call once at startup."""
-    importer = MeshImporter()
-    if importer not in sys.meta_path:
-        sys.meta_path.insert(0, importer)
-        log.debug("Mesh import hook installed")
+    for finder in sys.meta_path:
+        if isinstance(finder, _MeshFinder):
+            return  # Already installed
+    sys.meta_path.insert(0, _MeshFinder())
+    log.debug("Mesh import hook installed")
 
 
 def get_canonical(capability: str) -> Optional[str]:

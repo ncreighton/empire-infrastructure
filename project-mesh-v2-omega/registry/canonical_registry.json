@@ -1,13 +1,14 @@
 {
-  "version": "1.0.0",
-  "updated_at": "2026-02-28",
-  "description": "Declares THE canonical implementation for every common capability",
+  "version": "2.0.0",
+  "updated_at": "2026-03-01",
+  "description": "Declares THE canonical implementation for every common capability across the empire",
   "capabilities": {
     "image_generation": {
       "canonical_project": "_root",
       "canonical_path": "D:/Claude Code Projects/enhanced_image_gen.py",
+      "shared_core": "project-mesh-v2-omega/shared-core/systems/image-optimization/src/optimizer.py",
       "version": "2.0.0",
-      "consumers": ["witchcraft-for-beginners", "mythical-archives", "smart-home-wizards", "ai-in-action-hub", "ai-discovery-digest", "wealth-from-ai", "family-flourish", "bullet-journals"],
+      "consumers": ["witchcraft-for-beginners", "mythical-archives", "smart-home-wizards", "ai-in-action-hub", "ai-discovery-digest", "wealth-from-ai", "family-flourish", "bullet-journals", "celebration-season", "clear-ai-news", "manifest-and-align", "moon-ritual-library", "pulse-gear-reviews", "smart-home-gear-reviews", "wearable-gear-reviews", "the-connected-haven", "sprout-and-spruce"],
       "alternatives_deprecated": ["simple_image_gen.py"],
       "description": "Branded image generation with site-specific patterns and colors"
     },
@@ -15,85 +16,234 @@
       "canonical_project": "_root",
       "canonical_path": "D:/Claude Code Projects/article_images_pipeline.py",
       "version": "1.0.0",
-      "consumers": ["witchcraft-for-beginners", "mythical-archives", "smart-home-wizards"],
+      "consumers": ["witchcraft-for-beginners", "mythical-archives", "smart-home-wizards", "bullet-journals", "ai-discovery-digest"],
       "description": "Generate + upload + set featured image pipeline"
     },
     "tts_generation": {
       "canonical_project": "videoforge-engine",
-      "canonical_path": "videoforge-engine/assembly/audio_engine.py",
+      "canonical_path": "videoforge-engine/videoforge/assembly/audio_engine.py",
+      "shared_core": "project-mesh-v2-omega/shared-core/systems/elevenlabs-tts/src/tts.py",
       "version": "1.5.0",
       "consumers": ["videoforge-engine", "3d-print-forge"],
-      "description": "ElevenLabs TTS with 16 niche voice profiles"
+      "description": "ElevenLabs TTS with 16 niche voice profiles + catbox.moe hosting"
     },
     "video_rendering": {
       "canonical_project": "videoforge-engine",
-      "canonical_path": "videoforge-engine/assembly/render_engine.py",
+      "canonical_path": "videoforge-engine/videoforge/assembly/render_engine.py",
+      "shared_core": "project-mesh-v2-omega/shared-core/systems/creatomate-render/src/render.py",
       "version": "2.0.0",
+      "consumers": ["videoforge-engine", "forgefiles-pipeline"],
+      "description": "Creatomate composition-based video rendering with Ken Burns + animations"
+    },
+    "visual_generation": {
+      "canonical_project": "videoforge-engine",
+      "canonical_path": "videoforge-engine/videoforge/assembly/visual_engine.py",
+      "shared_core": "project-mesh-v2-omega/shared-core/systems/fal-image-gen/src/image_gen.py",
+      "version": "1.0.0",
       "consumers": ["videoforge-engine"],
-      "description": "Creatomate composition-based video rendering"
+      "description": "FAL.ai FLUX Pro image generation for video scenes"
     },
     "forge_amplify_pattern": {
       "canonical_project": "project-mesh-v2-omega",
       "canonical_path": "project-mesh-v2-omega/shared-core/systems/forge-amplify-pipeline/src/pipeline.py",
-      "version": "1.0.0",
-      "consumers": ["grimoire-intelligence", "videoforge-engine", "velvetveil-printables"],
+      "version": "1.1.0",
+      "consumers": ["grimoire-intelligence", "videoforge-engine", "velvetveil-printables", "3d-print-forge"],
       "description": "FORGE+AMPLIFY pipeline base classes and runner"
     },
     "api_retry": {
       "canonical_project": "project-mesh-v2-omega",
       "canonical_path": "project-mesh-v2-omega/shared-core/systems/api-retry/src/retry.py",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "consumers": ["*"],
       "description": "Retry with exponential backoff for all API calls"
     },
     "wordpress_api": {
       "canonical_project": "_root",
       "canonical_path": "D:/Claude Code Projects/wordpress_sync.py",
-      "version": "1.0.0",
-      "consumers": ["witchcraft-for-beginners", "mythical-archives", "smart-home-wizards"],
-      "description": "WordPress REST API wrapper — post CRUD, media upload"
+      "shared_core": "project-mesh-v2-omega/shared-core/systems/wordpress-automation/src/wordpress.py",
+      "version": "1.1.0",
+      "consumers": ["witchcraft-for-beginners", "mythical-archives", "smart-home-wizards", "bullet-journals", "ai-discovery-digest", "ai-in-action-hub", "clear-ai-news", "the-connected-haven", "family-flourish", "manifest-and-align", "celebration-season", "wealth-from-ai", "moon-ritual-library", "sprout-and-spruce", "pulse-gear-reviews", "smart-home-gear-reviews", "wearable-gear-reviews"],
+      "description": "WordPress REST API wrapper — post CRUD, media upload, featured images"
     },
     "seo_toolkit": {
       "canonical_project": "_root",
       "canonical_path": "D:/Claude Code Projects/scripts/gsc_bing_checkup.py",
-      "version": "1.0.0",
-      "consumers": ["witchcraft-for-beginners", "mythical-archives"],
-      "description": "GSC + Bing Webmaster API, keyword analysis"
+      "shared_core": "project-mesh-v2-omega/shared-core/systems/seo-toolkit/src/seo.py",
+      "version": "1.1.0",
+      "consumers": ["witchcraft-for-beginners", "mythical-archives", "smart-home-wizards", "nick-seo-content-engine", "article-audit-system"],
+      "description": "GSC + Bing Webmaster API, keyword analysis, schema validation"
     },
     "brand_config": {
       "canonical_project": "_root",
       "canonical_path": "D:/Claude Code Projects/config/sites.json",
-      "version": "1.0.0",
+      "shared_core": "project-mesh-v2-omega/shared-core/systems/brand-config/src/config.py",
+      "version": "1.1.0",
       "consumers": ["*"],
-      "description": "Centralized site branding, colors, credentials"
+      "description": "Centralized site branding, colors, credentials, domain config"
     },
     "sqlite_codex": {
       "canonical_project": "project-mesh-v2-omega",
       "canonical_path": "project-mesh-v2-omega/shared-core/systems/sqlite-codex/src/codex.py",
-      "version": "1.0.0",
-      "consumers": ["grimoire-intelligence", "videoforge-engine", "velvetveil-printables"],
-      "description": "Base SQLite knowledge engine with CRUD and search"
+      "version": "1.1.0",
+      "consumers": ["grimoire-intelligence", "videoforge-engine", "velvetveil-printables", "project-mesh-v2-omega"],
+      "description": "Base SQLite knowledge engine with CRUD, search, and milestones"
     },
     "openrouter_llm": {
       "canonical_project": "project-mesh-v2-omega",
       "canonical_path": "project-mesh-v2-omega/shared-core/systems/openrouter-llm/src/router.py",
-      "version": "1.0.0",
-      "consumers": ["videoforge-engine"],
-      "description": "Multi-model LLM routing via OpenRouter"
+      "version": "1.1.0",
+      "consumers": ["videoforge-engine", "nick-seo-content-engine"],
+      "description": "Multi-model LLM routing via OpenRouter with cost tracking"
     },
     "fal_image_gen": {
       "canonical_project": "project-mesh-v2-omega",
       "canonical_path": "project-mesh-v2-omega/shared-core/systems/fal-image-gen/src/image_gen.py",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "consumers": ["videoforge-engine"],
-      "description": "FAL.ai image generation wrapper"
+      "description": "FAL.ai FLUX Pro image generation wrapper"
     },
     "fastapi_scaffold": {
       "canonical_project": "project-mesh-v2-omega",
       "canonical_path": "project-mesh-v2-omega/shared-core/systems/fastapi-service/src/scaffold.py",
+      "version": "1.1.0",
+      "consumers": ["grimoire-intelligence", "videoforge-engine", "empire-dashboard", "bmc-witchcraft", "geelark-automation", "forgefiles-pipeline"],
+      "description": "Standard FastAPI app factory with health, CORS, timing middleware"
+    },
+    "content_pipeline": {
+      "canonical_project": "zimmwriter-project-new",
+      "canonical_path": "zimmwriter-project-new/src/orchestrator.py",
+      "shared_core": "project-mesh-v2-omega/shared-core/systems/content-pipeline/src/pipeline.py",
+      "version": "1.1.0",
+      "consumers": ["zimmwriter-project-new", "nick-seo-content-engine", "openclaw-empire"],
+      "description": "Content generation pipeline — outline, draft, format, SEO inject"
+    },
+    "affiliate_links": {
+      "canonical_project": "_root",
+      "canonical_path": "D:/Claude Code Projects/config/amazon_paapi.json",
+      "shared_core": "project-mesh-v2-omega/shared-core/systems/affiliate-link-manager/src/affiliates.py",
+      "version": "1.1.0",
+      "consumers": ["smart-home-wizards", "smart-home-gear-reviews", "wearable-gear-reviews", "pulse-gear-reviews"],
+      "description": "Amazon PAAPI with AWS SigV4, link formatting, tag injection"
+    },
+    "creatomate_render": {
+      "canonical_project": "project-mesh-v2-omega",
+      "canonical_path": "project-mesh-v2-omega/shared-core/systems/creatomate-render/src/render.py",
+      "version": "1.1.0",
+      "consumers": ["videoforge-engine", "forgefiles-pipeline"],
+      "description": "Creatomate API wrapper — composition builder, render polling"
+    },
+    "adb_automation": {
+      "canonical_project": "geelark-automation",
+      "canonical_path": "geelark-automation/scripts/adb_config.py",
       "version": "1.0.0",
-      "consumers": ["grimoire-intelligence", "videoforge-engine", "empire-dashboard", "bmc-witchcraft"],
-      "description": "Standard FastAPI app with health endpoint, CORS, timing middleware"
+      "consumers": ["geelark-automation", "openclaw-empire"],
+      "description": "ADB device connection, monitor, auto-reconnect via Tailscale"
+    },
+    "substack_scheduler": {
+      "canonical_project": "openclaw-empire",
+      "canonical_path": "openclaw-empire/scripts/substack_scheduler.py",
+      "version": "1.0.0",
+      "consumers": ["openclaw-empire"],
+      "description": "Substack post scheduling via ADB + UI automation"
+    },
+    "linkedin_automation": {
+      "canonical_project": "openclaw-empire",
+      "canonical_path": "openclaw-empire/scripts/linkedin_poster.py",
+      "version": "1.0.0",
+      "consumers": ["openclaw-empire"],
+      "description": "LinkedIn post/article automation via ADB"
+    },
+    "pinterest_automation": {
+      "canonical_project": "pinflux-engine",
+      "canonical_path": "pinflux-engine/src/pin_creator.py",
+      "version": "1.0.0",
+      "consumers": ["pinflux-engine"],
+      "description": "Pinterest pin creation and board management"
+    },
+    "etsy_automation": {
+      "canonical_project": "etsy-agent-v2",
+      "canonical_path": "etsy-agent-v2/src/etsy_client.py",
+      "version": "1.0.0",
+      "consumers": ["etsy-agent-v2", "printables-empire"],
+      "description": "Etsy listing creation, SEO optimization, shop management"
+    },
+    "pdf_generation": {
+      "canonical_project": "velvetveil-printables",
+      "canonical_path": "velvetveil-printables/intelligence/forge_pdf_engine.py",
+      "version": "1.0.0",
+      "consumers": ["velvetveil-printables", "printables-empire"],
+      "description": "PDF/eBook creation with FORGE+AMPLIFY pipeline"
+    },
+    "3d_model_pipeline": {
+      "canonical_project": "3d-print-forge",
+      "canonical_path": "3d-print-forge/forge/model_engine.py",
+      "version": "1.0.0",
+      "consumers": ["3d-print-forge", "forgefiles-pipeline"],
+      "description": "3D model generation, STL processing, brand rendering"
+    },
+    "brand_video_pipeline": {
+      "canonical_project": "forgefiles-pipeline",
+      "canonical_path": "forgefiles-pipeline/scripts/creatomate_compose.py",
+      "version": "1.0.0",
+      "consumers": ["forgefiles-pipeline"],
+      "description": "3D model brand video composition and rendering"
+    },
+    "analytics_sync": {
+      "canonical_project": "_root",
+      "canonical_path": "D:/Claude Code Projects/sync_analytics_to_supabase.py",
+      "version": "1.0.0",
+      "consumers": ["empire-dashboard"],
+      "description": "GA4 + GSC analytics sync to Supabase for dashboard"
+    },
+    "email_system": {
+      "canonical_project": "empire-email-system",
+      "canonical_path": "empire-email-system/src/email_sender.py",
+      "version": "1.0.0",
+      "consumers": ["empire-email-system"],
+      "description": "Multi-site email sending and newsletter management"
+    },
+    "bmc_webhooks": {
+      "canonical_project": "bmc-witchcraft",
+      "canonical_path": "bmc-witchcraft/automation/bmc_webhook_handler.py",
+      "version": "1.0.0",
+      "consumers": ["bmc-witchcraft"],
+      "description": "Buy Me a Coffee webhook handler — payments, memberships, alerts"
+    },
+    "vision_service": {
+      "canonical_project": "geelark-automation",
+      "canonical_path": "geelark-automation/vision/vision_service.py",
+      "version": "1.0.0",
+      "consumers": ["geelark-automation", "openclaw-empire"],
+      "description": "Anthropic Haiku vision analysis — element detection, state recognition"
+    },
+    "knowledge_graph": {
+      "canonical_project": "project-mesh-v2-omega",
+      "canonical_path": "project-mesh-v2-omega/knowledge/graph_engine.py",
+      "version": "1.0.0",
+      "consumers": ["project-mesh-v2-omega"],
+      "description": "SQLite knowledge graph with 10 tables, code indexing, search"
+    },
+    "revid_video": {
+      "canonical_project": "revid-forge",
+      "canonical_path": "revid-forge/src/revid_client.py",
+      "version": "1.0.0",
+      "consumers": ["revid-forge"],
+      "alternatives_deprecated": [],
+      "description": "Revid.ai API — faceless video generation + multi-platform publishing"
+    },
+    "article_audit": {
+      "canonical_project": "article-audit-system",
+      "canonical_path": "article-audit-system/src/audit_engine.py",
+      "version": "1.0.0",
+      "consumers": ["article-audit-system", "zimmwriter-project-new"],
+      "description": "Article quality scoring, SEO analysis, visual robot audit"
+    },
+    "secret_sanitizer": {
+      "canonical_project": "project-mesh-v2-omega",
+      "canonical_path": "project-mesh-v2-omega/scripts/knowledge_harvester.py",
+      "version": "1.0.0",
+      "consumers": ["project-mesh-v2-omega"],
+      "description": "Regex-based credential stripping — GitHub PATs, WP passwords, API keys"
     }
   }
 }
