@@ -1,0 +1,56 @@
+{
+  "schema_version": "3.0.0",
+  "project": {
+    "name": "VideoForge Engine",
+    "slug": "videoforge-engine",
+    "category": "intelligence-systems",
+    "description": "Video creation pipeline \u2014 12-step FORGE+AMPLIFY, Creatomate render",
+    "priority": "high",
+    "project_type": "api-service",
+    "active_development": true,
+    "last_human_touch": "2026-02-28",
+    "urls": {
+      "production": "",
+      "substack": null,
+      "etsy": null
+    },
+    "tech_stack": {
+      "language": "Python",
+      "framework": "FastAPI"
+    },
+    "port": 8090,
+    "path": "videoforge-engine",
+    "revenue_streams": []
+  },
+  "provides": {
+    "systems": [],
+    "discoveries": []
+  },
+  "consumes": {
+    "shared-core": [
+      {
+        "system": "api-retry",
+        "version": "1.0.0",
+        "criticality": "high",
+        "usage_frequency": "hourly"
+      }
+    ],
+    "from-projects": []
+  },
+  "context": {
+    "conditionals": [
+      "is-api-service"
+    ],
+    "context_budget_override": null
+  },
+  "health": {
+    "sync_health_pct": 100,
+    "compliance_score": 100,
+    "staleness_days": 0
+  },
+  "automation": {
+    "auto_sync": true,
+    "sync_schedule": "on-change",
+    "auto_compile": true
+  }
+}

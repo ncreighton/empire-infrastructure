@@ -437,15 +437,19 @@ class ZimmWriterController:
         return self._find_zimmwriter_pid() is not None
 
     def open_bulk_writer(self):
-        """Navigate from Menu screen to Bulk Writer screen."""
+        """Navigate from Menu screen to Bulk Writer screen.
+
+        ZimmWriter destroys the Menu window and creates a new Bulk Writer
+        window.  A full connect() is required to get a fresh Application
+        object that can find the new window.
+        """
         self.ensure_connected()
         try:
             btn = self._find_child(control_type="Button", title="Bulk Writer")
             self._click(btn)
-            time.sleep(3)
-            # Refresh window reference after screen change
-            self.main_window = self.app.top_window()
-            self._control_cache.clear()
+            time.sleep(4)
+            # Full reconnect — old app/window handles are now invalid
+            self.connect()
             logger.info("Opened Bulk Writer screen")
         except Exception as e:
             logger.warning(f"Could not open Bulk Writer: {e}")
@@ -1564,36 +1568,134 @@ class ZimmWriterController:
 
     # ── Style Mimic Config ──
 
-    def configure_style_mimic(self, style_text: str = None):
+    def configure_style_mimic(self, style_text: str = None, mimic_name: str = None,
+                              generate: bool = True):
         """
         Configure Style Mimic. Toggle auto_id=99, window "Style Mimic".
+
+        Full workflow: paste sample text → set name → Generate (AI analysis)
+        → wait for generation → Save Mimic.  If a mimic with the given name
+        already exists, it is loaded from the dropdown instead of regenerating.
 
         Control auto_ids (verified v10.872):
           Edit: style_to_mimic(114), mimicked_style(116), mimic_name(120)
           ComboBox: load_mimic(118), ai_model(126)
           Buttons: generate(121), update(122), save(123 "Save Mimic"), delete(124)
+
+        Args:
+            style_text: Sample writing text to paste into "Style to Mimic" field.
+            mimic_name: Name for saving/loading the mimic (e.g. domain name).
+            generate: If True, click Generate for AI analysis before saving.
+                      If False, just paste text and save directly.
         """
         win = self._open_config_window("style_mimic")
         if not win:
             return False
 
+        _SM = ctypes.windll.user32.SendMessageW
+        _SM.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+        _SM.restype = ctypes.c_long
+
         try:
-            if style_text and style_text.strip():
+            # Check if a mimic with this name already exists in the dropdown
+            mimic_exists = False
+            if mimic_name:
+                try:
+                    load_combo = self._find_child(win, control_type="ComboBox", auto_id="118")
+                    name_buf = ctypes.create_unicode_buffer(mimic_name)
+                    idx = _SM(load_combo.handle, 0x0158, -1, ctypes.addressof(name_buf))
+                    mimic_exists = (idx >= 0)
+                except Exception:
+                    pass
+
+            if mimic_exists:
+                # Load existing mimic by selecting it from the dropdown
+                logger.info(f"Style Mimic '{mimic_name}' found in dropdown, loading")
+                _SM(load_combo.handle, 0x014E, idx, 0)  # CB_SETCURSEL
+                # Fire CBN_SELCHANGE so ZimmWriter processes the selection
+                parent_hwnd = win.handle
+                ctrl_id = 118
+                CBN_SELCHANGE = 1
+                WM_COMMAND = 0x0111
+                wparam = (CBN_SELCHANGE << 16) | (ctrl_id & 0xFFFF)
+                _SM(parent_hwnd, WM_COMMAND, wparam, load_combo.handle)
+                time.sleep(1.0)
+
+            elif style_text and style_text.strip():
+                # Paste sample text into "Style to Mimic" field
                 self._set_config_text(win, "114", style_text)
                 time.sleep(0.5)
+
+                # Set mimic name
+                if mimic_name:
+                    self._set_config_text(win, "120", mimic_name)
+                    time.sleep(0.3)
+
+                if generate:
+                    # Click Generate button to create AI style analysis
+                    self._click_config_button(win, auto_id="121")
+                    logger.info(f"Style Mimic: generating analysis for '{mimic_name}'...")
+
+                    # Wait for generation to complete by polling the mimicked_style
+                    # field (116) for content. Timeout after 90 seconds.
+                    gen_timeout = 90
+                    poll_interval = 3
+                    elapsed = 0
+                    while elapsed < gen_timeout:
+                        time.sleep(poll_interval)
+                        elapsed += poll_interval
+                        try:
+                            result_edit = self._find_child(win, control_type="Edit",
+                                                           auto_id="116")
+                            result_text = result_edit.window_text()
+                            if result_text and len(result_text.strip()) > 20:
+                                logger.info(f"Style Mimic: generation complete "
+                                            f"({len(result_text)} chars, {elapsed}s)")
+                                break
+                        except Exception:
+                            pass
+                        # Also dismiss any error dialogs during generation
+                        self._dismiss_dialog(timeout=1)
+                    else:
+                        logger.warning(f"Style Mimic: generation timed out after {gen_timeout}s")
+
+                # Click Save Mimic to save
                 self._click_config_button(win, title="Save Mimic")
                 time.sleep(1.0)
-                # Dismiss any error dialog ("Style to Mimic box cannot be empty")
                 self._dismiss_dialog(timeout=2)
+                logger.info(f"Style Mimic saved: '{mimic_name}'")
             else:
-                logger.warning("Style Mimic: no text provided, skipping Save")
+                logger.warning("Style Mimic: no text provided, skipping")
+
         except Exception as e:
             logger.error(f"Style Mimic config failed: {e}")
         finally:
-            # Dismiss any lingering dialog before closing
             self._dismiss_dialog(timeout=1)
             self._close_config_window(win)
             self._dismiss_dialog(timeout=1)
+
+        # Verify the feature is actually Enabled after closing.
+        # If the window close reverted it to Disabled, re-enable it.
+        try:
+            self.ensure_connected()
+            btn = self._find_child(control_type="Button",
+                                    auto_id=self.FEATURE_TOGGLE_IDS["style_mimic"])
+            if "Disabled" in btn.window_text():
+                logger.info("Style Mimic reverted to Disabled after close, re-enabling")
+                btn.click_input()
+                time.sleep(1.5)
+                # If a config window opens, close it — the mimic is already saved
+                escaped = re.escape(self.FEATURE_CONFIG_WINDOWS["style_mimic"])
+                reopen_win = self._wait_for_window(escaped, timeout=2)
+                if reopen_win:
+                    self._close_config_window(reopen_win)
+                    self._dismiss_dialog(timeout=1)
+                # Check again
+                btn = self._find_child(control_type="Button",
+                                        auto_id=self.FEATURE_TOGGLE_IDS["style_mimic"])
+                logger.info(f"Style Mimic button now: '{btn.window_text()}'")
+        except Exception as e:
+            logger.warning(f"Style Mimic post-close verify failed: {e}")
 
         logger.info("Style Mimic configured")
         return True
@@ -1932,6 +2034,23 @@ class ZimmWriterController:
         finally:
             self._close_config_window(win)
             self._dismiss_dialog()
+
+        # Verify the feature is Enabled after closing
+        try:
+            self.ensure_connected()
+            btn = self._find_child(control_type="Button",
+                                    auto_id=self.FEATURE_TOGGLE_IDS["custom_prompt"])
+            if "Disabled" in btn.window_text():
+                logger.info("Custom Prompt reverted to Disabled, re-enabling")
+                btn.click_input()
+                time.sleep(1.5)
+                escaped = re.escape(self.FEATURE_CONFIG_WINDOWS["custom_prompt"])
+                reopen_win = self._wait_for_window(escaped, timeout=2)
+                if reopen_win:
+                    self._close_config_window(reopen_win)
+                    self._dismiss_dialog(timeout=1)
+        except Exception as e:
+            logger.warning(f"Custom Prompt post-close verify failed: {e}")
 
         logger.info(
             f"Custom Prompts: {saved_count} saved, {assigned_count} sections assigned"
@@ -2490,25 +2609,62 @@ class ZimmWriterController:
     # ═══════════════════════════════════════════
 
     def start_bulk_writer(self):
-        """Start bulk content generation and confirm the article list popup."""
+        """Start bulk content generation and confirm both startup dialogs.
+
+        ZimmWriter shows two modal dialogs in sequence:
+        1. "Confirm Articles to Write" — click "I Confirm I Want to Proceed"
+        2. "Fasten Your Seatbelts" — click "OK" to begin generation
+
+        Because these are modal, self.app.windows() hangs.  We use Desktop
+        to find and dismiss them independently of the app connection.
+        """
         self.ensure_connected()
         self.click_button(auto_id=self.BUTTON_IDS["start"][0])
         logger.info("Bulk Writer START clicked, waiting for confirmation dialog...")
 
-        # ZimmWriter shows a confirmation popup listing the articles.
-        # Look for a button containing "Confirm" or "I Confirm" and click it.
-        for attempt in range(20):
+        # Dialog 1: "Confirm Articles to Write" with "I Confirm I Want to Proceed"
+        self._click_desktop_dialog(
+            title_contains="Confirm",
+            button_contains=["Confirm", "Proceed"],
+            timeout=30,
+        )
+
+        # Dialog 2: "Fasten Your Seatbelts" with "OK"
+        self._click_desktop_dialog(
+            title_contains="Seatbelt",
+            button_contains=["OK", "Ok"],
+            timeout=15,
+        )
+
+    def _click_desktop_dialog(self, title_contains: str,
+                               button_contains: List[str],
+                               timeout: int = 20):
+        """Find and click a button in a ZimmWriter modal dialog.
+
+        Uses Desktop search instead of self.app.windows() because modal
+        dialogs block the app's message loop and cause hangs.
+        """
+        for attempt in range(timeout):
             time.sleep(1)
             try:
-                for w in self.app.windows():
+                desktop = Desktop(backend="win32")
+                for w in desktop.windows():
+                    try:
+                        wtitle = w.window_text()
+                    except Exception:
+                        continue
+                    if title_contains not in wtitle:
+                        continue
+                    # Found the dialog — click the matching button
+                    logger.info(f"Found dialog: '{wtitle}'")
                     try:
                         for child in w.children():
                             try:
                                 btn_text = child.window_text()
-                                if "confirm" in btn_text.lower():
+                                if any(kw in btn_text for kw in button_contains):
                                     child.click_input()
-                                    time.sleep(0.5)
-                                    logger.info(f"Confirmed article list via '{btn_text}'")
+                                    time.sleep(1)
+                                    logger.info(f"Clicked '{btn_text}' in '{wtitle}'")
                                     return
                             except Exception:
                                 pass
@@ -2517,7 +2673,7 @@ class ZimmWriterController:
             except Exception:
                 pass
 
-        logger.warning("No confirmation dialog found — may have auto-proceeded")
+        logger.warning(f"Dialog with '{title_contains}' not found after {timeout}s")
 
     def stop_bulk_writer(self):
         """Stop/exit bulk writing."""
@@ -2807,9 +2963,15 @@ class ZimmWriterController:
         csv_path: str = None,
         site_config: Dict = None,
         profile_name: str = None,
+        ai_model_override: str = None,
         wait: bool = False,
     ) -> bool:
-        """Run a complete bulk generation job end-to-end."""
+        """Run a complete bulk generation job end-to-end.
+
+        If ai_model_override is provided, the AI Model dropdown is changed
+        after loading the profile and the profile is updated to persist the
+        new model for future runs.
+        """
         self.ensure_connected()
         self.bring_to_front()
         time.sleep(0.5)
@@ -2825,12 +2987,37 @@ class ZimmWriterController:
                 time.sleep(2)
                 self.connect()
                 self.open_bulk_writer()
-            time.sleep(1)
+
+            # Verify we actually landed on Bulk Writer
+            for retry in range(5):
+                title = self.get_window_title()
+                if "Bulk" in title:
+                    break
+                logger.info(f"Retry {retry + 1}: still on '{title}', reconnecting...")
+                time.sleep(3)
+                self.connect()
+            else:
+                logger.error(f"Failed to navigate to Bulk Writer (stuck on '{title}')")
+                return False
 
         # 1. Load profile
         if profile_name:
             self.load_profile(profile_name)
             time.sleep(2)
+
+        # 1b. Override AI model and persist to profile
+        if ai_model_override:
+            try:
+                self.set_dropdown(
+                    auto_id=self.DROPDOWN_IDS["ai_model"][0],
+                    value=ai_model_override,
+                )
+                logger.info(f"AI model set to: {ai_model_override}")
+                if profile_name:
+                    self.update_profile()
+                    logger.info(f"Profile '{profile_name}' updated with new model")
+            except Exception as e:
+                logger.warning(f"Could not override AI model: {e}")
 
         # 2. Apply site config
         if site_config:

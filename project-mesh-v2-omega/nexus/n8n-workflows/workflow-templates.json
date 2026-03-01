@@ -1,0 +1,28 @@
+{
+  "workflows": {
+    "mesh-sync-pipeline": {
+      "name": "Mesh Sync Pipeline",
+      "trigger": "webhook POST /mesh-sync",
+      "flow": "Webhook \u2192 Impact Analysis \u2192 Sync \u2192 Test \u2192 Compile \u2192 Dashboard \u2192 Notify",
+      "description": "Auto-triggered when shared-core systems change"
+    },
+    "daily-health-check": {
+      "name": "Daily Health Check",
+      "trigger": "cron 0 8 * * *",
+      "flow": "Health Check \u2192 Sentinel \u2192 Oracle \u2192 Digest Email",
+      "description": "Morning health digest with alerts"
+    },
+    "knowledge-capture": {
+      "name": "Knowledge Auto-Capture",
+      "trigger": "webhook POST /mesh-knowledge",
+      "flow": "Receive \u2192 Deduplicate \u2192 Score \u2192 Route (auto-add/review/discard)",
+      "description": "Captures discoveries from Claude sessions"
+    },
+    "weekly-forge-scan": {
+      "name": "Weekly Forge Scan",
+      "trigger": "cron 0 9 * * 1",
+      "flow": "Forge Scan \u2192 Drift Report \u2192 Email Summary",
+      "description": "Finds extractable code across projects"
+    }
+  }
+}

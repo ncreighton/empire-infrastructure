@@ -43,9 +43,12 @@ class TestSitePresets:
         assert config.get("serp_scraping") or config.get("deep_research")
         assert config["literary_devices"] == True
 
-    def test_all_sites_use_claude_model(self):
+    def test_all_sites_use_valid_model(self):
+        valid_models = {"Claude-4.5 Haiku (ANT)", "GPT-4.1 Mini (OA)"}
         for domain, config in SITE_PRESETS.items():
-            assert "Claude" in config["ai_model"], f"{domain} not using Claude"
+            assert config["ai_model"] in valid_models, (
+                f"{domain} uses unexpected model: {config['ai_model']}"
+            )
 
 
 class TestArticleTypes:

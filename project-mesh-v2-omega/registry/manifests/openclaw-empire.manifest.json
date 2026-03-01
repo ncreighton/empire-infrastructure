@@ -1,0 +1,54 @@
+{
+  "schema_version": "3.0.0",
+  "project": {
+    "name": "OpenClaw Empire",
+    "slug": "openclaw-empire",
+    "category": "content-tools",
+    "description": "LinkedIn + Substack automation, ADB-driven engagement",
+    "priority": "high",
+    "project_type": "code-project",
+    "active_development": true,
+    "last_human_touch": "2026-02-28",
+    "urls": {
+      "production": "",
+      "substack": null,
+      "etsy": null
+    },
+    "tech_stack": {
+      "language": "Python",
+      "framework": "CLI"
+    },
+    "port": null,
+    "path": "openclaw-empire",
+    "revenue_streams": []
+  },
+  "provides": {
+    "systems": [],
+    "discoveries": []
+  },
+  "consumes": {
+    "shared-core": [
+      {
+        "system": "api-retry",
+        "version": "1.0.0",
+        "criticality": "high",
+        "usage_frequency": "hourly"
+      }
+    ],
+    "from-projects": []
+  },
+  "context": {
+    "conditionals": [],
+    "context_budget_override": null
+  },
+  "health": {
+    "sync_health_pct": 100,
+    "compliance_score": 100,
+    "staleness_days": 0
+  },
+  "automation": {
+    "auto_sync": true,
+    "sync_schedule": "on-change",
+    "auto_compile": true
+  }
+}

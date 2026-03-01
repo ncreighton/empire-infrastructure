@@ -1,0 +1,170 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: #0f1117;
+    color: #e0e0e0;
+    min-height: 100vh;
+}
+
+header {
+    background: linear-gradient(135deg, #1a1d28 0%, #2d1f4e 100%);
+    padding: 20px 30px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid #7c3aed;
+}
+
+header h1 { font-size: 1.4rem; color: #a78bfa; }
+
+#status-badge {
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+#status-badge.healthy { background: #065f46; color: #6ee7b7; }
+#status-badge.unhealthy { background: #7f1d1d; color: #fca5a5; }
+#status-badge.degraded { background: #78350f; color: #fcd34d; }
+
+main { padding: 20px 30px; max-width: 1400px; margin: 0 auto; }
+
+.panel {
+    background: #1a1d28;
+    border: 1px solid #2d3148;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.panel h2 {
+    font-size: 1.1rem;
+    color: #a78bfa;
+    margin-bottom: 15px;
+    border-bottom: 1px solid #2d3148;
+    padding-bottom: 8px;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+}
+
+.card {
+    background: #252838;
+    border: 1px solid #3d4260;
+    border-radius: 8px;
+    padding: 14px;
+    transition: border-color 0.2s;
+}
+.card:hover { border-color: #7c3aed; }
+.card .name { font-weight: 600; font-size: 0.95rem; margin-bottom: 4px; }
+.card .meta { font-size: 0.78rem; color: #9ca3af; }
+.card .status { font-size: 0.78rem; font-weight: 600; }
+.card .status.healthy { color: #6ee7b7; }
+.card .status.down { color: #fca5a5; }
+.card .status.degraded { color: #fcd34d; }
+
+.card.priority-critical { border-left: 3px solid #ef4444; }
+.card.priority-high { border-left: 3px solid #f59e0b; }
+.card.priority-normal { border-left: 3px solid #6b7280; }
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 10px;
+}
+.stat {
+    background: #252838;
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+}
+.stat .value { font-size: 1.8rem; font-weight: 700; color: #a78bfa; }
+.stat .label { font-size: 0.75rem; color: #9ca3af; margin-top: 4px; }
+
+.actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.actions button, .search-box button {
+    padding: 8px 20px;
+    border: 1px solid #7c3aed;
+    background: transparent;
+    color: #a78bfa;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+}
+.actions button:hover, .search-box button:hover {
+    background: #7c3aed;
+    color: #fff;
+}
+
+.search-box {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+.search-box input {
+    flex: 1;
+    padding: 8px 14px;
+    background: #252838;
+    border: 1px solid #3d4260;
+    border-radius: 6px;
+    color: #e0e0e0;
+    font-size: 0.9rem;
+}
+.search-box input:focus { outline: none; border-color: #7c3aed; }
+
+#search-results .result {
+    padding: 10px;
+    border-bottom: 1px solid #2d3148;
+    font-size: 0.85rem;
+}
+#search-results .result .type {
+    display: inline-block;
+    padding: 2px 8px;
+    background: #3d4260;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    margin-right: 8px;
+    color: #a78bfa;
+}
+
+.filter-bar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.filter {
+    padding: 4px 12px;
+    border: 1px solid #3d4260;
+    background: transparent;
+    color: #9ca3af;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+.filter.active { background: #7c3aed; color: #fff; border-color: #7c3aed; }
+
+#events-feed .event {
+    padding: 8px 0;
+    border-bottom: 1px solid #2d3148;
+    font-size: 0.82rem;
+    display: flex;
+    gap: 10px;
+}
+.event .time { color: #6b7280; min-width: 150px; }
+.event .type-badge {
+    padding: 1px 8px;
+    background: #3d4260;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    color: #a78bfa;
+}
+
+footer {
+    padding: 15px 30px;
+    text-align: center;
+    color: #6b7280;
+    font-size: 0.8rem;
+    display: flex;
+    justify-content: space-between;
+}

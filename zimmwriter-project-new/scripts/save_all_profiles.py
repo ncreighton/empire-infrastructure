@@ -581,7 +581,11 @@ def update_profile_for_site(zw: ZimmWriterController, domain: str, preset: dict,
             sm_cfg = preset.get("style_mimic_settings")
             if sm_cfg:
                 try:
-                    zw.configure_style_mimic(style_text=sm_cfg.get("style_text"))
+                    zw.configure_style_mimic(
+                        style_text=sm_cfg.get("style_text"),
+                        mimic_name=sm_cfg.get("mimic_name", domain),
+                        generate=True,
+                    )
                     screenshot(domain, "07_style_mimic_ok")
                     time.sleep(0.5)
                 except Exception as e:

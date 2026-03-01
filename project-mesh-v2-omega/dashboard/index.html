@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Mesh v3.0 ULTIMATE</title>
+    <link rel="stylesheet" href="/static/dashboard.css">
+</head>
+<body>
+    <header>
+        <h1>Project Mesh v3.0 ULTIMATE</h1>
+        <div id="status-badge">Loading...</div>
+    </header>
+
+    <main>
+        <!-- Service Health Grid -->
+        <section class="panel">
+            <h2>Service Health</h2>
+            <div id="services-grid" class="grid"></div>
+        </section>
+
+        <!-- Quick Actions -->
+        <section class="panel">
+            <h2>Quick Actions</h2>
+            <div class="actions">
+                <button onclick="triggerAction('sync')">Sync All</button>
+                <button onclick="triggerAction('compile')">Compile CLAUDE.md</button>
+                <button onclick="triggerAction('scan')">Scan Code</button>
+            </div>
+        </section>
+
+        <!-- Knowledge Graph Stats -->
+        <section class="panel">
+            <h2>Knowledge Graph</h2>
+            <div id="graph-stats" class="stats-grid"></div>
+        </section>
+
+        <!-- Search -->
+        <section class="panel">
+            <h2>Search Empire</h2>
+            <div class="search-box">
+                <input type="text" id="search-input" placeholder="Search functions, classes, endpoints, knowledge..." onkeydown="if(event.key==='Enter')doSearch()">
+                <button onclick="doSearch()">Search</button>
+            </div>
+            <div id="search-results"></div>
+        </section>
+
+        <!-- Projects -->
+        <section class="panel">
+            <h2>Projects <span id="project-count"></span></h2>
+            <div class="filter-bar">
+                <button class="filter active" data-filter="all" onclick="filterProjects('all', this)">All</button>
+                <button class="filter" data-filter="wordpress" onclick="filterProjects('wordpress', this)">WordPress</button>
+                <button class="filter" data-filter="intelligence-systems" onclick="filterProjects('intelligence-systems', this)">Intelligence</button>
+                <button class="filter" data-filter="infrastructure" onclick="filterProjects('infrastructure', this)">Infrastructure</button>
+                <button class="filter" data-filter="content-tools" onclick="filterProjects('content-tools', this)">Content</button>
+                <button class="filter" data-filter="ecommerce" onclick="filterProjects('ecommerce', this)">E-commerce</button>
+            </div>
+            <div id="projects-grid" class="grid"></div>
+        </section>
+
+        <!-- Recent Events -->
+        <section class="panel">
+            <h2>Recent Events</h2>
+            <div id="events-feed"></div>
+        </section>
+    </main>
+
+    <footer>
+        <span>Project Mesh v3.0 ULTIMATE</span>
+        <span id="last-refresh">Last refresh: never</span>
+    </footer>
+
+    <script src="/static/dashboard.js"></script>
+</body>
+</html>

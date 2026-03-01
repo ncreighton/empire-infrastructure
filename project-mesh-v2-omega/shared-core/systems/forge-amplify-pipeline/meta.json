@@ -1,0 +1,12 @@
+{
+  "name": "forge-amplify-pipeline",
+  "description": "Shared forge amplify pipeline system",
+  "version": "1.0.0",
+  "status": "production",
+  "owner": "Nick Creighton",
+  "created_date": "2026-02-28",
+  "maturity_score": 7.0,
+  "documentation_quality": "medium",
+  "test_coverage": "low",
+  "tags": []
+}

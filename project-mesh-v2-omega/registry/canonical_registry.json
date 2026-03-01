@@ -1,0 +1,99 @@
+{
+  "version": "1.0.0",
+  "updated_at": "2026-02-28",
+  "description": "Declares THE canonical implementation for every common capability",
+  "capabilities": {
+    "image_generation": {
+      "canonical_project": "_root",
+      "canonical_path": "D:/Claude Code Projects/enhanced_image_gen.py",
+      "version": "2.0.0",
+      "consumers": ["witchcraft-for-beginners", "mythical-archives", "smart-home-wizards", "ai-in-action-hub", "ai-discovery-digest", "wealth-from-ai", "family-flourish", "bullet-journals"],
+      "alternatives_deprecated": ["simple_image_gen.py"],
+      "description": "Branded image generation with site-specific patterns and colors"
+    },
+    "image_pipeline": {
+      "canonical_project": "_root",
+      "canonical_path": "D:/Claude Code Projects/article_images_pipeline.py",
+      "version": "1.0.0",
+      "consumers": ["witchcraft-for-beginners", "mythical-archives", "smart-home-wizards"],
+      "description": "Generate + upload + set featured image pipeline"
+    },
+    "tts_generation": {
+      "canonical_project": "videoforge-engine",
+      "canonical_path": "videoforge-engine/assembly/audio_engine.py",
+      "version": "1.5.0",
+      "consumers": ["videoforge-engine", "3d-print-forge"],
+      "description": "ElevenLabs TTS with 16 niche voice profiles"
+    },
+    "video_rendering": {
+      "canonical_project": "videoforge-engine",
+      "canonical_path": "videoforge-engine/assembly/render_engine.py",
+      "version": "2.0.0",
+      "consumers": ["videoforge-engine"],
+      "description": "Creatomate composition-based video rendering"
+    },
+    "forge_amplify_pattern": {
+      "canonical_project": "project-mesh-v2-omega",
+      "canonical_path": "project-mesh-v2-omega/shared-core/systems/forge-amplify-pipeline/src/pipeline.py",
+      "version": "1.0.0",
+      "consumers": ["grimoire-intelligence", "videoforge-engine", "velvetveil-printables"],
+      "description": "FORGE+AMPLIFY pipeline base classes and runner"
+    },
+    "api_retry": {
+      "canonical_project": "project-mesh-v2-omega",
+      "canonical_path": "project-mesh-v2-omega/shared-core/systems/api-retry/src/retry.py",
+      "version": "1.0.0",
+      "consumers": ["*"],
+      "description": "Retry with exponential backoff for all API calls"
+    },
+    "wordpress_api": {
+      "canonical_project": "_root",
+      "canonical_path": "D:/Claude Code Projects/wordpress_sync.py",
+      "version": "1.0.0",
+      "consumers": ["witchcraft-for-beginners", "mythical-archives", "smart-home-wizards"],
+      "description": "WordPress REST API wrapper — post CRUD, media upload"
+    },
+    "seo_toolkit": {
+      "canonical_project": "_root",
+      "canonical_path": "D:/Claude Code Projects/scripts/gsc_bing_checkup.py",
+      "version": "1.0.0",
+      "consumers": ["witchcraft-for-beginners", "mythical-archives"],
+      "description": "GSC + Bing Webmaster API, keyword analysis"
+    },
+    "brand_config": {
+      "canonical_project": "_root",
+      "canonical_path": "D:/Claude Code Projects/config/sites.json",
+      "version": "1.0.0",
+      "consumers": ["*"],
+      "description": "Centralized site branding, colors, credentials"
+    },
+    "sqlite_codex": {
+      "canonical_project": "project-mesh-v2-omega",
+      "canonical_path": "project-mesh-v2-omega/shared-core/systems/sqlite-codex/src/codex.py",
+      "version": "1.0.0",
+      "consumers": ["grimoire-intelligence", "videoforge-engine", "velvetveil-printables"],
+      "description": "Base SQLite knowledge engine with CRUD and search"
+    },
+    "openrouter_llm": {
+      "canonical_project": "project-mesh-v2-omega",
+      "canonical_path": "project-mesh-v2-omega/shared-core/systems/openrouter-llm/src/router.py",
+      "version": "1.0.0",
+      "consumers": ["videoforge-engine"],
+      "description": "Multi-model LLM routing via OpenRouter"
+    },
+    "fal_image_gen": {
+      "canonical_project": "project-mesh-v2-omega",
+      "canonical_path": "project-mesh-v2-omega/shared-core/systems/fal-image-gen/src/image_gen.py",
+      "version": "1.0.0",
+      "consumers": ["videoforge-engine"],
+      "description": "FAL.ai image generation wrapper"
+    },
+    "fastapi_scaffold": {
+      "canonical_project": "project-mesh-v2-omega",
+      "canonical_path": "project-mesh-v2-omega/shared-core/systems/fastapi-service/src/scaffold.py",
+      "version": "1.0.0",
+      "consumers": ["grimoire-intelligence", "videoforge-engine", "empire-dashboard", "bmc-witchcraft"],
+      "description": "Standard FastAPI app with health endpoint, CORS, timing middleware"
+    }
+  }
+}

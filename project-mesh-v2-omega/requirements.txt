@@ -1,0 +1,7 @@
+# Project Mesh v3.0 ULTIMATE — Dependencies
+watchdog>=3.0.0        # File system monitoring (daemon)
+fastapi>=0.104.0       # Dashboard API
+uvicorn>=0.24.0        # ASGI server
+jinja2>=3.1.0          # Template rendering
+websockets>=12.0       # Real-time dashboard
+requests>=2.31.0       # HTTP client (service monitor)

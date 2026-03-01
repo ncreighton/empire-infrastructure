@@ -1,0 +1,97 @@
+{
+  "schema_version": "3.0.0",
+  "project": {
+    "name": "Witchcraft for Beginners",
+    "slug": "witchcraft-for-beginners",
+    "category": "witchcraft-sites",
+    "description": "Flagship witchcraft & spirituality site",
+    "priority": "critical",
+    "project_type": "wordpress",
+    "active_development": true,
+    "last_human_touch": "2026-02-28",
+    "urls": {
+      "production": "https://witchcraftforbeginners.com",
+      "substack": "https://witchcraftb.substack.com/",
+      "etsy": "etsy-shop-url"
+    },
+    "tech_stack": {
+      "cms": "WordPress",
+      "theme": "Blocksy",
+      "hosting": "Hostinger",
+      "cdn": "LiteSpeed",
+      "analytics": "RankMath"
+    },
+    "port": null,
+    "path": "witchcraftforbeginners",
+    "revenue_streams": [
+      "affiliate",
+      "digital-products",
+      "substack",
+      "etsy-pod"
+    ]
+  },
+  "provides": {
+    "systems": [],
+    "discoveries": []
+  },
+  "consumes": {
+    "shared-core": [
+      {
+        "system": "content-pipeline",
+        "version": "1.0.0",
+        "criticality": "critical",
+        "usage_frequency": "daily"
+      },
+      {
+        "system": "image-optimization",
+        "version": "1.0.0",
+        "criticality": "high",
+        "usage_frequency": "daily"
+      },
+      {
+        "system": "seo-toolkit",
+        "version": "1.0.0",
+        "criticality": "critical",
+        "usage_frequency": "daily"
+      },
+      {
+        "system": "api-retry",
+        "version": "1.0.0",
+        "criticality": "high",
+        "usage_frequency": "hourly"
+      },
+      {
+        "system": "wordpress-automation",
+        "version": "1.0.0",
+        "criticality": "high",
+        "usage_frequency": "daily"
+      },
+      {
+        "system": "affiliate-link-manager",
+        "version": "1.0.0",
+        "criticality": "high",
+        "usage_frequency": "weekly"
+      }
+    ],
+    "from-projects": []
+  },
+  "context": {
+    "conditionals": [
+      "is-wordpress",
+      "has-substack",
+      "has-etsy",
+      "is-revenue-critical"
+    ],
+    "context_budget_override": null
+  },
+  "health": {
+    "sync_health_pct": 100,
+    "compliance_score": 100,
+    "staleness_days": 0
+  },
+  "automation": {
+    "auto_sync": true,
+    "sync_schedule": "on-change",
+    "auto_compile": true
+  }
+}

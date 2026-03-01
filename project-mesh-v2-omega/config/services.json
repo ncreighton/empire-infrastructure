@@ -1,0 +1,60 @@
+{
+  "services": {
+    "screenpipe": {
+      "name": "Screenpipe",
+      "port": 3030,
+      "health_path": "/health",
+      "description": "OCR + audio capture",
+      "category": "infrastructure",
+      "auto_start": true
+    },
+    "dashboard": {
+      "name": "Empire Dashboard",
+      "port": 8000,
+      "health_path": "/api/health/services",
+      "description": "Central monitoring hub",
+      "category": "infrastructure",
+      "auto_start": true
+    },
+    "vision": {
+      "name": "Vision Service",
+      "port": 8002,
+      "health_path": "/health",
+      "description": "Anthropic Haiku vision analysis",
+      "category": "infrastructure",
+      "auto_start": true
+    },
+    "grimoire": {
+      "name": "Grimoire API",
+      "port": 8080,
+      "health_path": "/health",
+      "description": "Witchcraft practice companion",
+      "category": "intelligence",
+      "auto_start": true
+    },
+    "videoforge": {
+      "name": "VideoForge API",
+      "port": 8090,
+      "health_path": "/health",
+      "description": "Video creation pipeline",
+      "category": "intelligence",
+      "auto_start": true
+    },
+    "bmc": {
+      "name": "BMC Webhook",
+      "port": 8095,
+      "health_path": "/health",
+      "description": "Buy Me a Coffee webhook handler",
+      "category": "monetization",
+      "auto_start": true
+    },
+    "mesh-dashboard": {
+      "name": "Mesh Dashboard",
+      "port": 8100,
+      "health_path": "/api/status",
+      "description": "Project Mesh v3.0 dashboard",
+      "category": "mesh",
+      "auto_start": false
+    }
+  }
+}

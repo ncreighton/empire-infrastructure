@@ -1,0 +1,53 @@
+{
+  "version": "1.0.0",
+  "patterns": [
+    {
+      "name": "hardcoded-webhook-url",
+      "regex": "https?://[\\\\w.-]+/webhook/[a-f0-9-]+",
+      "severity": "high",
+      "description": "Hardcoded webhook URLs should use config values",
+      "replacement": "Use config.get('webhooks.{name}') or environment variable",
+      "auto_fixable": false
+    },
+    {
+      "name": "hardcoded-api-key",
+      "regex": "(?:api[_-]?key|apikey|secret|token)\\\\s*[:=]\\\\s*['\"][a-zA-Z0-9_-]{20,}['\"]",
+      "severity": "high",
+      "description": "API keys must never be hardcoded",
+      "replacement": "Use environment variables or secure config",
+      "auto_fixable": false
+    },
+    {
+      "name": "zimm-reference",
+      "regex": "zimm(?:writer)?[_-]?(?:pipeline|factory|api)",
+      "severity": "medium",
+      "description": "ZimmWriter is deprecated",
+      "replacement": "Use n8n content pipeline or direct Claude API",
+      "auto_fixable": false
+    },
+    {
+      "name": "raw-fetch-no-retry",
+      "regex": "(?:fetch|axios\\\\.get|axios\\\\.post)\\\\([^)]+\\\\)(?!.*retry)",
+      "severity": "medium",
+      "description": "API calls should use retry wrapper",
+      "replacement": "Use shared-core/api-retry system",
+      "auto_fixable": false
+    },
+    {
+      "name": "console-log-debug",
+      "regex": "console\\\\.log\\\\(['\"]debug",
+      "severity": "low",
+      "description": "Debug console.log should be removed",
+      "replacement": "Remove or use proper logging",
+      "auto_fixable": true
+    },
+    {
+      "name": "wrong-substack-url",
+      "regex": "witchcraftforbeginners\\\\.substack",
+      "severity": "high",
+      "description": "Wrong Substack URL",
+      "replacement": "Use witchcraftb.substack.com",
+      "auto_fixable": true
+    }
+  ]
+}

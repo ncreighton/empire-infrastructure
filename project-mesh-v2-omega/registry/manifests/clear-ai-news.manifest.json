@@ -1,0 +1,91 @@
+{
+  "schema_version": "3.0.0",
+  "project": {
+    "name": "Clear AI News",
+    "slug": "clear-ai-news",
+    "category": "ai-sites",
+    "description": "Clear, concise AI news and analysis",
+    "priority": "normal",
+    "project_type": "wordpress",
+    "active_development": true,
+    "last_human_touch": "2026-02-28",
+    "urls": {
+      "production": "https://clearainews.com",
+      "substack": null,
+      "etsy": null
+    },
+    "tech_stack": {
+      "cms": "WordPress",
+      "theme": "Blocksy",
+      "hosting": "Hostinger",
+      "cdn": "LiteSpeed",
+      "analytics": "RankMath"
+    },
+    "port": null,
+    "path": "clearainews",
+    "revenue_streams": [
+      "affiliate"
+    ]
+  },
+  "provides": {
+    "systems": [],
+    "discoveries": []
+  },
+  "consumes": {
+    "shared-core": [
+      {
+        "system": "content-pipeline",
+        "version": "1.0.0",
+        "criticality": "critical",
+        "usage_frequency": "daily"
+      },
+      {
+        "system": "image-optimization",
+        "version": "1.0.0",
+        "criticality": "high",
+        "usage_frequency": "daily"
+      },
+      {
+        "system": "seo-toolkit",
+        "version": "1.0.0",
+        "criticality": "critical",
+        "usage_frequency": "daily"
+      },
+      {
+        "system": "api-retry",
+        "version": "1.0.0",
+        "criticality": "high",
+        "usage_frequency": "hourly"
+      },
+      {
+        "system": "wordpress-automation",
+        "version": "1.0.0",
+        "criticality": "high",
+        "usage_frequency": "daily"
+      },
+      {
+        "system": "affiliate-link-manager",
+        "version": "1.0.0",
+        "criticality": "high",
+        "usage_frequency": "weekly"
+      }
+    ],
+    "from-projects": []
+  },
+  "context": {
+    "conditionals": [
+      "is-wordpress"
+    ],
+    "context_budget_override": null
+  },
+  "health": {
+    "sync_health_pct": 100,
+    "compliance_score": 100,
+    "staleness_days": 0
+  },
+  "automation": {
+    "auto_sync": true,
+    "sync_schedule": "on-change",
+    "auto_compile": true
+  }
+}
