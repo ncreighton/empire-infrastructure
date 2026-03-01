@@ -1,0 +1,27 @@
+# Runtime daemon files
+.mesh-daemon.pid
+.mesh-daemon-status.json
+daemon.log
+daemon_error.log
+daemon_combined.log
+
+# SQLite runtime files (DB itself is tracked)
+knowledge/empire_graph.db-shm
+knowledge/empire_graph.db-wal
+knowledge/empire_graph.db-journal
+
+# Event logs
+events/
+
+# Reports & sync logs
+sync/sync-log.json
+testing/latest-report.json
+sentinel/latest-report.json
+knowledge-base/knowledge-index.json
+
+# Claude Code local settings
+.claude/
+
+# Install artifacts
+INSTALL.bat
+INSTALL.md
