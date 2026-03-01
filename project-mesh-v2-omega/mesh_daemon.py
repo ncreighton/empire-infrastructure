@@ -404,10 +404,11 @@ class ActionExecutor:
     
     def _run_mesh_command(self, cmd: list) -> str:
         try:
-            result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=120,
-                cwd=str(self.hub)
-            )
+            kwargs = dict(capture_output=True, text=True, timeout=120,
+                          cwd=str(self.hub))
+            if sys.platform == "win32":
+                kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+            result = subprocess.run(cmd, **kwargs)
             if result.returncode != 0 and result.stderr:
                 log.error(f"Command failed: {' '.join(cmd[:3])}...\n{result.stderr[:200]}")
             return result.stdout
@@ -431,7 +432,8 @@ class ActionExecutor:
                     f'$n.Visible = $true; '
                     f'$n.ShowBalloonTip(5000, "{title}", "{message}", "Warning"); '
                     f'Start-Sleep -Seconds 6; $n.Dispose()'
-                ], capture_output=True, timeout=10)
+                ], capture_output=True, timeout=10,
+                   creationflags=subprocess.CREATE_NO_WINDOW)
         except:
             pass  # Notifications are nice-to-have, not critical
     
@@ -773,7 +775,8 @@ def stop_daemon():
     print(f" Stopping daemon (PID {pid})...")
     
     if sys.platform == "win32":
-        subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True)
+        subprocess.run(["taskkill", "/PID", str(pid), "/F"],
+                       capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
     else:
         os.kill(pid, signal.SIGTERM)
     
@@ -924,7 +927,10 @@ def main():
         # Install watchdog if missing
         if not HAS_WATCHDOG:
             print("[PKG] Installing watchdog for real-time file watching...")
-            subprocess.run([sys.executable, "-m", "pip", "install", "watchdog", "-q"])
+            pip_kw = {}
+            if sys.platform == "win32":
+                pip_kw["creationflags"] = subprocess.CREATE_NO_WINDOW
+            subprocess.run([sys.executable, "-m", "pip", "install", "watchdog", "-q"], **pip_kw)
             print("   [OK] Installed. Restart the daemon for real-time mode.")
             print("   (Continuing with polling mode for now...)\n")
         

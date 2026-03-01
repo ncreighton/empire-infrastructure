@@ -28,8 +28,11 @@ import hashlib
 import argparse
 from pathlib import Path
 from datetime import datetime
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Set
 from collections import defaultdict
+
+# Ensure project root is on path for knowledge graph imports
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 
 DEFAULT_HUB_PATH = r"D:\Claude Code Projects\project-mesh-v2-omega"
@@ -38,8 +41,10 @@ DEFAULT_HUB_PATH = r"D:\Claude Code Projects\project-mesh-v2-omega"
 SCAN_EXTENSIONS = {".js", ".ts", ".py", ".php", ".jsx", ".tsx", ".mjs", ".cjs"}
 
 # Directories to skip
-SKIP_DIRS = {"node_modules", ".git", ".next", "dist", "build", "__pycache__", 
-             ".project-mesh", "vendor", ".cache"}
+SKIP_DIRS = {"node_modules", ".git", ".next", "dist", "build", "__pycache__",
+             ".project-mesh", "vendor", ".cache", ".venv", "venv", ".venv-vision",
+             "env", ".env", "site-packages", ".tox", ".mypy_cache", ".pytest_cache",
+             "coverage", ".coverage", "htmlcov", "eggs", ".eggs"}
 
 # Minimum lines for a function/class to be considered extractable
 MIN_EXTRACTABLE_LINES = 20
@@ -52,35 +57,38 @@ SIMILARITY_THRESHOLD = 0.55
 # CODE SCANNING
 # ============================================================================
 
-def scan_project_files(project_path: Path) -> List[Dict]:
+def scan_project_files(project_path: Path, max_files: int = 500) -> List[Dict]:
     """Scan a project for code files and extract function/class signatures."""
     findings = []
-    
+    file_count = 0
+
     for root, dirs, files in os.walk(project_path):
         # Skip ignored directories
         dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
-        
+
         for fname in files:
+            if file_count >= max_files:
+                return findings
             ext = Path(fname).suffix
             if ext not in SCAN_EXTENSIONS:
                 continue
-            
+
             fpath = Path(root) / fname
             try:
                 content = fpath.read_text(encoding="utf-8", errors="ignore")
             except Exception:
                 continue
-            
-            lines = content.split("\n")
+            file_count += 1
+
             rel_path = fpath.relative_to(project_path)
-            
+
             # Extract functions and classes
             blocks = extract_code_blocks(content, ext, str(rel_path))
             for block in blocks:
                 block["file"] = str(rel_path)
                 block["project"] = project_path.name
                 findings.append(block)
-    
+
     return findings
 
 
@@ -306,11 +314,13 @@ def detect_drift(hub_path: Path, all_blocks: List[Dict]) -> List[Dict]:
                     block["system"] = sys_dir.name
                     core_blocks.append(block)
     
-    for util_dir in (shared_core / "utilities").iterdir():
-        if util_dir.is_dir():
-            for block in scan_project_files(util_dir):
-                block["system"] = util_dir.name
-                core_blocks.append(block)
+    utilities_dir = shared_core / "utilities"
+    if utilities_dir.exists():
+        for util_dir in utilities_dir.iterdir():
+            if util_dir.is_dir():
+                for block in scan_project_files(util_dir):
+                    block["system"] = util_dir.name
+                    core_blocks.append(block)
     
     # Compare satellite blocks against core blocks
     for project_block in all_blocks:
@@ -503,52 +513,293 @@ def scaffold_system(hub_path: Path, name: str, sys_type: str = "system"):
 
 
 # ============================================================================
+# CROSS-PROJECT DEPENDENCY DETECTION
+# ============================================================================
+
+def detect_cross_project_imports(hub_path: Path, project_dirs: List[Tuple[str, Path]],
+                                  manifest_data: Dict[str, Dict]) -> List[Dict]:
+    """Scan project files for imports/references to other empire projects.
+
+    Detects:
+      - Python import statements referencing other project directory names
+      - Config files referencing other project paths or slugs
+      - Shared-core system consumption declared in manifests
+    """
+    # Build lookup: directory name -> manifest slug (e.g. "aidiscoverydigest" -> "ai-discovery-digest")
+    dir_to_slug: Dict[str, str] = {}
+    slug_to_dir: Dict[str, str] = {}
+    for slug, mdata in manifest_data.items():
+        dir_name = mdata.get("project", {}).get("path", slug)
+        dir_to_slug[dir_name] = slug
+        slug_to_dir[slug] = dir_name
+
+    # All known identifiers (directory names and slugs) for matching
+    all_project_ids: Set[str] = set(dir_to_slug.keys()) | set(slug_to_dir.keys())
+
+    dependencies: List[Dict] = []
+    seen_pairs: Set[Tuple[str, str, str]] = set()
+
+    # Pre-build self-id sets per project for fast lookup
+    MAX_FILES_PER_PROJECT = 500  # Safety limit to avoid scanning huge repos forever
+
+    for proj_slug, proj_path in project_dirs:
+        proj_dir_name = slug_to_dir.get(proj_slug, proj_slug)
+        # IDs that reference this project (skip self-references)
+        self_ids = {proj_slug, proj_dir_name}
+
+        # --- 1. Scan Python/JS/TS/config files for import references ---
+        file_count = 0
+        for root, dirs, files in os.walk(proj_path):
+            dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
+            for fname in files:
+                if file_count >= MAX_FILES_PER_PROJECT:
+                    break
+                ext = Path(fname).suffix
+                if ext not in SCAN_EXTENSIONS and ext not in (".json", ".yaml", ".yml", ".toml", ".cfg", ".ini", ".env"):
+                    continue
+                fpath = Path(root) / fname
+                try:
+                    content = fpath.read_text(encoding="utf-8", errors="ignore")
+                except Exception:
+                    continue
+                file_count += 1
+
+                # Fast pre-filter: find which project IDs appear in this file at all
+                # (plain substring check is much faster than per-ID regex)
+                candidate_ids = [pid for pid in all_project_ids
+                                 if pid not in self_ids and pid in content]
+                if not candidate_ids:
+                    continue
+
+                is_config = ext in (".json", ".yaml", ".yml", ".toml", ".cfg", ".ini", ".env")
+                rel_file = str(fpath.relative_to(proj_path))
+
+                for other_id in candidate_ids:
+                    other_slug = dir_to_slug.get(other_id, other_id)
+                    if other_slug == proj_slug:
+                        continue
+
+                    pair_key = (proj_slug, other_slug, "imports")
+                    if pair_key in seen_pairs:
+                        continue
+
+                    # Verify with proper regex (the substring check was just a fast filter)
+                    patterns = [
+                        rf"\bfrom\s+{re.escape(other_id)}\b",
+                        rf"\bimport\s+{re.escape(other_id)}\b",
+                        rf"require\(['\"].*{re.escape(other_id)}",
+                        rf"sys\.path.*{re.escape(other_id)}",
+                    ]
+                    if is_config:
+                        patterns.append(rf"\b{re.escape(other_id)}\b")
+
+                    for pat in patterns:
+                        if re.search(pat, content):
+                            seen_pairs.add(pair_key)
+                            dependencies.append({
+                                "from_project": proj_slug,
+                                "to_project": other_slug,
+                                "type": "imports",
+                                "details": f"Reference in {rel_file}",
+                            })
+                            break
+
+        # --- 2. Shared-core consumption from manifest ---
+        mdata = manifest_data.get(proj_slug, {})
+        consumed_systems = mdata.get("consumes", {}).get("shared-core", [])
+        for sys_entry in consumed_systems:
+            sys_name = sys_entry.get("system", "") if isinstance(sys_entry, dict) else str(sys_entry)
+            if sys_name:
+                pair_key = (proj_slug, "shared-core", f"consumes:{sys_name}")
+                if pair_key not in seen_pairs:
+                    seen_pairs.add(pair_key)
+                    dependencies.append({
+                        "from_project": proj_slug,
+                        "to_project": "shared-core",
+                        "type": "consumes-system",
+                        "details": f"Uses shared-core system: {sys_name}",
+                    })
+
+        # --- 3. Explicit from-projects in manifest ---
+        from_projects = mdata.get("consumes", {}).get("from-projects", [])
+        for dep_entry in from_projects:
+            dep_slug = dep_entry.get("project", "") if isinstance(dep_entry, dict) else str(dep_entry)
+            if dep_slug:
+                pair_key = (proj_slug, dep_slug, "manifest-dep")
+                if pair_key not in seen_pairs:
+                    seen_pairs.add(pair_key)
+                    dependencies.append({
+                        "from_project": proj_slug,
+                        "to_project": dep_slug,
+                        "type": "manifest-dependency",
+                        "details": f"Declared in manifest from-projects",
+                    })
+
+    return dependencies
+
+
+def _populate_graph_db(hub_path: Path, candidates: List[Dict],
+                       cross_deps: List[Dict],
+                       manifest_data: Dict[str, Dict]):
+    """Write extraction-candidate patterns and cross-project dependencies
+    into the knowledge graph SQLite database."""
+    try:
+        from knowledge.graph_engine import KnowledgeGraph
+    except ImportError:
+        print("  [WARN] knowledge.graph_engine not importable -- skipping graph DB population")
+        return
+
+    graph = KnowledgeGraph()
+
+    # --- Upsert patterns from extraction candidates ---
+    pattern_count = 0
+    for c in candidates:
+        name = c["name"]
+        projects_list = json.dumps(c.get("projects_affected", []))
+        # Pick the first project as canonical source
+        canonical = c["projects_affected"][0] if c.get("projects_affected") else ""
+        description = (
+            f"Duplicated code pattern ({c['lines']} lines, "
+            f"{c['similarity']*100:.0f}% similar). "
+            f"Score: {c['score']}. Effort: {c['effort']}. "
+            f"{c.get('recommendation', '')}"
+        )
+        graph.upsert_pattern(
+            name,
+            description=description,
+            canonical_source=canonical,
+            used_by_projects=projects_list,
+        )
+        pattern_count += 1
+
+    print(f"  [GRAPH] Wrote {pattern_count} patterns to knowledge graph")
+
+    # --- Ensure all projects exist in graph DB so we can reference their IDs ---
+    slug_to_id: Dict[str, int] = {}
+    for slug, mdata in manifest_data.items():
+        proj_info = mdata.get("project", {})
+        pid = graph.upsert_project(
+            slug,
+            name=proj_info.get("name", slug),
+            category=proj_info.get("category", ""),
+            path=proj_info.get("path", slug),
+            active=1 if proj_info.get("active_development", True) else 0,
+            port=proj_info.get("port") or 0,
+            project_type=proj_info.get("project_type", ""),
+            description=proj_info.get("description", ""),
+        )
+        slug_to_id[slug] = pid
+
+    # Also ensure a pseudo-project for shared-core exists
+    if "shared-core" not in slug_to_id:
+        slug_to_id["shared-core"] = graph.upsert_project(
+            "shared-core",
+            name="Shared Core",
+            category="infrastructure",
+            path="project-mesh-v2-omega/shared-core",
+            project_type="shared-library",
+            description="Shared code systems consumed by all empire projects",
+        )
+
+    # --- Write cross-project dependencies ---
+    dep_count = 0
+    for dep in cross_deps:
+        from_slug = dep["from_project"]
+        to_slug = dep["to_project"]
+        from_id = slug_to_id.get(from_slug)
+        to_id = slug_to_id.get(to_slug)
+        if from_id and to_id:
+            graph.add_dependency(
+                from_project_id=from_id,
+                to_project_id=to_id,
+                dependency_type=dep["type"],
+                details=dep["details"],
+            )
+            dep_count += 1
+
+    print(f"  [GRAPH] Wrote {dep_count} dependencies to knowledge graph")
+
+    # Print summary stats
+    stats = graph.stats()
+    print(f"  [GRAPH] DB totals -- patterns: {stats.get('patterns', 0)}, "
+          f"dependencies: {stats.get('dependencies', 0)}, "
+          f"projects: {stats.get('projects', 0)}")
+
+
+# ============================================================================
 # REPORT GENERATION
 # ============================================================================
 
 def generate_scan_report(hub_path: Path, project_filter: Optional[str] = None):
-    """Full forge scan with extraction candidates, drift, and duplicates."""
-    
+    """Full forge scan with extraction candidates, drift, and duplicates.
+
+    Also populates the knowledge graph patterns and dependencies tables.
+    """
+
     projects_root = hub_path.parent
-    print(" FORGE SCAN   Analyzing empire codebase...\n")
-    
+    print("[FORGE] SCAN -- Analyzing empire codebase...\n")
+
     all_blocks = []
     project_dirs = []
-    
-    # Determine which projects to scan
+    manifest_data: Dict[str, Dict] = {}  # slug -> full manifest dict
+
+    # Determine which projects to scan, using manifest path field for resolution
     manifests_dir = hub_path / "registry" / "manifests"
     if manifests_dir.exists():
         for mf in manifests_dir.glob("*.manifest.json"):
             proj_name = mf.stem.replace(".manifest", "")
             if project_filter and proj_name != project_filter:
                 continue
-            proj_path = projects_root / proj_name
+            try:
+                manifest = json.loads(mf.read_text("utf-8"))
+            except (json.JSONDecodeError, OSError):
+                continue
+            manifest_data[proj_name] = manifest
+            manifest_path = manifest.get("project", {}).get("path", proj_name)
+            proj_path = projects_root / manifest_path
             if proj_path.exists():
                 project_dirs.append((proj_name, proj_path))
-    
+
     # Scan all projects
-    for proj_name, proj_path in project_dirs:
-        print(f"  Scanning: {proj_name}...")
+    for idx, (proj_name, proj_path) in enumerate(project_dirs, 1):
+        print(f"  [{idx}/{len(project_dirs)}] Scanning: {proj_name}...", flush=True)
         blocks = scan_project_files(proj_path)
         all_blocks.extend(blocks)
         print(f"    Found {len(blocks)} extractable code blocks")
-    
+
     print(f"\n  Total blocks scanned: {len(all_blocks)}")
-    
-    # Find duplicates
-    print("\n  [SEARCH] Detecting duplicates...")
-    duplicates = find_duplicates(all_blocks)
+
+    # Find duplicates (cap at 2000 blocks to avoid O(n^2) blowup)
+    DUPE_CAP = 2000
+    if len(all_blocks) > DUPE_CAP:
+        print(f"\n  [SEARCH] Detecting duplicates (sampling {DUPE_CAP}/{len(all_blocks)} blocks)...", flush=True)
+        import random
+        random.seed(42)
+        sampled = random.sample(all_blocks, DUPE_CAP)
+    else:
+        print(f"\n  [SEARCH] Detecting duplicates ({len(all_blocks)} blocks)...", flush=True)
+        sampled = all_blocks
+    duplicates = find_duplicates(sampled)
     print(f"    Found {len(duplicates)} duplicate pairs")
-    
+
     # Detect drift
     print("  [SEARCH] Detecting drift from shared-core...")
     drift = detect_drift(hub_path, all_blocks)
     print(f"    Found {len(drift)} drift instances")
-    
+
     # Score extraction candidates
-    print("  [CHART] Scoring extraction candidates...")
+    print("  [SCORE] Scoring extraction candidates...")
     candidates = score_extraction_candidates(duplicates, all_blocks)
-    
+
+    # Detect cross-project dependencies
+    print("  [DEPS] Detecting cross-project dependencies...")
+    cross_deps = detect_cross_project_imports(hub_path, project_dirs, manifest_data)
+    print(f"    Found {len(cross_deps)} cross-project dependencies")
+
+    # Populate knowledge graph DB with patterns and dependencies
+    print("  [GRAPH] Populating knowledge graph...")
+    _populate_graph_db(hub_path, candidates, cross_deps, manifest_data)
+
     # Generate report
     report = {
         "scan_date": datetime.now().isoformat(),
@@ -556,37 +807,50 @@ def generate_scan_report(hub_path: Path, project_filter: Optional[str] = None):
         "total_blocks": len(all_blocks),
         "duplicate_pairs": len(duplicates),
         "drift_instances": len(drift),
+        "cross_project_dependencies": len(cross_deps),
         "extraction_candidates": candidates[:20],  # Top 20
         "drift_report": drift[:20],
+        "dependency_report": cross_deps[:50],
     }
-    
+
     # Save report
     report_path = hub_path / "forge" / "extraction-candidates.json"
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
-    
+
     # Print summary
     print(f"\n{'='*60}")
     print(f"FORGE SCAN REPORT")
     print(f"{'='*60}")
-    
+
     if candidates:
-        print(f"\n[TROPHY] TOP EXTRACTION CANDIDATES:\n")
+        print(f"\n[TOP] EXTRACTION CANDIDATES:\n")
         for i, c in enumerate(candidates[:10], 1):
             print(f"  [{i}] {c['name']} (score: {c['score']})")
             print(f"      Projects: {', '.join(c['projects_affected'])}")
             print(f"      Lines: ~{c['lines']} | Similarity: {c['similarity']*100:.0f}% | Effort: {c['effort']}")
             print()
-    
+
     if drift:
-        print(f"\n[WARN]  DRIFT DETECTED:\n")
+        print(f"\n[WARN] DRIFT DETECTED:\n")
         for d in drift[:10]:
             print(f"  {d['project']}/{d['file']}:{d['function']}")
             print(f"     Similar to shared-core/{d['shared_core_system']} ({d['similarity']*100:.0f}%)")
             print(f"     Recommendation: {d['recommendation']}")
             print()
-    
-    print(f"[LIST] Full report saved to: {report_path}")
+
+    if cross_deps:
+        print(f"\n[DEPS] CROSS-PROJECT DEPENDENCIES ({len(cross_deps)} total):\n")
+        # Group by from_project for cleaner output
+        by_project: Dict[str, List[Dict]] = defaultdict(list)
+        for dep in cross_deps:
+            by_project[dep["from_project"]].append(dep)
+        for proj_slug in sorted(by_project.keys()):
+            deps = by_project[proj_slug]
+            targets = sorted(set(d["to_project"] for d in deps))
+            print(f"  {proj_slug} -> {', '.join(targets)}")
+
+    print(f"\n[DONE] Full report saved to: {report_path}")
 
 
 # ============================================================================

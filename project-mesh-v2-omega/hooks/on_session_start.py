@@ -81,10 +81,13 @@ def on_session_start(project_path: str = ""):
     if not check_sync_freshness():
         print("[Mesh] Sync is stale (>1h). Triggering fast sync...")
         try:
+            kw = dict(capture_output=True, timeout=30)
+            if sys.platform == "win32":
+                kw["creationflags"] = subprocess.CREATE_NO_WINDOW
             subprocess.run(
                 [sys.executable, str(HUB_PATH / "sync" / "sync_engine_v2.py"),
                  "--sync", "--hub", str(HUB_PATH)],
-                capture_output=True, timeout=30
+                **kw
             )
         except Exception:
             pass

@@ -37,12 +37,45 @@
 
         <!-- Search -->
         <section class="panel">
-            <h2>Search Empire</h2>
+            <h2>&#128269; Search Empire</h2>
             <div class="search-box">
                 <input type="text" id="search-input" placeholder="Search functions, classes, endpoints, knowledge..." onkeydown="if(event.key==='Enter')doSearch()">
                 <button onclick="doSearch()">Search</button>
             </div>
             <div id="search-results"></div>
+        </section>
+
+        <!-- Top APIs -->
+        <section class="panel">
+            <h2>&#9889; Top APIs &amp; Services</h2>
+            <div id="api-stats">
+                <div id="api-usage-grid" class="stats-grid"></div>
+                <div id="api-per-project" class="api-project-list"></div>
+            </div>
+        </section>
+
+        <!-- Knowledge Base -->
+        <section class="panel">
+            <h2>&#128218; Knowledge Base</h2>
+            <div id="knowledge-section">
+                <div id="knowledge-categories" class="kb-categories"></div>
+                <div id="knowledge-entries" class="kb-entries"></div>
+            </div>
+        </section>
+
+        <!-- Detected Patterns -->
+        <section class="panel">
+            <h2>&#129520; Detected Patterns</h2>
+            <div id="patterns-section" class="patterns-list"></div>
+        </section>
+
+        <!-- Dependencies -->
+        <section class="panel">
+            <h2>&#128279; Dependencies</h2>
+            <div id="dependencies-section">
+                <div id="dep-summary" class="dep-summary-grid"></div>
+                <div id="dep-list" class="dep-list"></div>
+            </div>
         </section>
 
         <!-- Projects -->

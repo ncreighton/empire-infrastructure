@@ -1,0 +1,622 @@
+{
+  "scan_date": "2026-03-01T13:39:10.060981",
+  "projects_scanned": 35,
+  "total_blocks": 7336,
+  "duplicate_pairs": 224,
+  "drift_instances": 0,
+  "cross_project_dependencies": 217,
+  "extraction_candidates": [
+    {
+      "name": "generate_component",
+      "score": 453.8,
+      "projects_affected": [
+        "aidiscoverydigest",
+        "aiinactionhub",
+        "bulletjournals",
+        "celebrationseason",
+        "manifestandalign",
+        "pulsegearreviews",
+        "smarthomegearreviews",
+        "wearablegearreviews",
+        "witchcraftforbeginners"
+      ],
+      "projects_count": 9,
+      "lines": 38,
+      "similarity": 1.0,
+      "occurrences": 32,
+      "effort": "low",
+      "recommendation": "Extract to shared-core. Affects 9 projects, 38 lines, 100% similar."
+    },
+    {
+      "name": "V0Generator",
+      "score": 338.8,
+      "projects_affected": [
+        "aidiscoverydigest",
+        "bulletjournals",
+        "celebrationseason",
+        "manifestandalign",
+        "pulsegearreviews",
+        "wearablegearreviews",
+        "witchcraftforbeginners"
+      ],
+      "projects_count": 7,
+      "lines": 38,
+      "similarity": 1.0,
+      "occurrences": 21,
+      "effort": "low",
+      "recommendation": "Extract to shared-core. Affects 7 projects, 38 lines, 100% similar."
+    },
+    {
+      "name": "save_component",
+      "score": 277.0,
+      "projects_affected": [
+        "aidiscoverydigest",
+        "clearainews",
+        "manifestandalign",
+        "mythicalarchives",
+        "smarthomegearreviews",
+        "theconnectedhaven"
+      ],
+      "projects_count": 6,
+      "lines": 20,
+      "similarity": 1.0,
+      "occurrences": 15,
+      "effort": "low",
+      "recommendation": "Extract to shared-core. Affects 6 projects, 20 lines, 100% similar."
+    },
+    {
+      "name": "main",
+      "score": 270.3,
+      "projects_affected": [
+        "VelvetVeilPrintables-ClaudeCode",
+        "family-flourish",
+        "geelark-automation",
+        "manifestandalign",
+        "pulsegearreviews",
+        "wearablegearreviews"
+      ],
+      "projects_count": 6,
+      "lines": 53,
+      "similarity": 1.0,
+      "occurrences": 13,
+      "effort": "low",
+      "recommendation": "Extract to shared-core. Affects 6 projects, 53 lines, 100% similar."
+    },
+    {
+      "name": "generate_site_components",
+      "score": 224.7,
+      "projects_affected": [
+        "aiinactionhub",
+        "celebrationseason",
+        "family-flourish",
+        "mythicalarchives",
+        "witchcraftforbeginners"
+      ],
+      "projects_count": 5,
+      "lines": 47,
+      "similarity": 1.0,
+      "occurrences": 10,
+      "effort": "low",
+      "recommendation": "Extract to shared-core. Affects 5 projects, 47 lines, 100% similar."
+    },
+    {
+      "name": "AiinactionhubAutomation",
+      "score": 197.3,
+      "projects_affected": [
+        "aiinactionhub",
+        "smarthomegearreviews",
+        "smarthomewizards",
+        "theconnectedhaven",
+        "wearablegearreviews"
+      ],
+      "projects_count": 5,
+      "lines": 81,
+      "similarity": 0.96,
+      "occurrences": 4,
+      "effort": "low",
+      "recommendation": "Extract to shared-core. Affects 5 projects, 81 lines, 96% similar."
+    },
+    {
+      "name": "setup_systeme_automation",
+      "score": 184.4,
+      "projects_affected": [
+        "aidiscoverydigest",
+        "aiinactionhub",
+        "clearainews",
+        "mythicalarchives"
+      ],
+      "projects_count": 4,
+      "lines": 144,
+      "similarity": 1.0,
+      "occurrences": 6,
+      "effort": "low",
+      "recommendation": "Extract to shared-core. Affects 4 projects, 144 lines, 100% similar."
+    },
+    {
+      "name": "load_site_prompts",
+      "score": 175.2,
+      "projects_affected": [
+        "aidiscoverydigest",
+        "manifestandalign",
+        "pulsegearreviews",
+        "wearablegearreviews"
+      ],
+      "projects_count": 4,
+      "lines": 52,
+      "similarity": 1.0,
+      "occurrences": 6,
+      "effort": "low",
+      "recommendation": "Extract to shared-core. Affects 4 projects, 52 lines, 100% similar."
+    },
+    {
+      "name": "create_post",
+      "score": 172.0,
+      "projects_affected": [
+        "aiinactionhub",
+        "bulletjournals",
+        "clearainews",
+        "smarthomegearreviews"
+      ],
+      "projects_count": 4,
+      "lines": 20,
+      "similarity": 1.0,
+      "occurrences": 6,
+      "effort": "low",
+      "recommendation": "Extract to shared-core. Affects 4 projects, 20 lines, 100% similar."
+    },
+    {
+      "name": "WearablegearreviewsAutomation",
+      "score": 162.3,
+      "projects_affected": [
+        "smarthomegearreviews",
+        "smarthomewizards",
+        "theconnectedhaven",
+        "wearablegearreviews"
+      ],
+      "projects_count": 4,
+      "lines": 81,
+      "similarity": 0.96,
+      "occurrences": 3,
+      "effort": "low",
+      "recommendation": "Extract to shared-core. Affects 4 projects, 81 lines, 96% similar."
+    },
+    {
+      "name": "_save_json",
+      "score": 157.7,
+      "projects_affected": [
+        "openclaw-empire"
+      ],
+      "projects_count": 1,
+      "lines": 27,
+      "similarity": 1.0,
+      "occurrences": 21,
+      "effort": "low",
+      "recommendation": "Extract to shared-core. Affects 1 projects, 27 lines, 100% similar."
+    },
+    {
+      "name": "SmarthomewizardsAutomation",
+      "score": 127.3,
+      "projects_affected": [
+        "smarthomegearreviews",
+        "smarthomewizards",
+        "theconnectedhaven"
+      ],
+      "projects_count": 3,
+      "lines": 81,
+      "similarity": 0.96,
+      "occurrences": 2,
+      "effort": "low",
+      "recommendation": "Extract to shared-core. Affects 3 projects, 81 lines, 96% similar."
+    },
+    {
+      "name": "generate_pdf",
+      "score": 98.9,
+      "projects_affected": [
+        "VelvetVeilPrintables-ClaudeCode"
+      ],
+      "projects_count": 1,
+      "lines": 39,
+      "similarity": 1.0,
+      "occurrences": 9,
+      "effort": "low",
+      "recommendation": "Extract to shared-core. Affects 1 projects, 39 lines, 100% similar."
+    },
+    {
+      "name": "iter_bundles",
+      "score": 97.5,
+      "projects_affected": [
+        "3d-print-forge"
+      ],
+      "projects_count": 1,
+      "lines": 25,
+      "similarity": 1.0,
+      "occurrences": 9,
+      "effort": "low",
+      "recommendation": "Extract to shared-core. Affects 1 projects, 25 lines, 100% similar."
+    },
+    {
+      "name": "TheconnectedhavenAutomation",
+      "score": 92.3,
+      "projects_affected": [
+        "smarthomegearreviews",
+        "theconnectedhaven"
+      ],
+      "projects_count": 2,
+      "lines": 81,
+      "similarity": 0.96,
+      "occurrences": 1,
+      "effort": "low",
+      "recommendation": "Extract to shared-core. Affects 2 projects, 81 lines, 96% similar."
+    },
+    {
+      "name": "build_resource_directive",
+      "score": 87.7,
+      "projects_affected": [
+        "VelvetVeilPrintables-ClaudeCode",
+        "geelark-automation"
+      ],
+      "projects_count": 2,
+      "lines": 27,
+      "similarity": 1.0,
+      "occurrences": 1,
+      "effort": "low",
+      "recommendation": "Extract to shared-core. Affects 2 projects, 27 lines, 100% similar."
+    },
+    {
+      "name": "_format_table",
+      "score": 83.3,
+      "projects_affected": [
+        "openclaw-empire"
+      ],
+      "projects_count": 1,
+      "lines": 33,
+      "similarity": 1.0,
+      "occurrences": 6,
+      "effort": "low",
+      "recommendation": "Extract to shared-core. Affects 1 projects, 33 lines, 100% similar."
+    },
+    {
+      "name": "wfai_enqueue_styles",
+      "score": 80.5,
+      "projects_affected": [
+        "moonrituallibrary",
+        "wealthfromai"
+      ],
+      "projects_count": 2,
+      "lines": 41,
+      "similarity": 0.57,
+      "occurrences": 1,
+      "effort": "high",
+      "recommendation": "Extract to shared-core. Affects 2 projects, 41 lines, 57% similar."
+    },
+    {
+      "name": "_niche_for_product",
+      "score": 73.7,
+      "projects_affected": [
+        "3d-print-forge"
+      ],
+      "projects_count": 1,
+      "lines": 187,
+      "similarity": 1.0,
+      "occurrences": 1,
+      "effort": "low",
+      "recommendation": "Extract to shared-core. Affects 1 projects, 187 lines, 100% similar."
+    },
+    {
+      "name": "adb_try_connect",
+      "score": 67.2,
+      "projects_affected": [
+        "openclaw-empire"
+      ],
+      "projects_count": 1,
+      "lines": 22,
+      "similarity": 1.0,
+      "occurrences": 3,
+      "effort": "low",
+      "recommendation": "Extract to shared-core. Affects 1 projects, 22 lines, 100% similar."
+    }
+  ],
+  "drift_report": [],
+  "dependency_report": [
+    {
+      "from_project": "3d-print-forge",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: api-retry"
+    },
+    {
+      "from_project": "ai-discovery-digest",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: content-pipeline"
+    },
+    {
+      "from_project": "ai-discovery-digest",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: image-optimization"
+    },
+    {
+      "from_project": "ai-discovery-digest",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: seo-toolkit"
+    },
+    {
+      "from_project": "ai-discovery-digest",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: api-retry"
+    },
+    {
+      "from_project": "ai-discovery-digest",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: wordpress-automation"
+    },
+    {
+      "from_project": "ai-discovery-digest",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: affiliate-link-manager"
+    },
+    {
+      "from_project": "ai-in-action-hub",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: content-pipeline"
+    },
+    {
+      "from_project": "ai-in-action-hub",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: image-optimization"
+    },
+    {
+      "from_project": "ai-in-action-hub",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: seo-toolkit"
+    },
+    {
+      "from_project": "ai-in-action-hub",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: api-retry"
+    },
+    {
+      "from_project": "ai-in-action-hub",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: wordpress-automation"
+    },
+    {
+      "from_project": "ai-in-action-hub",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: affiliate-link-manager"
+    },
+    {
+      "from_project": "article-audit-system",
+      "to_project": "bullet-journals",
+      "type": "imports",
+      "details": "Reference in optimize_report_20251229_002452.json"
+    },
+    {
+      "from_project": "article-audit-system",
+      "to_project": "smart-home-wizards",
+      "type": "imports",
+      "details": "Reference in optimize_report_20251229_002452.json"
+    },
+    {
+      "from_project": "article-audit-system",
+      "to_project": "ai-discovery-digest",
+      "type": "imports",
+      "details": "Reference in optimize_report_20251229_002452.json"
+    },
+    {
+      "from_project": "article-audit-system",
+      "to_project": "clear-ai-news",
+      "type": "imports",
+      "details": "Reference in optimize_report_20251229_002452.json"
+    },
+    {
+      "from_project": "article-audit-system",
+      "to_project": "wearable-gear-reviews",
+      "type": "imports",
+      "details": "Reference in optimize_report_20251229_002452.json"
+    },
+    {
+      "from_project": "article-audit-system",
+      "to_project": "mythical-archives",
+      "type": "imports",
+      "details": "Reference in optimize_report_20251229_002452.json"
+    },
+    {
+      "from_project": "article-audit-system",
+      "to_project": "the-connected-haven",
+      "type": "imports",
+      "details": "Reference in optimize_report_20251229_002452.json"
+    },
+    {
+      "from_project": "article-audit-system",
+      "to_project": "smart-home-gear-reviews",
+      "type": "imports",
+      "details": "Reference in optimize_report_20251229_002452.json"
+    },
+    {
+      "from_project": "article-audit-system",
+      "to_project": "ai-in-action-hub",
+      "type": "imports",
+      "details": "Reference in optimize_report_20251229_002452.json"
+    },
+    {
+      "from_project": "article-audit-system",
+      "to_project": "pulse-gear-reviews",
+      "type": "imports",
+      "details": "Reference in optimize_report_20251229_002452.json"
+    },
+    {
+      "from_project": "article-audit-system",
+      "to_project": "manifest-and-align",
+      "type": "imports",
+      "details": "Reference in optimize_report_20251229_002452.json"
+    },
+    {
+      "from_project": "article-audit-system",
+      "to_project": "wealth-from-ai",
+      "type": "imports",
+      "details": "Reference in optimize_report_20251229_002452.json"
+    },
+    {
+      "from_project": "article-audit-system",
+      "to_project": "family-flourish",
+      "type": "imports",
+      "details": "Reference in scan_results.json"
+    },
+    {
+      "from_project": "article-audit-system",
+      "to_project": "witchcraft-for-beginners",
+      "type": "imports",
+      "details": "Reference in n8n-workflows\\scheduled-audit-sweep.json"
+    },
+    {
+      "from_project": "article-audit-system",
+      "to_project": "empire-dashboard",
+      "type": "imports",
+      "details": "Reference in n8n-workflows\\scheduled-audit-sweep.json"
+    },
+    {
+      "from_project": "article-audit-system",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: api-retry"
+    },
+    {
+      "from_project": "bmc-witchcraft",
+      "to_project": "witchcraft-for-beginners",
+      "type": "imports",
+      "details": "Reference in config\\bmc_config.json"
+    },
+    {
+      "from_project": "bmc-witchcraft",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: api-retry"
+    },
+    {
+      "from_project": "bullet-journals",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: content-pipeline"
+    },
+    {
+      "from_project": "bullet-journals",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: image-optimization"
+    },
+    {
+      "from_project": "bullet-journals",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: seo-toolkit"
+    },
+    {
+      "from_project": "bullet-journals",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: api-retry"
+    },
+    {
+      "from_project": "bullet-journals",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: wordpress-automation"
+    },
+    {
+      "from_project": "bullet-journals",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: affiliate-link-manager"
+    },
+    {
+      "from_project": "celebration-season",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: content-pipeline"
+    },
+    {
+      "from_project": "celebration-season",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: image-optimization"
+    },
+    {
+      "from_project": "celebration-season",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: seo-toolkit"
+    },
+    {
+      "from_project": "celebration-season",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: api-retry"
+    },
+    {
+      "from_project": "celebration-season",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: wordpress-automation"
+    },
+    {
+      "from_project": "celebration-season",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: affiliate-link-manager"
+    },
+    {
+      "from_project": "clear-ai-news",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: content-pipeline"
+    },
+    {
+      "from_project": "clear-ai-news",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: image-optimization"
+    },
+    {
+      "from_project": "clear-ai-news",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: seo-toolkit"
+    },
+    {
+      "from_project": "clear-ai-news",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: api-retry"
+    },
+    {
+      "from_project": "clear-ai-news",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: wordpress-automation"
+    },
+    {
+      "from_project": "clear-ai-news",
+      "to_project": "shared-core",
+      "type": "consumes-system",
+      "details": "Uses shared-core system: affiliate-link-manager"
+    },
+    {
+      "from_project": "empire-dashboard",
+      "to_project": "mythical-archives",
+      "type": "imports",
+      "details": "Reference in data\\alerts.json"
+    }
+  ]
+}

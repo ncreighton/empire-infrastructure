@@ -32,9 +32,12 @@ def pre_commit():
     print("[SEARCH] Mesh pre-commit check...")
     
     # Get staged files
+    kw = dict(capture_output=True, text=True)
+    if sys.platform == "win32":
+        kw["creationflags"] = subprocess.CREATE_NO_WINDOW
     result = subprocess.run(
         ["git", "diff", "--cached", "--name-only", "--diff-filter=ACMR"],
-        capture_output=True, text=True
+        **kw
     )
     staged = [f.strip() for f in result.stdout.strip().split("\n") if f.strip()]
     
@@ -96,9 +99,12 @@ def post_commit():
     print("[SYNC] Mesh post-commit hook...")
     
     # Get files changed in last commit
+    kw = dict(capture_output=True, text=True)
+    if sys.platform == "win32":
+        kw["creationflags"] = subprocess.CREATE_NO_WINDOW
     result = subprocess.run(
         ["git", "diff", "--name-only", "HEAD~1", "HEAD"],
-        capture_output=True, text=True
+        **kw
     )
     changed = [f.strip() for f in result.stdout.strip().split("\n") if f.strip()]
     

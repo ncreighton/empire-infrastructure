@@ -19,10 +19,13 @@ HUB_PATH = Path(r"D:\Claude Code Projects\project-mesh-v2-omega")
 def get_changed_files(project_path: str) -> list:
     """Get files changed in the last git commit."""
     try:
+        kw = dict(capture_output=True, text=True, timeout=10,
+                  cwd=project_path)
+        if sys.platform == "win32":
+            kw["creationflags"] = subprocess.CREATE_NO_WINDOW
         result = subprocess.run(
             ["git", "diff", "--name-only", "HEAD~1"],
-            capture_output=True, text=True, timeout=10,
-            cwd=project_path
+            **kw
         )
         if result.returncode == 0:
             return [f.strip() for f in result.stdout.strip().split("\n") if f.strip()]

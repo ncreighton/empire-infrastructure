@@ -334,7 +334,11 @@ def bootstrap_project(name, niche, category=None, monetization=None, url="", hub
         harvester = hub / "scripts" / "knowledge_harvester.py"
         if harvester.exists():
             import subprocess
-            subprocess.run([sys.executable, str(harvester), "--harvest", "--fast", "--hub", str(hub)])
+            kw = {}
+            if sys.platform == "win32":
+                import subprocess as _sp
+                kw["creationflags"] = _sp.CREATE_NO_WINDOW
+            subprocess.run([sys.executable, str(harvester), "--harvest", "--fast", "--hub", str(hub)], **kw)
     
     print("Gathering knowledge from empire...")
     knowledge = gather_knowledge(hub, niche, category, monetization)

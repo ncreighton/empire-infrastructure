@@ -9,7 +9,7 @@ import sys
 import logging
 from pathlib import Path
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List, Dict
 
 # Add parent to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -207,9 +207,12 @@ async def trigger_sync():
     """Trigger manual sync."""
     import subprocess
     try:
+        kw = dict(capture_output=True, text=True, timeout=60)
+        if sys.platform == "win32":
+            kw["creationflags"] = subprocess.CREATE_NO_WINDOW
         result = subprocess.run(
             [sys.executable, str(HUB_PATH / "sync" / "sync_engine_v2.py"), "--sync", "--hub", str(HUB_PATH)],
-            capture_output=True, text=True, timeout=60
+            **kw
         )
         return {"status": "ok", "output": result.stdout[:500]}
     except Exception as e:
@@ -221,9 +224,12 @@ async def trigger_compile():
     """Trigger CLAUDE.md recompile."""
     import subprocess
     try:
+        kw = dict(capture_output=True, text=True, timeout=60)
+        if sys.platform == "win32":
+            kw["creationflags"] = subprocess.CREATE_NO_WINDOW
         result = subprocess.run(
             [sys.executable, str(HUB_PATH / "quick_compile.py"), "--all", "--hub", str(HUB_PATH)],
-            capture_output=True, text=True, timeout=60
+            **kw
         )
         return {"status": "ok", "output": result.stdout[:500]}
     except Exception as e:
@@ -247,7 +253,124 @@ async def trigger_scan():
         return {"status": "error", "error": str(e)}
 
 
+# -- Knowledge Entries -----------------------------------------
+
+@app.get("/api/knowledge/entries")
+async def get_knowledge_entries(limit: int = 100):
+    """Recent knowledge entries with counts by category."""
+    try:
+        from knowledge.graph_engine import KnowledgeGraph
+        graph = KnowledgeGraph()
+        with graph._conn() as conn:
+            # Category counts
+            cat_rows = conn.execute(
+                "SELECT category, COUNT(*) as count FROM knowledge_entries "
+                "GROUP BY category ORDER BY count DESC"
+            ).fetchall()
+            categories = [{"category": r["category"] or "(uncategorized)", "count": r["count"]} for r in cat_rows]
+
+            # Recent entries
+            entry_rows = conn.execute(
+                "SELECT id, substr(text, 1, 200) as text, source_project, source_file, "
+                "category, subcategory, confidence, created_at "
+                "FROM knowledge_entries ORDER BY created_at DESC LIMIT ?",
+                (limit,)
+            ).fetchall()
+            entries = [dict(r) for r in entry_rows]
+
+            total = conn.execute("SELECT COUNT(*) as cnt FROM knowledge_entries").fetchone()["cnt"]
+
+        return {
+            "entries": entries,
+            "categories": categories,
+            "total": total,
+        }
+    except Exception as e:
+        return {"error": str(e), "entries": [], "categories": [], "total": 0}
+
+
+# -- Patterns --------------------------------------------------
+
+@app.get("/api/patterns")
+async def get_patterns():
+    """Detected code patterns across projects."""
+    try:
+        from knowledge.graph_engine import KnowledgeGraph
+        graph = KnowledgeGraph()
+        with graph._conn() as conn:
+            rows = conn.execute(
+                "SELECT id, name, description, pattern_type, implementation_files, "
+                "used_by_projects, canonical_source, created_at, updated_at "
+                "FROM patterns ORDER BY name"
+            ).fetchall()
+            patterns = []
+            for r in rows:
+                p = dict(r)
+                # Parse JSON fields safely
+                for field in ("implementation_files", "used_by_projects"):
+                    try:
+                        p[field] = json.loads(p.get(field, "[]") or "[]")
+                    except (json.JSONDecodeError, TypeError):
+                        p[field] = []
+                patterns.append(p)
+
+        return {"patterns": patterns, "total": len(patterns)}
+    except Exception as e:
+        return {"error": str(e), "patterns": [], "total": 0}
+
+
+# -- Dependencies ----------------------------------------------
+
+@app.get("/api/dependencies")
+async def get_dependencies():
+    """Dependency map between projects."""
+    try:
+        from knowledge.graph_engine import KnowledgeGraph
+        graph = KnowledgeGraph()
+        with graph._conn() as conn:
+            rows = conn.execute(
+                "SELECT d.id, d.dependency_type, d.details, "
+                "pf.slug as from_project, pf.name as from_name, "
+                "pt.slug as to_project, pt.name as to_name "
+                "FROM dependencies d "
+                "JOIN projects pf ON d.from_project_id = pf.id "
+                "JOIN projects pt ON d.to_project_id = pt.id "
+                "ORDER BY pf.slug, pt.slug"
+            ).fetchall()
+            deps = [dict(r) for r in rows]
+
+            # Build adjacency summary: how many deps each project has
+            dep_counts = {}
+            for d in deps:
+                fp = d["from_project"]
+                tp = d["to_project"]
+                dep_counts.setdefault(fp, {"depends_on": 0, "depended_by": 0})
+                dep_counts.setdefault(tp, {"depends_on": 0, "depended_by": 0})
+                dep_counts[fp]["depends_on"] += 1
+                dep_counts[tp]["depended_by"] += 1
+
+        return {
+            "dependencies": deps,
+            "total": len(deps),
+            "project_summary": dep_counts,
+        }
+    except Exception as e:
+        return {"error": str(e), "dependencies": [], "total": 0, "project_summary": {}}
+
+
 # -- DNA Profiles ----------------------------------------------
+
+@app.get("/api/dna/similar/{slug}")
+async def get_similar_projects(slug: str, top_n: int = 5):
+    """Find projects similar to a given project by DNA profile."""
+    try:
+        from knowledge.dna_profiler import DNAProfiler
+        profiler = DNAProfiler()
+        similar = profiler.find_similar(slug, top_n=top_n)
+        return {"project": slug, "similar": similar, "total": len(similar)}
+    except Exception as e:
+        return {"error": str(e), "similar": []}
+
 
 @app.get("/api/dna/{slug}")
 async def get_dna_profile(slug: str):
@@ -256,6 +379,73 @@ async def get_dna_profile(slug: str):
         from knowledge.dna_profiler import DNAProfiler
         profiler = DNAProfiler()
         return profiler.profile_project(slug)
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# -- Stats Summary ---------------------------------------------
+
+@app.get("/api/stats/summary")
+async def get_stats_summary():
+    """Comprehensive stats: top projects, most connected, API usage breakdown."""
+    try:
+        from knowledge.graph_engine import KnowledgeGraph
+        graph = KnowledgeGraph()
+        with graph._conn() as conn:
+            # Top projects by function count
+            top_by_functions = [dict(r) for r in conn.execute(
+                "SELECT p.slug, p.name, COUNT(f.id) as function_count "
+                "FROM projects p LEFT JOIN functions f ON p.id = f.project_id "
+                "GROUP BY p.id ORDER BY function_count DESC LIMIT 10"
+            ).fetchall()]
+
+            # Top projects by class count
+            top_by_classes = [dict(r) for r in conn.execute(
+                "SELECT p.slug, p.name, COUNT(c.id) as class_count "
+                "FROM projects p LEFT JOIN classes c ON p.id = c.project_id "
+                "GROUP BY p.id ORDER BY class_count DESC LIMIT 10"
+            ).fetchall()]
+
+            # Most connected projects (dependencies in + out)
+            most_connected = [dict(r) for r in conn.execute(
+                "SELECT p.slug, p.name, "
+                "(SELECT COUNT(*) FROM dependencies WHERE from_project_id = p.id) as outgoing, "
+                "(SELECT COUNT(*) FROM dependencies WHERE to_project_id = p.id) as incoming "
+                "FROM projects p "
+                "ORDER BY (outgoing + incoming) DESC LIMIT 10"
+            ).fetchall()]
+
+            # API usage breakdown by service
+            api_usage = [dict(r) for r in conn.execute(
+                "SELECT service_name, COUNT(DISTINCT project_id) as project_count, "
+                "COUNT(*) as total_usages "
+                "FROM api_keys_used GROUP BY service_name "
+                "ORDER BY project_count DESC"
+            ).fetchall()]
+
+            # API services per project
+            api_per_project = [dict(r) for r in conn.execute(
+                "SELECT p.slug, p.name, COUNT(DISTINCT a.service_name) as api_count, "
+                "GROUP_CONCAT(DISTINCT a.service_name) as services "
+                "FROM projects p JOIN api_keys_used a ON p.id = a.project_id "
+                "GROUP BY p.id ORDER BY api_count DESC LIMIT 10"
+            ).fetchall()]
+
+            # Endpoints by project
+            endpoints_by_project = [dict(r) for r in conn.execute(
+                "SELECT p.slug, p.name, COUNT(e.id) as endpoint_count "
+                "FROM projects p JOIN api_endpoints e ON p.id = e.project_id "
+                "GROUP BY p.id ORDER BY endpoint_count DESC LIMIT 10"
+            ).fetchall()]
+
+        return {
+            "top_by_functions": top_by_functions,
+            "top_by_classes": top_by_classes,
+            "most_connected": most_connected,
+            "api_usage": api_usage,
+            "api_per_project": api_per_project,
+            "endpoints_by_project": endpoints_by_project,
+        }
     except Exception as e:
         return {"error": str(e)}
 

@@ -23,6 +23,11 @@ from datetime import datetime, timezone
 from collections import defaultdict
 from typing import Dict, List, Set, Tuple
 
+# Add mesh root to sys.path so we can import knowledge.graph_engine
+MESH_ROOT = Path(__file__).resolve().parent.parent
+if str(MESH_ROOT) not in sys.path:
+    sys.path.insert(0, str(MESH_ROOT))
+
 DEFAULT_HUB_PATH = Path(r"D:\Claude Code Projects\project-mesh-v2-omega")
 INDEX_FILE = "knowledge-index.json"
 
@@ -436,7 +441,7 @@ def categorize_text(text: str) -> str:
 def harvest(hub: Path, fast: bool = False) -> dict:
     """Run the full knowledge harvest across the entire empire."""
     
-    print(" KNOWLEDGE HARVESTER v2.0\n")
+    print("[HARVEST] KNOWLEDGE HARVESTER v2.0\n")
     print(f"   Hub: {hub}")
     print(f"   Mode: {'fast (CLAUDE.md + manifests)' if fast else 'full (everything)'}\n")
     
@@ -444,7 +449,7 @@ def harvest(hub: Path, fast: bool = False) -> dict:
     projects_scanned = 0
     
     # 1. Harvest from global context (always)
-    print("   Harvesting global context...")
+    print("  [RULES] Harvesting global context...")
     entries = extract_from_global_context(hub)
     all_entries.extend(entries)
     print(f"      {len(entries)} entries")
@@ -470,7 +475,10 @@ def harvest(hub: Path, fast: bool = False) -> dict:
         for mf in manifest_files:
             proj_name = mf.stem.replace(".manifest", "")
             manifest = json.loads(mf.read_text("utf-8"))
-            proj_path = hub.parent / proj_name
+            # Use manifest's path field for directory resolution (slug may
+            # differ from the actual directory name, e.g. hyphens vs none)
+            manifest_path = manifest.get("project", {}).get("path", proj_name)
+            proj_path = hub.parent / manifest_path
             
             print(f"    [FOLDER] {proj_name}...", end=" ")
             proj_entries = []
@@ -535,7 +543,36 @@ def harvest(hub: Path, fast: bool = False) -> dict:
     index_path = hub / "knowledge-base" / INDEX_FILE
     index_path.parent.mkdir(parents=True, exist_ok=True)
     index_path.write_text(json.dumps(index, indent=2, default=str), "utf-8")
-    
+
+    # 7. Write entries into the knowledge graph SQLite database
+    graph_count = 0
+    try:
+        from knowledge.graph_engine import KnowledgeGraph
+        graph = KnowledgeGraph()
+
+        # Clear existing harvester knowledge entries before re-inserting
+        with graph._conn() as conn:
+            conn.execute("DELETE FROM knowledge_entries")
+            conn.commit()
+
+        for entry in unique_entries:
+            graph.add_knowledge(
+                text=entry["text"],
+                source_project=entry["source_project"],
+                source_file=entry["source_file"],
+                category=entry["category"],
+                subcategory=entry.get("subcategory", ""),
+                confidence=entry.get("confidence", 1.0),
+                tags=json.dumps(entry.get("tags", []))
+            )
+            graph_count += 1
+
+        print(f"\n  [DB] {graph_count} entries written to knowledge graph (SQLite)")
+    except ImportError:
+        print("\n  [WARN] knowledge.graph_engine not available -- skipped graph DB write")
+    except Exception as exc:
+        print(f"\n  [FAIL] Graph DB write error: {exc}")
+
     # Report
     print(f"\n{'='*60}")
     print(f"   HARVEST COMPLETE")
@@ -543,12 +580,14 @@ def harvest(hub: Path, fast: bool = False) -> dict:
     print(f"  Projects scanned: {projects_scanned}")
     print(f"  Total entries: {len(unique_entries)}")
     print(f"  Duplicates removed: {len(all_entries) - len(unique_entries)}")
+    if graph_count:
+        print(f"  Graph DB entries: {graph_count}")
     print(f"\n  By category:")
     for cat_key, cat_info in index["categories"].items():
         bar = "-" * min(30, cat_info["entry_count"])
         print(f"    {CATEGORIES[cat_key]['label']:<35} {cat_info['entry_count']:>4} entries  {bar}")
     print(f"\n  Index saved: {index_path}")
-    
+
     return index
 
 

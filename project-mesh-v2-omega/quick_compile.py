@@ -216,7 +216,8 @@ def main():
             continue
         
         manifest = load_json(mf_path)
-        proj_path = hub.parent / proj_name
+        manifest_path = manifest.get("project", {}).get("path", proj_name)
+        proj_path = hub.parent / manifest_path
         
         if not proj_path.exists() and not args.dry_run:
             print(f"    {proj_name}: directory not found, skipping")
