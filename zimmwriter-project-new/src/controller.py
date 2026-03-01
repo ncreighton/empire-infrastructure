@@ -371,12 +371,14 @@ class ZimmWriterController:
 
         try:
             self.app = Application(backend=self.backend).connect(process=pid)
-            # Prefer the Bulk Writer window over sub-windows (use handle for speed)
+            # Prefer the Bulk Writer window over sub-windows.
+            # Must match "Bulk Blog Writer" or "Bulk Writer" but NOT config
+            # windows like "Set Bulk SEO CSV" which also contain "Bulk".
             bulk_handle = None
             try:
                 for w in self.app.windows():
                     title = w.window_text()
-                    if "Bulk" in title:
+                    if "Bulk" in title and "Writer" in title and "Set " not in title:
                         bulk_handle = w.handle
                         break
             except Exception:
@@ -793,36 +795,38 @@ class ZimmWriterController:
     # ═══════════════════════════════════════════
 
     def load_seo_csv(self, csv_path: str):
-        """Load an SEO CSV file via the config window + browse button + file dialog.
+        """Load an SEO CSV file via the config window + file dialog.
 
-        The SEO CSV toggle (auto_id=105) opens the "Set Bulk SEO CSV" AutoIt
-        config window.  Inside that window, the Browse button (auto_id=114)
-        opens a standard Windows file dialog where the path is entered.
-
-        After loading, the config window is closed WITHOUT ESC (which would
-        revert the toggle to Disabled), and the Enabled state is verified.
+        Flow:
+          1. Click SEO CSV toggle (auto_id=105) → opens "Set Bulk SEO CSV" window
+          2. Click "Load Bulk SEO CSV File" (auto_id=114) → opens file dialog
+          3. File dialog has custom title containing "load the CSV"
+          4. Use win32 API (FindWindowExW) to set path in the file dialog's
+             nested edit control (ComboBoxEx32 > ComboBox > Edit) because
+             pywinauto's child_window() fails on 32/64-bit mismatch
+          5. Click "&Open" button in file dialog
+          6. If CSV is valid, ZimmWriter auto-closes the config window and
+             the SEO CSV toggle shows "Enabled"
         """
         self.ensure_connected()
         csv_path = os.path.abspath(csv_path)
         if not os.path.exists(csv_path):
             raise FileNotFoundError(f"CSV not found: {csv_path}")
 
-        _SM = ctypes.windll.user32.SendMessageW
-        _SM.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
-        _SM.restype = ctypes.c_long
+        user32 = ctypes.windll.user32
+        _FindWindowExW = user32.FindWindowExW
+        _FindWindowExW.argtypes = [wintypes.HWND, wintypes.HWND,
+                                    wintypes.LPCWSTR, wintypes.LPCWSTR]
+        _FindWindowExW.restype = wintypes.HWND
 
         # Step 1: Open the "Set Bulk SEO CSV" config window
         win = self._open_config_window("seo_csv")
         if not win:
-            # _open_config_window returns None when the feature re-enabled with
-            # settings preserved (no config window).  The CSV from the profile
-            # may still be loaded.  Try a second approach: toggle off, then on.
             logger.warning("SEO CSV config window didn't open — trying direct toggle")
             self.bring_to_front()
             time.sleep(0.3)
             btn = self._find_child(control_type="Button",
                                    auto_id=self.FEATURE_TOGGLE_IDS["seo_csv"])
-            # Force the cycle: ensure we're disabled, then enable to get the window
             if "Enabled" in btn.window_text():
                 btn.click_input()
                 time.sleep(1.5)
@@ -839,152 +843,159 @@ class ZimmWriterController:
                 raise RuntimeError("Could not open SEO CSV config window")
 
         config_handle = win.handle
+        file_loaded = False
 
         try:
-            # Step 2: Click the Browse button (auto_id=114) to open file dialog
-            self._click_config_button(win, auto_id="114")
-            time.sleep(1.5)
-
-            # Step 3: Find and fill the Windows file dialog
-            file_dialog_loaded = False
-            for fd_attempt in range(3):
-                # Try app-owned windows first (file dialog spawned by ZimmWriter)
+            # Step 2: Click "Load Bulk SEO CSV File" button (auto_id=114)
+            # Focus the config window first, then click via direct children scan
+            # (_find_child can timeout on 32-bit windows from 64-bit Python)
+            try:
+                win.set_focus()
+            except Exception:
+                pass
+            time.sleep(0.3)
+            clicked = False
+            for child in win.children():
                 try:
-                    dlg = self.app.window(title_re=".*Open.*|.*Save.*|.*Select.*|.*Browse.*")
-                    dlg.wait("visible", timeout=3)
-                    # Look for the filename edit field
-                    fname = None
-                    for edit_title in ["File name:", "File &name:", ""]:
-                        try:
-                            if edit_title:
-                                fname = dlg.child_window(control_type="Edit",
-                                                         title=edit_title)
-                            else:
-                                fname = dlg.child_window(control_type="Edit",
-                                                         found_index=0)
-                            fname.wait("visible", timeout=2)
-                            break
-                        except Exception:
-                            fname = None
-                    if fname:
-                        fname.set_edit_text(csv_path)
-                        time.sleep(0.5)
-                        # Click Open button
-                        for btn_title in ["&Open", "Open", "OK"]:
-                            try:
-                                open_btn = dlg.child_window(control_type="Button",
-                                                            title=btn_title)
-                                open_btn.click_input()
-                                file_dialog_loaded = True
-                                break
-                            except Exception:
-                                continue
-                        if file_dialog_loaded:
-                            break
+                    if child.control_id() == 114:
+                        child.click_input()
+                        clicked = True
+                        logger.info("Clicked 'Load Bulk SEO CSV File' button")
+                        break
                 except Exception:
                     pass
+            if not clicked:
+                self._click_config_button(win, auto_id="114")
+            time.sleep(2)
 
-                # Fallback: try Desktop search for the file dialog
+            # Step 3: Find the file dialog
+            # ZimmWriter's file dialog title: "Please load the CSV you generated
+            # using the Google Sheet template."
+            # Search app.windows() first (fast), then Desktop (slower but wider)
+            file_dialog_hwnd = None
+            for _attempt in range(20):
+                # Fast path: check app-owned windows
                 try:
-                    desktop = Desktop(backend="win32")
-                    for w in desktop.windows():
+                    for w in self.app.windows():
                         try:
                             wtitle = w.window_text()
                         except Exception:
                             continue
-                        if any(kw in wtitle for kw in ["Open", "Browse", "Select"]):
-                            logger.info(f"Found file dialog via Desktop: '{wtitle}'")
-                            dlg = w
-                            # Type path directly and press Enter
-                            dlg.set_focus()
-                            time.sleep(0.3)
-                            send_keys(csv_path, with_spaces=True, pause=0.02)
-                            time.sleep(0.5)
-                            send_keys("{ENTER}")
-                            time.sleep(1)
-                            file_dialog_loaded = True
+                        if "load the CSV" in wtitle or (
+                                "CSV" in wtitle and "template" in wtitle):
+                            file_dialog_hwnd = w.handle
+                            logger.info(f"Found file dialog (app): '{wtitle}'")
                             break
                 except Exception:
                     pass
-
-                if file_dialog_loaded:
+                if file_dialog_hwnd:
                     break
-                time.sleep(1)
-
-            if not file_dialog_loaded:
-                # Last resort: type path into whatever is focused and press Enter
-                logger.warning("File dialog not found — using send_keys fallback")
-                send_keys(csv_path, with_spaces=True, pause=0.02)
+                # Slow path: Desktop-level search
+                if _attempt % 5 == 4:
+                    try:
+                        for w in Desktop(backend="win32").windows():
+                            try:
+                                wtitle = w.window_text()
+                            except Exception:
+                                continue
+                            if "load the CSV" in wtitle or (
+                                    "CSV" in wtitle and "template" in wtitle):
+                                file_dialog_hwnd = w.handle
+                                logger.info(f"Found file dialog (desktop): "
+                                            f"'{wtitle}'")
+                                break
+                    except Exception:
+                        pass
+                if file_dialog_hwnd:
+                    break
                 time.sleep(0.5)
+
+            if not file_dialog_hwnd:
+                raise RuntimeError(
+                    "File dialog not found after clicking Load CSV button")
+
+            # Step 4: Set path via win32 API (FindWindowExW chain)
+            # File dialog structure: ComboBoxEx32 > ComboBox > Edit
+            combo_ex = _FindWindowExW(file_dialog_hwnd, None,
+                                      "ComboBoxEx32", None)
+            if not combo_ex:
+                raise RuntimeError("ComboBoxEx32 not found in file dialog")
+            combo = _FindWindowExW(combo_ex, None, "ComboBox", None)
+            if not combo:
+                raise RuntimeError("ComboBox not found in ComboBoxEx32")
+            edit = _FindWindowExW(combo, None, "Edit", None)
+            if not edit:
+                raise RuntimeError("Edit not found in ComboBox")
+
+            # WM_SETTEXT — Windows marshals the string across process boundaries
+            # Use separate WINFUNCTYPE wrappers to avoid argtypes conflicts
+            WM_SETTEXT = 0x000C
+            _SendText = ctypes.WINFUNCTYPE(
+                ctypes.c_long, wintypes.HWND, wintypes.UINT,
+                wintypes.WPARAM, ctypes.c_wchar_p
+            )(("SendMessageW", ctypes.windll.user32))
+            _SendText(edit, WM_SETTEXT, 0, csv_path)
+            time.sleep(0.5)
+            logger.info(f"File dialog path set: {csv_path}")
+
+            # Step 5: Click "&Open" button
+            open_btn = _FindWindowExW(file_dialog_hwnd, None,
+                                      "Button", "&Open")
+            if not open_btn:
+                open_btn = _FindWindowExW(file_dialog_hwnd, None,
+                                          "Button", "Open")
+            if open_btn:
+                BM_CLICK = 0x00F5
+                _SendInt = ctypes.WINFUNCTYPE(
+                    ctypes.c_long, wintypes.HWND, wintypes.UINT,
+                    wintypes.WPARAM, wintypes.LPARAM
+                )(("SendMessageW", ctypes.windll.user32))
+                _SendInt(open_btn, BM_CLICK, 0, 0)
+                logger.info("File dialog Open button clicked")
+            else:
+                # Fallback: press Enter
+                logger.warning("Open button not found, pressing Enter")
                 send_keys("{ENTER}")
 
-            time.sleep(1)
-            logger.info(f"SEO CSV path entered: {csv_path}")
+            time.sleep(2)
+            file_loaded = True
 
         except Exception as e:
             logger.error(f"SEO CSV load failed: {e}")
-        finally:
-            # Step 4: Close config window WITHOUT ESC (preserve Enabled state)
+
+        # Step 6: Dismiss any error dialogs and wait for config window to close
+        self._dismiss_dialog(timeout=2)
+
+        # Wait for config window to auto-close (happens when CSV is valid)
+        deadline = time.time() + 8
+        while time.time() < deadline:
+            if not user32.IsWindow(config_handle):
+                break
             self._dismiss_dialog(timeout=1)
-            try:
-                # Focus main Bulk Writer window to auto-dismiss the config window
-                main_hwnd = self.main_window.handle
-                ctypes.windll.user32.SetForegroundWindow(main_hwnd)
-                time.sleep(1.0)
-                # If config window still open, send WM_CLOSE
-                if ctypes.windll.user32.IsWindow(config_handle):
-                    _SM(config_handle, 0x0010, 0, 0)  # WM_CLOSE
-                    time.sleep(0.5)
-                # If still open, try Alt+F4
-                if ctypes.windll.user32.IsWindow(config_handle):
-                    try:
-                        win.set_focus()
-                        time.sleep(0.2)
-                        send_keys("%{F4}", pause=0.1)
-                        time.sleep(0.5)
-                    except Exception:
-                        pass
-                # Last resort: ESC
-                if ctypes.windll.user32.IsWindow(config_handle):
-                    logger.warning("SEO CSV: falling back to ESC close")
-                    self._close_config_window(win)
-            except Exception:
-                self._close_config_window(win)
+            time.sleep(0.5)
+
+        # If config window is still open, close it gracefully
+        if user32.IsWindow(config_handle):
+            logger.warning("SEO CSV config window still open after load, closing")
+            self._close_config_window(win)
             self._dismiss_dialog(timeout=1)
 
-        # Step 5: Verify SEO CSV shows Enabled
-        for re_enable_attempt in range(3):
-            try:
-                self.connect()
-                self.bring_to_front()
-                time.sleep(0.5)
-                btn = self._find_child(control_type="Button",
-                                       auto_id=self.FEATURE_TOGGLE_IDS["seo_csv"])
-                if "Enabled" in btn.window_text():
-                    logger.info(f"SEO CSV Enabled — loaded: {csv_path}")
-                    return
-                logger.info("SEO CSV shows '%s' after close, re-enabling (attempt %d)",
-                            btn.window_text(), re_enable_attempt + 1)
-                self.bring_to_front()
-                time.sleep(0.3)
-                btn.click_input()
-                time.sleep(2)
-                # Dismiss any config window that opens (CSV path already saved)
-                escaped = re.escape(self.FEATURE_CONFIG_WINDOWS["seo_csv"])
-                reopen_win = self._wait_for_window(escaped, timeout=3)
-                if reopen_win:
-                    rh = reopen_win.handle
-                    main_hwnd = self.main_window.handle
-                    ctypes.windll.user32.SetForegroundWindow(main_hwnd)
-                    time.sleep(1.0)
-                    if ctypes.windll.user32.IsWindow(rh):
-                        self._close_config_window(reopen_win)
-                    self._dismiss_dialog(timeout=1)
-                    self.connect()
-                    time.sleep(0.5)
-                self._control_cache.clear()
-            except Exception as e:
-                logger.warning(f"SEO CSV re-enable attempt {re_enable_attempt + 1} failed: {e}")
+        # Step 7: Reconnect to Bulk Writer and verify Enabled state
+        self._control_cache.clear()
+        self.connect()
+        self.bring_to_front()
+        time.sleep(0.5)
+
+        try:
+            btn = self._find_child(control_type="Button",
+                                   auto_id=self.FEATURE_TOGGLE_IDS["seo_csv"])
+            btn_text = btn.window_text()
+            if "Enabled" in btn_text:
+                logger.info(f"SEO CSV Enabled — loaded: {csv_path}")
+                return
+            logger.warning(f"SEO CSV button shows '{btn_text}' after load attempt")
+        except Exception as e:
+            logger.warning(f"Could not verify SEO CSV state: {e}")
 
     # ═══════════════════════════════════════════
     # BULK WRITER — DROPDOWN CONFIGURATION

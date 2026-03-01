@@ -10,6 +10,7 @@ from typing import List, Dict, Any, Optional
 from .controller import ZimmWriterController
 from .site_presets import SITE_PRESETS, get_preset
 from .monitor import JobMonitor
+from .model_stats import ModelStats, MODEL_ASSIGNMENTS
 from .utils import setup_logger, ensure_output_dir
 
 logger = setup_logger("orchestrator")
@@ -32,15 +33,40 @@ class Orchestrator:
     
     Usage:
         orch = Orchestrator()
-        orch.add_job("smarthomewizards.com", csv_path="C:\\batches\\smart_home.csv")
+        orch.add_job("smarthomewizards.com", csv_path="D:\\batches\\smart_home.csv")
         orch.add_job("witchcraftforbeginners.com", titles=["Spell 1", "Spell 2"])
         results = orch.run_all()
     """
 
     def __init__(self, controller: ZimmWriterController = None):
         self.controller = controller or ZimmWriterController()
+        self.stats = ModelStats()
         self.jobs: List[JobSpec] = []
         self.results: List[Dict] = []
+        self._skip_domains: set = set()
+        self._current_job_index: int = 0
+
+    def skip(self, domain: str):
+        """Mark a domain to be skipped. Takes effect before the next job starts."""
+        self._skip_domains.add(domain)
+        logger.info(f"Marked for skip: {domain}")
+
+    def get_queue_status(self) -> List[Dict]:
+        """Return status of all jobs in the queue."""
+        status = []
+        for i, job in enumerate(self.jobs):
+            if i < self._current_job_index:
+                # Already processed — look up result
+                matching = [r for r in self.results if r["domain"] == job.domain]
+                s = matching[-1]["status"] if matching else "completed"
+            elif i == self._current_job_index:
+                s = "in_progress"
+            elif job.domain in self._skip_domains:
+                s = "skipped"
+            else:
+                s = "pending"
+            status.append({"index": i + 1, "domain": job.domain, "status": s})
+        return status
 
     def add_job(self, domain: str, titles: List[str] = None, csv_path: str = None,
                 profile_name: str = None, wait: bool = True):
@@ -48,42 +74,112 @@ class Orchestrator:
         self.jobs.append(JobSpec(domain, titles, csv_path, profile_name, wait))
         logger.info(f"Queued: {domain} ({len(titles or [])} titles / CSV: {csv_path})")
 
-    def _wait_for_idle(self, timeout: int = 1800):
-        """Wait until ZimmWriter finishes generating and returns to Bulk Writer or Menu.
+    # Window titles that indicate ZimmWriter is actively generating
+    _BUSY_TITLES = ("Generating", "Uploading", "Processing SERP", "Processing",
+                     "Writing", "Scraping")
 
-        During generation, ZimmWriter shows titles like 'Processing SERP',
-        'Writing Article 1 of 5', or blank.  When done it returns to
-        'Bulk Blog Writer' or 'Menu'.  We detect generation by checking if
-        the title does NOT contain 'Bulk' or 'Menu' at some point.
+    def _wait_until_ready(self, timeout: int = 7200):
+        """Wait until ZimmWriter is on Bulk Writer or Menu (not mid-generation).
+
+        Use BEFORE starting a job to ensure no previous generation is running.
+        Closes the Output window if present, then navigates to Menu if needed.
+        Recognizes empty title '' and generation states as 'still busy'.
         """
-        saw_busy = False
-        for _ in range(timeout // 5):
+        for _ in range(timeout // 10):
             try:
+                # Close Output window if left open from previous generation
+                self._close_output_window()
+
                 self.controller.connect()
                 title = self.controller.get_window_title()
-                is_idle = ("Bulk" in title or "Menu" in title) and title != ""
-                is_busy = not is_idle
+                if ("Bulk" in title or "Menu" in title) and title != "":
+                    return
+                # On Output screen — close it and go to Menu
+                if title and "Output" in title:
+                    self._close_output_window()
+                    time.sleep(2)
+                    self.controller.connect()
+                    title = self.controller.get_window_title()
+                    if "Bulk" in title or "Menu" in title:
+                        return
+                # Empty title or known busy states = still generating, just wait
+                if title == "" or any(kw in title for kw in self._BUSY_TITLES):
+                    logger.info(f"Waiting for generation to finish (currently: '{title}')...")
+                elif title and "ZimmWriter" in title:
+                    logger.info(f"On unexpected screen '{title}', navigating to Menu...")
+                    try:
+                        self.controller.back_to_menu()
+                        time.sleep(3)
+                        self.controller.connect()
+                        new_title = self.controller.get_window_title()
+                        if "Bulk" in new_title or "Menu" in new_title:
+                            return
+                    except Exception:
+                        pass
+                else:
+                    logger.info(f"Waiting for ready (currently: '{title}')...")
+            except Exception:
+                pass
+            time.sleep(10)
+        raise RuntimeError("Timed out waiting for ZimmWriter to become ready")
 
-                if is_busy:
-                    saw_busy = True
-                    logger.info(f"Waiting for idle (currently: '{title}')...")
-                elif saw_busy and is_idle:
-                    # Was busy, now idle — generation complete
+    def _wait_for_generation(self, timeout: int = 21600):
+        """Wait for active article generation to complete.
+
+        Use AFTER starting a job. Waits 30s for generation to begin,
+        then polls until ZimmWriter returns to Bulk Writer or Menu.
+        After generation, dismisses the results summary popup (X button).
+        """
+        from pywinauto import Desktop
+
+        # Give ZimmWriter time to transition into generation state
+        logger.info("Waiting 30s for generation to begin...")
+        time.sleep(30)
+
+        # Poll until it returns to idle.  "Output" screen also means done.
+        for _ in range(timeout // 5):
+            try:
+                # Close Output window if present
+                self._close_output_window()
+
+                self.controller.connect()
+                title = self.controller.get_window_title()
+                if title and any(kw in title for kw in ("Bulk", "Menu")):
                     logger.info(f"Generation complete (now: '{title}')")
                     return
-                elif not saw_busy and is_idle:
-                    # Never saw busy state — generation may not have started yet
-                    # Keep waiting a bit to give it time to transition
-                    pass
+                if title and "Output" in title:
+                    logger.info(f"Generation complete (Output screen), closing...")
+                    self._close_output_window()
+                    time.sleep(2)
+                    self.controller.connect()
+                    return
+                logger.info(f"Generating (currently: '{title}')...")
             except Exception:
-                saw_busy = True  # Connection error likely means window is changing
+                pass  # Connection error during generation is normal
             time.sleep(5)
+        raise RuntimeError("Timed out waiting for generation to complete")
 
-        if not saw_busy:
-            # Never saw generation start — it may have been instant or skipped
-            logger.warning("Never detected generation state — proceeding anyway")
-            return
-        raise RuntimeError(f"Timed out waiting for ZimmWriter to become idle")
+    def _close_output_window(self):
+        """Close ZimmWriter's Output window (post-generation results screen).
+
+        The Output window shows completed/failed articles after generation.
+        It must be closed (via X button) before the next job can start.
+        Uses Desktop search since the window may block self.app.windows().
+        """
+        from pywinauto import Desktop
+        try:
+            for w in Desktop(backend="win32").windows():
+                try:
+                    wtitle = w.window_text()
+                except Exception:
+                    continue
+                if "ZimmWriter" in wtitle and "Output" in wtitle:
+                    w.close()
+                    logger.info(f"Closed Output window: '{wtitle}'")
+                    time.sleep(1)
+                    return
+        except Exception:
+            pass
 
     def run_all(self, delay_between: int = 10) -> List[Dict]:
         """
@@ -96,10 +192,25 @@ class Orchestrator:
         self.results = []
         total = len(self.jobs)
 
-        logger.info(f"🚀 Starting {total} jobs...")
+        logger.info(f"Starting {total} jobs...")
 
         for i, job in enumerate(self.jobs, 1):
-            logger.info(f"═══ Job {i}/{total}: {job.domain} ═══")
+            self._current_job_index = i - 1
+
+            # Check skip list before starting
+            if job.domain in self._skip_domains:
+                logger.info(f"=== Job {i}/{total}: {job.domain} — SKIPPED ===")
+                self.results.append({
+                    "domain": job.domain,
+                    "index": f"{i}/{total}",
+                    "status": "skipped",
+                    "started": datetime.now().isoformat(),
+                    "finished": datetime.now().isoformat(),
+                    "elapsed_seconds": 0,
+                })
+                continue
+
+            logger.info(f"=== Job {i}/{total}: {job.domain} ===")
             result = self._run_single(job, i, total)
             self.results.append(result)
 
@@ -108,15 +219,22 @@ class Orchestrator:
                 logger.info(f"Waiting {delay_between}s before next job...")
                 time.sleep(delay_between)
 
+        self._current_job_index = total
+
         # Summary
         success = sum(1 for r in self.results if r["status"] == "completed")
-        logger.info(f"═══ DONE: {success}/{total} jobs completed ═══")
+        skipped = sum(1 for r in self.results if r["status"] == "skipped")
+        logger.info(f"=== DONE: {success}/{total} completed, {skipped} skipped ===")
 
         self._save_results()
         return self.results
 
     def _run_single(self, job: JobSpec, index: int, total: int) -> Dict:
-        """Run a single job using controller.run_job()."""
+        """Run a single job with inline model update.
+
+        Steps: wait for ready -> navigate -> load profile -> set AI model
+        from A/B assignment -> update profile -> set titles -> start -> wait.
+        """
         start = time.time()
         result = {
             "domain": job.domain,
@@ -127,35 +245,39 @@ class Orchestrator:
 
         try:
             # Wait for any active generation to finish first
-            self._wait_for_idle()
+            self._wait_until_ready()
 
-            # Delegate to controller.run_job which handles:
-            # - Navigation to Bulk Writer
-            # - Profile loading
-            # - Title/CSV loading
-            # - Starting + confirming
+            # Run the job with inline model override (retry on stale handles)
             profile = job.profile_name or job.domain
-            started = self.controller.run_job(
-                titles=job.titles,
-                csv_path=job.csv_path,
-                profile_name=profile,
-                wait=False,  # We handle waiting ourselves below
-            )
+            model = MODEL_ASSIGNMENTS.get(job.domain)
+
+            started = False
+            last_err = None
+            for attempt in range(3):
+                try:
+                    self.controller.connect()
+                    started = self.controller.run_job(
+                        titles=job.titles,
+                        csv_path=job.csv_path,
+                        profile_name=profile,
+                        ai_model_override=model,
+                        wait=False,
+                    )
+                    break
+                except Exception as e:
+                    last_err = e
+                    logger.warning(f"run_job attempt {attempt + 1} failed: {e}")
+                    time.sleep(5)
 
             if not started:
                 result["status"] = "failed"
-                result["error"] = "run_job returned False"
+                result["error"] = str(last_err) if last_err else "run_job returned False"
                 return result
 
             result["source"] = f"{len(job.titles or [])} titles" if job.titles else f"CSV: {job.csv_path}"
 
-            # Give ZimmWriter time to transition into generation state
-            logger.info("Waiting 30s for generation to begin...")
-            time.sleep(30)
-
-            # Now wait for generation to complete
-            logger.info("Waiting for generation to complete...")
-            self._wait_for_idle()
+            # Wait for generation to complete before starting next job
+            self._wait_for_generation()
             result["status"] = "completed"
 
         except Exception as e:
@@ -165,6 +287,19 @@ class Orchestrator:
 
         result["elapsed_seconds"] = int(time.time() - start)
         result["finished"] = datetime.now().isoformat()
+
+        # Log to model A/B stats tracker
+        model = MODEL_ASSIGNMENTS.get(job.domain, "unknown")
+        result["ai_model"] = model
+        self.stats.log_job(
+            domain=job.domain,
+            model=model,
+            titles=job.titles,
+            status=result["status"],
+            elapsed_seconds=result["elapsed_seconds"],
+            error=result.get("error"),
+        )
+
         return result
 
     def _save_results(self):

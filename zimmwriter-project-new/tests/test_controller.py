@@ -225,6 +225,46 @@ class TestCSVGenerator:
         assert callable(generate_csv_from_titles)
         assert callable(generate_bulk_csv)
 
+    def test_zw_format_tags(self, tmp_path):
+        """CSV cells must use {field=valueZW} format (Sheet2 style)."""
+        import csv
+        from src.csv_generator import generate_bulk_csv
+        out = str(tmp_path / "test.csv")
+        generate_bulk_csv(
+            articles=[{
+                "title": "Test Article",
+                "outline_focus": "Focus text",
+                "wordpress_category": "Cat1",
+                "slug": "test-article",
+            }],
+            output_path=out,
+        )
+        with open(out, newline='', encoding='utf-8') as f:
+            rows = list(csv.reader(f))
+        assert len(rows) == 1, "Should have no header row, just 1 data row"
+        row = rows[0]
+        assert row[0] == "{title=Test ArticleZW}"
+        assert row[1] == "{outline_focus=Focus textZW}"
+        assert row[2] == ""  # empty background
+        assert row[3] == ""  # empty outline
+        assert row[4] == ""  # empty keywords
+        assert row[5] == "{category=Cat1ZW}"
+        assert row[6] == "{slug=test-articleZW}"
+
+    def test_zw_format_no_header(self, tmp_path):
+        """CSV must NOT have a header row."""
+        from src.csv_generator import generate_csv_from_titles
+        out = str(tmp_path / "test.csv")
+        generate_csv_from_titles(
+            titles=["Title One", "Title Two"],
+            output_path=out,
+        )
+        with open(out, encoding='utf-8') as f:
+            first_line = f.readline()
+        # First line should be data, not a header
+        assert "{title=" in first_line
+        assert "ARTICLE TITLE" not in first_line
+
 
 class TestUtils:
     def test_timestamp(self):
