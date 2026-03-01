@@ -490,12 +490,16 @@ def apply_preset(domain: str):
 # ORCHESTRATION (Multi-site)
 # ═══════════════════════════════════════════
 
+_active_orchestrator: Orchestrator = None
+
 @app.post("/orchestrate", tags=["Orchestration"])
 def orchestrate(req: OrchestrateReq, background_tasks: BackgroundTasks):
     """
     Run multiple jobs across sites. Each job: {domain, titles?, csv_path?, profile_name?}
-    Runs in background - check /orchestrate/status for progress.
+    Runs in background - check /orchestrate/status for queue and progress.
+    Use POST /orchestrate/skip to skip pending jobs.
     """
+    global _active_orchestrator
     orch = Orchestrator(get_ctrl())
     for job in req.jobs:
         domain = job.get("domain") or job.get("profile_name")
@@ -509,9 +513,47 @@ def orchestrate(req: OrchestrateReq, background_tasks: BackgroundTasks):
             wait=job.get("wait", True),
         )
 
-    # Run in background
+    _active_orchestrator = orch
     background_tasks.add_task(orch.run_all, req.delay_between)
     return {"status": "orchestration_started", "job_count": len(req.jobs)}
+
+@app.post("/orchestrate/skip", tags=["Orchestration"])
+def orchestrate_skip(domain: str):
+    """Skip a pending job by domain. The job won't run when its turn comes."""
+    if not _active_orchestrator:
+        raise HTTPException(404, "No active orchestration")
+    _active_orchestrator.skip(domain)
+    return {"status": "skipped", "domain": domain, "queue": _active_orchestrator.get_queue_status()}
+
+@app.get("/orchestrate/status", tags=["Orchestration"])
+def orchestrate_status():
+    """Get the current orchestration queue status."""
+    if not _active_orchestrator:
+        return {"status": "no_active_orchestration"}
+    return {
+        "queue": _active_orchestrator.get_queue_status(),
+        "skip_list": sorted(_active_orchestrator._skip_domains),
+    }
+
+
+@app.get("/model-stats", tags=["Orchestration"])
+def model_stats():
+    """Get A/B test statistics comparing Claude-4.5 Haiku vs GPT-4.1 Mini."""
+    from .model_stats import ModelStats, MODEL_ASSIGNMENTS
+    stats = ModelStats()
+    return {
+        "summary": stats.summary(),
+        "assignments": MODEL_ASSIGNMENTS,
+        "total_entries": len(stats.load_all()),
+    }
+
+
+@app.get("/model-stats/report", tags=["Orchestration"])
+def model_stats_report():
+    """Get human-readable model comparison report."""
+    from .model_stats import ModelStats
+    stats = ModelStats()
+    return {"report": stats.report()}
 
 
 # ═══════════════════════════════════════════
@@ -864,6 +906,132 @@ def codex_domain_history(domain: str):
     if not history:
         return {"domain": domain, "history": None, "message": "No data yet"}
     return {"domain": domain, "history": history}
+
+
+# ═══════════════════════════════════════════
+# BATCH CAMPAIGN
+# ═══════════════════════════════════════════
+
+class BatchPrepareReq(BaseModel):
+    count: int = Field(20, description="Articles per site")
+    domains: Optional[List[str]] = Field(None, description="Specific domains (default: all 14)")
+
+class BatchExecuteReq(BaseModel):
+    batch_id: str = Field(..., description="Batch ID from prepare step")
+
+class BatchResumeReq(BaseModel):
+    batch_id: str = Field(..., description="Batch ID to resume")
+
+
+_active_batch = None
+
+
+@app.post("/batch/prepare", tags=["Batch Campaign"])
+def batch_prepare(req: BatchPrepareReq, background_tasks: BackgroundTasks):
+    """
+    Run batch preparation (steps 1-3): check existing titles,
+    generate new titles via Claude API, and save for review.
+    No ZimmWriter needed. Check /batch/status/{id} for progress.
+    """
+    global _active_batch
+    from .batch_campaign import BatchCampaign
+
+    batch = BatchCampaign(count=req.count, domains=req.domains)
+    _active_batch = batch
+    background_tasks.add_task(batch.run, prepare_only=True)
+    return {
+        "status": "preparation_started",
+        "batch_id": batch.batch_id,
+        "sites": len(batch.domains),
+        "articles_per_site": req.count,
+    }
+
+
+@app.post("/batch/execute", tags=["Batch Campaign"])
+def batch_execute(req: BatchExecuteReq, background_tasks: BackgroundTasks):
+    """
+    Execute a prepared batch (steps 4-8): refresh link packs,
+    optimize profiles, generate CSVs, queue orchestration, run articles.
+    Requires ZimmWriter to be running.
+    """
+    global _active_batch
+    from .batch_campaign import BatchCampaign
+
+    try:
+        batch = BatchCampaign.from_checkpoint(req.batch_id)
+    except FileNotFoundError:
+        raise HTTPException(404, f"Batch not found: {req.batch_id}")
+
+    _active_batch = batch
+    background_tasks.add_task(batch.run, execute_only=True)
+    return {
+        "status": "execution_started",
+        "batch_id": batch.batch_id,
+        "completed_steps": batch.state.get("completed_steps", []),
+    }
+
+
+@app.get("/batch/status/{batch_id}", tags=["Batch Campaign"])
+def batch_status(batch_id: str):
+    """Get current batch status and progress."""
+    from .batch_campaign import BatchCampaign
+
+    try:
+        batch = BatchCampaign.from_checkpoint(batch_id)
+    except FileNotFoundError:
+        raise HTTPException(404, f"Batch not found: {batch_id}")
+
+    return batch.get_status()
+
+
+@app.post("/batch/resume/{batch_id}", tags=["Batch Campaign"])
+def batch_resume(batch_id: str, background_tasks: BackgroundTasks):
+    """Resume a batch from its last checkpoint."""
+    global _active_batch
+    from .batch_campaign import BatchCampaign
+
+    try:
+        batch = BatchCampaign.from_checkpoint(batch_id)
+    except FileNotFoundError:
+        raise HTTPException(404, f"Batch not found: {batch_id}")
+
+    _active_batch = batch
+    background_tasks.add_task(batch.resume)
+    return {
+        "status": "resumed",
+        "batch_id": batch.batch_id,
+        "completed_steps": batch.state.get("completed_steps", []),
+    }
+
+
+@app.get("/batch/review/{batch_id}", tags=["Batch Campaign"])
+def batch_review(batch_id: str):
+    """Get generated titles for human review before execution."""
+    from .batch_campaign import BatchCampaign
+
+    try:
+        batch = BatchCampaign.from_checkpoint(batch_id)
+    except FileNotFoundError:
+        raise HTTPException(404, f"Batch not found: {batch_id}")
+
+    review = batch.get_review()
+    if not review:
+        raise HTTPException(404, "No review file found. Run /batch/prepare first.")
+    return review
+
+
+@app.get("/titles/existing/{domain}", tags=["Batch Campaign"])
+def titles_existing(domain: str):
+    """Check existing titles for a single WordPress site."""
+    from .title_checker import TitleChecker
+
+    preset = get_preset(domain)
+    if not preset:
+        raise HTTPException(404, f"No preset for: {domain}")
+
+    checker = TitleChecker()
+    result = checker.check_site(domain)
+    return checker.to_serializable(result)
 
 
 if __name__ == "__main__":
