@@ -24,6 +24,31 @@ from config.settings import EMPIRE_ROOT, IGNORE_DIRS, IGNORE_FILES, SCAN_EXTENSI
 class BrainScout:
     """Discovers and indexes everything across the empire."""
 
+    # Exact slug → category for edge cases that keyword matching misses
+    SLUG_OVERRIDES = {
+        "_archive": "infrastructure",
+        "anthropic-cost-optimizer-bundle": "infrastructure",
+        "ecss": "infrastructure",
+        "nexus": "infrastructure",
+        "scripts": "infrastructure",
+        "search": "infrastructure",
+        "src": "infrastructure",
+        "sync": "infrastructure",
+        "testing": "infrastructure",
+        "tests": "infrastructure",
+        "article-audit-system": "content-tools",
+        "mysticpress": "content-tools",
+        "mysticpress-project": "content-tools",
+        "nick-seo-content-engine": "content-tools",
+        "vision-auditor-project": "content-tools",
+        "manifest-and-align": "witchcraft-sites",
+        "moon-ritual-library": "witchcraft-sites",
+        "mythical-archives": "witchcraft-sites",
+        "mythicalarchives": "lifestyle-sites",
+        "etsy-agent-v2": "commerce",
+        "seo-link-building-agents-for-forums-and-q&a-sites---haro,-quora,-reddit": "automation",
+    }
+
     def __init__(self, db: Optional[BrainDB] = None):
         self.db = db or BrainDB()
         self.stats = {"projects": 0, "skills": 0, "functions": 0, "classes": 0, "endpoints": 0, "files": 0}
@@ -347,8 +372,12 @@ class BrainScout:
 
     # --- Helpers ---
     def _categorize_project(self, path: Path) -> str:
+        slug = path.name.lower().replace(" ", "-")
+        # Check exact-match overrides first
+        if slug in self.SLUG_OVERRIDES:
+            return self.SLUG_OVERRIDES[slug]
         name = path.name.lower()
-        if any(w in name for w in ["witchcraft", "grimoire", "moonritual", "manifestandalign"]):
+        if any(w in name for w in ["witchcraft", "grimoire", "moonritual", "manifestandalign", "moon-ritual", "manifest"]):
             return "witchcraft-sites"
         elif any(w in name for w in ["ai", "wealth", "clearai"]):
             return "ai-sites"
@@ -356,15 +385,15 @@ class BrainScout:
             return "tech-sites"
         elif any(w in name for w in ["video", "forge", "revid"]):
             return "video-systems"
-        elif any(w in name for w in ["empire", "brain", "mesh", "dashboard"]):
+        elif any(w in name for w in ["empire", "brain", "mesh", "dashboard", "archive", "test", "script", "nexus", "sync", "src", "search"]):
             return "infrastructure"
-        elif any(w in name for w in ["geelark", "openclaw", "automation"]):
+        elif any(w in name for w in ["geelark", "openclaw", "automation", "seo"]):
             return "automation"
-        elif any(w in name for w in ["velvet", "printable", "bmc"]):
+        elif any(w in name for w in ["velvet", "printable", "bmc", "etsy", "pod"]):
             return "commerce"
-        elif any(w in name for w in ["bullet", "family", "sprout", "celebration"]):
+        elif any(w in name for w in ["bullet", "family", "sprout", "celebration", "mythical"]):
             return "lifestyle-sites"
-        elif any(w in name for w in ["zimm", "pinflux", "canva"]):
+        elif any(w in name for w in ["zimm", "pinflux", "canva", "audit", "content", "nick", "mystic", "vision"]):
             return "content-tools"
         return "uncategorized"
 

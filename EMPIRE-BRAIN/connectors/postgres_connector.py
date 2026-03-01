@@ -126,6 +126,44 @@ class PostgresConnector:
             (event_type, json.dumps(data), source)
         )
 
+    def sync_briefing(self, briefing: dict):
+        """Sync a briefing to PostgreSQL."""
+        self.execute("""
+            INSERT INTO brain_briefings (date, summary, content, opportunities_count, alerts_count)
+            VALUES (%(date)s, %(summary)s, %(content)s, %(opportunities_count)s, %(alerts_count)s)
+            ON CONFLICT DO NOTHING
+        """, briefing)
+
+    def sync_code_solution(self, solution: dict):
+        """Sync a code solution to PostgreSQL."""
+        self.execute("""
+            INSERT INTO brain_code_solutions (problem, solution, language, project_slug, file_path, tags, content_hash)
+            VALUES (%(problem)s, %(solution)s, %(language)s, %(project_slug)s, %(file_path)s, %(tags)s, %(content_hash)s)
+            ON CONFLICT (content_hash) DO UPDATE SET
+                times_reused = brain_code_solutions.times_reused + 1
+        """, solution)
+
+    def sync_session(self, session: dict):
+        """Sync a session to PostgreSQL."""
+        self.execute("""
+            INSERT INTO brain_sessions (project_slug, summary, files_modified, learnings_captured, patterns_detected, started_at, ended_at)
+            VALUES (%(project_slug)s, %(summary)s, %(files_modified)s, %(learnings_captured)s, %(patterns_detected)s, %(started_at)s, %(ended_at)s)
+        """, session)
+
+    def sync_task(self, task: dict):
+        """Sync a task to PostgreSQL."""
+        self.execute("""
+            INSERT INTO brain_tasks (title, description, source, priority, status, assigned_project)
+            VALUES (%(title)s, %(description)s, %(source)s, %(priority)s, %(status)s, %(assigned_project)s)
+        """, task)
+
+    def sync_cross_reference(self, xref: dict):
+        """Sync a cross-reference to PostgreSQL."""
+        self.execute("""
+            INSERT INTO brain_cross_references (source_type, source_id, target_type, target_id, relationship, strength)
+            VALUES (%(source_type)s, %(source_id)s, %(target_type)s, %(target_id)s, %(relationship)s, %(strength)s)
+        """, xref)
+
     def get_analytics(self, days: int = 30) -> dict:
         """Get brain analytics for the last N days."""
         events = self.execute("""
@@ -267,6 +305,18 @@ CREATE TABLE IF NOT EXISTS brain_tasks (
     completed_at TIMESTAMPTZ
 );
 
+-- Cross References (connections between entities)
+CREATE TABLE IF NOT EXISTS brain_cross_references (
+    id SERIAL PRIMARY KEY,
+    source_type TEXT NOT NULL,
+    source_id INTEGER NOT NULL,
+    target_type TEXT NOT NULL,
+    target_id INTEGER NOT NULL,
+    relationship TEXT,
+    strength REAL DEFAULT 0.5,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_brain_events_type ON brain_events(event_type);
 CREATE INDEX IF NOT EXISTS idx_brain_events_ts ON brain_events(timestamp);
@@ -275,4 +325,6 @@ CREATE INDEX IF NOT EXISTS idx_brain_learnings_hash ON brain_learnings(content_h
 CREATE INDEX IF NOT EXISTS idx_brain_projects_cat ON brain_projects(category);
 CREATE INDEX IF NOT EXISTS idx_brain_sessions_proj ON brain_sessions(project_slug);
 CREATE INDEX IF NOT EXISTS idx_brain_opportunities_status ON brain_opportunities(status);
+CREATE INDEX IF NOT EXISTS idx_brain_xrefs_source ON brain_cross_references(source_type, source_id);
+CREATE INDEX IF NOT EXISTS idx_brain_xrefs_target ON brain_cross_references(target_type, target_id);
 """

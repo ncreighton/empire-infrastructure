@@ -402,17 +402,26 @@ class BrainDB:
     def add_opportunity(self, title: str, opp_type: str, description: str, projects: list[str],
                         impact: str = "medium", effort: str = "medium"):
         conn = self._conn()
+        # Deduplicate: skip if an open opportunity with the same title already exists
+        existing = conn.execute(
+            "SELECT id FROM opportunities WHERE title = ? AND status = 'open'", (title,)
+        ).fetchone()
+        if existing:
+            conn.close()
+            return existing["id"]
         impact_scores = {"low": 1, "medium": 2, "high": 3, "critical": 4}
         effort_scores = {"low": 3, "medium": 2, "high": 1}
         priority = impact_scores.get(impact, 2) * effort_scores.get(effort, 2)
-        conn.execute(
+        cur = conn.execute(
             """INSERT INTO opportunities (title, opportunity_type, description, affected_projects,
                estimated_impact, estimated_effort, priority_score)
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
             (title, opp_type, description, json.dumps(projects), impact, effort, priority)
         )
         conn.commit()
+        oid = cur.lastrowid
         conn.close()
+        return oid
 
     def get_opportunities(self, status: str = "open") -> list[dict]:
         conn = self._conn()

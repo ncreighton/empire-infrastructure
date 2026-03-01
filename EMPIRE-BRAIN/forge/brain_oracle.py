@@ -45,21 +45,68 @@ class BrainOracle:
         }
 
     def find_opportunities(self) -> list[dict]:
-        """Discover monetization and growth opportunities."""
+        """Discover monetization, growth, and architecture opportunities."""
         opportunities = []
         projects = self.db.get_projects()
+        conn = self.db._conn()
 
-        # Group by category
+        # Build lookup structures once
         categories = {}
+        slugs_by_cat = {}
         for p in projects:
             cat = p.get("category", "uncategorized")
             categories.setdefault(cat, []).append(p)
+            slugs_by_cat.setdefault(cat, set()).add(p["slug"])
 
-        # Cross-pollination opportunities
-        systems = [p for p in projects if p.get("category") in ("video-systems", "infrastructure", "content-tools")]
         sites = [p for p in projects if "sites" in p.get("category", "")]
+        api_projects = [p for p in projects if p.get("endpoint_count", 0) > 0]
 
-        # FORGE+AMPLIFY expansion
+        # --- Finder 1: FORGE+AMPLIFY expansion (existing) ---
+        opportunities.extend(self._find_forge_expansion(projects, sites))
+
+        # --- Finder 2: Cross-pollination ---
+        opportunities.extend(self._find_cross_pollination(projects, conn))
+
+        # --- Finder 3: Shared auth layer ---
+        opportunities.extend(self._find_shared_auth(conn))
+
+        # --- Finder 4: API gateway consolidation ---
+        opportunities.extend(self._find_api_gateway(api_projects))
+
+        # --- Finder 5: Content pipeline unification ---
+        opportunities.extend(self._find_content_unification(conn))
+
+        # --- Finder 6: Revenue attribution ---
+        opportunities.extend(self._find_revenue_attribution(conn))
+
+        # --- Finder 7: Monitoring consolidation ---
+        opportunities.extend(self._find_monitoring_gaps(api_projects))
+
+        # --- Existing: Video + PinFlux for sites ---
+        opportunities.extend(self._find_video_gaps(projects, sites))
+        opportunities.extend(self._find_pinflux_gaps(projects, sites))
+
+        conn.close()
+
+        # Persist all new opportunities (dedup handled by add_opportunity)
+        for opp in opportunities:
+            self.db.add_opportunity(
+                title=opp["title"],
+                opp_type=opp["type"],
+                description=opp["description"],
+                projects=opp["affected_projects"],
+                impact=opp["impact"],
+                effort=opp["effort"],
+            )
+
+        return opportunities
+
+    # ------------------------------------------------------------------
+    # Individual opportunity finders
+    # ------------------------------------------------------------------
+
+    def _find_forge_expansion(self, projects: list[dict], sites: list[dict]) -> list[dict]:
+        """Find site projects that lack FORGE+AMPLIFY."""
         forge_projects = self.db.get_patterns(pattern_type="architecture")
         forge_slugs = set()
         for p in forge_projects:
@@ -69,59 +116,394 @@ class BrainOracle:
                 except (json.JSONDecodeError, TypeError):
                     pass
 
+        opps = []
         for site_proj in sites:
             if site_proj["slug"] not in forge_slugs:
-                opp = {
+                opps.append({
                     "title": f"Add FORGE+AMPLIFY to {site_proj['name']}",
                     "type": "optimization",
                     "impact": "high",
                     "effort": "medium",
-                    "description": f"Project '{site_proj['name']}' doesn't use FORGE+AMPLIFY pipeline. Adding it could improve content quality and automation.",
+                    "description": f"Project '{site_proj['name']}' doesn't use FORGE+AMPLIFY pipeline. "
+                                   f"Adding it could improve content quality and automation.",
                     "affected_projects": [site_proj["slug"]],
-                }
-                opportunities.append(opp)
-                self.db.add_opportunity(**{
-                    "title": opp["title"],
-                    "opp_type": opp["type"],
-                    "description": opp["description"],
-                    "projects": opp["affected_projects"],
-                    "impact": opp["impact"],
-                    "effort": opp["effort"],
+                })
+        return opps
+
+    def _find_cross_pollination(self, projects: list[dict], conn) -> list[dict]:
+        """Find capabilities in one system that could benefit another."""
+        opps = []
+
+        # VideoForge ScriptEngine → ZimmWriter content generation
+        vf_scripts = conn.execute(
+            "SELECT 1 FROM classes WHERE project_slug = 'videoforge-engine' AND name = 'ScriptEngine'"
+        ).fetchone()
+        zw_exists = any(p["slug"] == "zimmwriter-project-new" for p in projects)
+        if vf_scripts and zw_exists:
+            opps.append({
+                "title": "Port VideoForge ScriptEngine anti-slop pipeline to ZimmWriter",
+                "type": "cross_pollination",
+                "impact": "high",
+                "effort": "medium",
+                "description": "VideoForge's ScriptEngine has an anti-slop pipeline that removes AI-sounding "
+                               "language. This same pipeline could clean up ZimmWriter-generated articles, "
+                               "improving E-E-A-T across all 16 sites.",
+                "affected_projects": ["videoforge-engine", "zimmwriter-project-new"],
+            })
+
+        # Grimoire knowledge base → Witchcraft sites content enrichment
+        grimoire_knowledge = conn.execute(
+            "SELECT COUNT(*) as cnt FROM classes WHERE project_slug = 'grimoire-intelligence' "
+            "AND (name LIKE '%Knowledge%' OR name LIKE '%Herb%' OR name LIKE '%Crystal%' OR name LIKE '%Tarot%')"
+        ).fetchone()
+        if grimoire_knowledge and grimoire_knowledge["cnt"] >= 3:
+            opps.append({
+                "title": "Use Grimoire knowledge base to enrich witchcraft article content",
+                "type": "cross_pollination",
+                "impact": "high",
+                "effort": "low",
+                "description": "Grimoire has 49 herbs, 40 crystals, 78 tarot cards, 8 sabbats cataloged. "
+                               "This data could auto-inject accurate correspondences into articles for "
+                               "witchcraftforbeginners and manifestandalign, boosting E-E-A-T without AI costs.",
+                "affected_projects": ["grimoire-intelligence", "witchcraftforbeginners", "manifestandalign"],
+            })
+
+        # Article audit visual checks → Empire dashboard monitoring
+        audit_vision = conn.execute(
+            "SELECT 1 FROM functions WHERE project_slug = 'article-audit-system' AND name LIKE '%visual%'"
+        ).fetchone()
+        dash_exists = any(p["slug"] == "empire-dashboard" for p in projects)
+        if audit_vision and dash_exists:
+            opps.append({
+                "title": "Feed article-audit visual regression results into Empire Dashboard",
+                "type": "cross_pollination",
+                "impact": "medium",
+                "effort": "low",
+                "description": "Article audit system captures screenshots and detects visual regressions. "
+                               "Piping these results as dashboard alerts would catch broken layouts across "
+                               "all 16 sites automatically.",
+                "affected_projects": ["article-audit-system", "empire-dashboard"],
+            })
+
+        # VideoCodex learnings → Brain learnings
+        codex_exists = conn.execute(
+            "SELECT 1 FROM classes WHERE project_slug = 'videoforge-engine' AND name = 'VideoCodex'"
+        ).fetchone()
+        if codex_exists:
+            opps.append({
+                "title": "Sync VideoCodex cost/performance data into EMPIRE-BRAIN learnings",
+                "type": "cross_pollination",
+                "impact": "medium",
+                "effort": "low",
+                "description": "VideoCodex tracks per-video costs, render success rates, and niche performance. "
+                               "Syncing this into EMPIRE-BRAIN's learnings table would let the Morning Briefing "
+                               "surface video ROI trends.",
+                "affected_projects": ["videoforge-engine", "empire-brain"],
+            })
+
+        return opps
+
+    def _find_shared_auth(self, conn) -> list[dict]:
+        """Detect duplicated WordPress auth across projects."""
+        opps = []
+
+        # Count projects with their own login_wordpress implementation
+        wp_login_projects = conn.execute(
+            "SELECT DISTINCT project_slug FROM functions WHERE name = 'login_wordpress'"
+        ).fetchall()
+
+        if len(wp_login_projects) >= 8:
+            slugs = [r["project_slug"] for r in wp_login_projects]
+            opps.append({
+                "title": f"Extract shared WordPress auth service ({len(slugs)} duplicate implementations)",
+                "type": "shared_service",
+                "impact": "high",
+                "effort": "medium",
+                "description": f"login_wordpress() is copy-pasted across {len(slugs)} projects. "
+                               f"A single wp-auth-service or shared module would centralize credential "
+                               f"management, simplify app-password rotation, and reduce code by ~{len(slugs) * 30} lines. "
+                               f"Projects: {', '.join(slugs[:6])}{'...' if len(slugs) > 6 else ''}",
+                "affected_projects": slugs[:10],
+            })
+
+        # Also check for duplicated create_post / clear_cache
+        for fn_name, label in [
+            ("create_post", "WordPress post creation"),
+            ("clear_cache", "LiteSpeed cache clearing"),
+            ("take_screenshot", "screenshot capture"),
+        ]:
+            fn_projects = conn.execute(
+                "SELECT DISTINCT project_slug FROM functions WHERE name = ?", (fn_name,)
+            ).fetchall()
+            if len(fn_projects) >= 10:
+                slugs = [r["project_slug"] for r in fn_projects]
+                opps.append({
+                    "title": f"Extract shared {label} utility ({len(slugs)} implementations)",
+                    "type": "shared_service",
+                    "impact": "medium",
+                    "effort": "low",
+                    "description": f"{fn_name}() is duplicated across {len(slugs)} projects. "
+                                   f"Moving to a shared empire-utils package eliminates maintenance overhead.",
+                    "affected_projects": slugs[:8],
                 })
 
-        # Video creation for sites without video
+        return opps
+
+    def _find_api_gateway(self, api_projects: list[dict]) -> list[dict]:
+        """Detect need for API gateway when multiple services run independently."""
+        opps = []
+
+        if len(api_projects) >= 5:
+            slugs = [p["slug"] for p in api_projects if p.get("endpoint_count", 0) >= 4]
+            if len(slugs) >= 4:
+                opps.append({
+                    "title": f"Add API gateway for {len(slugs)} independent FastAPI services",
+                    "type": "architecture",
+                    "impact": "high",
+                    "effort": "high",
+                    "description": f"{len(slugs)} FastAPI services run on separate ports with no unified "
+                                   f"routing, auth, or rate limiting. A lightweight gateway (nginx/Traefik) "
+                                   f"would add: single entrypoint, shared API key auth, request logging, "
+                                   f"health aggregation, and CORS in one place. "
+                                   f"Services: {', '.join(slugs[:6])}",
+                    "affected_projects": slugs[:8],
+                })
+
+        # Check for services without /health endpoint
+        no_health = []
+        conn = self.db._conn()
+        for p in api_projects:
+            if p.get("endpoint_count", 0) >= 4:
+                has_health = conn.execute(
+                    "SELECT 1 FROM api_endpoints WHERE project_slug = ? AND path LIKE '%health%'",
+                    (p["slug"],)
+                ).fetchone()
+                if not has_health:
+                    no_health.append(p["slug"])
+        conn.close()
+
+        if no_health:
+            opps.append({
+                "title": f"Add /health endpoint to {len(no_health)} API services",
+                "type": "architecture",
+                "impact": "medium",
+                "effort": "low",
+                "description": f"These API services lack a /health endpoint, making automated monitoring "
+                               f"impossible: {', '.join(no_health)}",
+                "affected_projects": no_health,
+            })
+
+        return opps
+
+    def _find_content_unification(self, conn) -> list[dict]:
+        """Detect fragmented content generation across multiple systems."""
+        opps = []
+
+        # Find all projects that generate articles
+        content_projects = conn.execute("""
+            SELECT DISTINCT project_slug FROM functions
+            WHERE name IN ('generate_article', 'write_article', 'generate_content',
+                           '_generate_article', 'create_article')
+            AND project_slug NOT LIKE '%test%'
+            AND project_slug != '_archive'
+        """).fetchall()
+
+        slugs = [r["project_slug"] for r in content_projects]
+        if len(slugs) >= 3:
+            opps.append({
+                "title": f"Unify content generation across {len(slugs)} separate pipelines",
+                "type": "architecture",
+                "impact": "critical",
+                "effort": "high",
+                "description": f"Article generation is fragmented across {len(slugs)} projects: "
+                               f"{', '.join(slugs)}. Each has its own prompt engineering, model selection, "
+                               f"and quality checks. A single content-engine service would enforce consistent "
+                               f"brand voice, E-E-A-T signals, anti-slop filtering, and cost-optimized "
+                               f"model routing across all 16 sites.",
+                "affected_projects": slugs,
+            })
+
+        # Check for projects using different AI models/APIs
+        openrouter_projects = conn.execute(
+            "SELECT DISTINCT project_slug FROM functions WHERE name LIKE '%openrouter%'"
+        ).fetchall()
+        claude_projects = conn.execute(
+            "SELECT DISTINCT project_slug FROM functions WHERE name LIKE '%claude%' OR name LIKE '%anthropic%'"
+        ).fetchall()
+
+        or_slugs = {r["project_slug"] for r in openrouter_projects}
+        cl_slugs = {r["project_slug"] for r in claude_projects}
+        mixed = or_slugs & cl_slugs
+        if mixed:
+            opps.append({
+                "title": "Standardize LLM provider routing across projects",
+                "type": "optimization",
+                "impact": "medium",
+                "effort": "medium",
+                "description": f"{len(mixed)} projects use both OpenRouter and direct Claude API. "
+                               f"A shared LLM router would optimize cost (route simple tasks to Haiku, "
+                               f"complex to Sonnet) and add prompt caching uniformly. "
+                               f"Projects: {', '.join(list(mixed)[:5])}",
+                "affected_projects": list(mixed)[:8],
+            })
+
+        return opps
+
+    def _find_revenue_attribution(self, conn) -> list[dict]:
+        """Detect gaps in revenue tracking and attribution."""
+        opps = []
+
+        # Check if BMC webhook handler exists but lacks content attribution
+        bmc_exists = conn.execute(
+            "SELECT 1 FROM functions WHERE project_slug = 'bmc-witchcraft' AND name = 'handle_bmc_webhook'"
+        ).fetchone()
+        # Check if any revenue tracking connects to content
+        revenue_to_content = conn.execute("""
+            SELECT 1 FROM functions
+            WHERE name LIKE '%revenue%content%' OR name LIKE '%attribution%'
+            OR name LIKE '%revenue%article%' OR name LIKE '%conversion%track%'
+        """).fetchone()
+
+        if bmc_exists and not revenue_to_content:
+            opps.append({
+                "title": "Add revenue-to-content attribution for BMC + AdSense",
+                "type": "monetization",
+                "impact": "high",
+                "effort": "medium",
+                "description": "BMC webhook captures payment events but nothing traces which articles, "
+                               "videos, or email sequences drove each sale. Adding UTM tracking from "
+                               "content → BMC page → webhook would reveal which content converts, "
+                               "informing the content calendar. Same pattern applies to AdSense per-page revenue.",
+                "affected_projects": ["bmc-witchcraft", "empire-dashboard", "witchcraftforbeginners"],
+            })
+
+        # Check for AdSense/monetization in site projects
+        adsense_projects = conn.execute(
+            "SELECT DISTINCT project_slug FROM functions WHERE name LIKE '%adsense%' OR name LIKE '%monetiz%'"
+        ).fetchall()
+        site_slugs = {p["project_slug"] for p in adsense_projects}
+
+        # Check which EMPIRE_SITES have no monetization code at all
+        unmonetized = []
+        for site in EMPIRE_SITES:
+            has_any_revenue = conn.execute("""
+                SELECT 1 FROM functions WHERE project_slug = ?
+                AND (name LIKE '%revenue%' OR name LIKE '%adsense%' OR name LIKE '%affiliate%'
+                     OR name LIKE '%monetiz%' OR name LIKE '%shop%')
+            """, (site,)).fetchone()
+            if not has_any_revenue:
+                unmonetized.append(site)
+
+        if len(unmonetized) >= 5:
+            opps.append({
+                "title": f"Add monetization tracking to {len(unmonetized)} sites with no revenue code",
+                "type": "monetization",
+                "impact": "high",
+                "effort": "medium",
+                "description": f"These sites have zero monetization-related functions: "
+                               f"{', '.join(unmonetized[:8])}. At minimum, each should track "
+                               f"AdSense RPM per article and affiliate click-through rates.",
+                "affected_projects": unmonetized[:10],
+            })
+
+        return opps
+
+    def _find_monitoring_gaps(self, api_projects: list[dict]) -> list[dict]:
+        """Detect services not covered by the dashboard health monitor."""
+        opps = []
+
+        # Known monitored services (from settings.py SERVICES dict)
+        monitored_ports = {3030, 8000, 8002, 8080, 8090, 8095, 8200, 8765}
+        monitored_slugs = {
+            "screenpipe", "empire-dashboard", "geelark-automation",
+            "grimoire-intelligence", "videoforge-engine", "bmc-witchcraft",
+            "empire-brain", "zimmwriter-project-new"
+        }
+
+        unmonitored = []
+        for p in api_projects:
+            if p.get("endpoint_count", 0) >= 4 and p["slug"] not in monitored_slugs:
+                # Skip infrastructure/archive projects
+                if p.get("category") in ("infrastructure",) and p["slug"] in (
+                    "_archive", "scripts", "src", "project-mesh-v2-omega"
+                ):
+                    continue
+                unmonitored.append(p["slug"])
+
+        if unmonitored:
+            opps.append({
+                "title": f"Add {len(unmonitored)} API services to dashboard health monitoring",
+                "type": "monitoring",
+                "impact": "medium",
+                "effort": "low",
+                "description": f"These API services have endpoints but aren't in the dashboard health "
+                               f"monitor: {', '.join(unmonitored)}. Adding them to SERVICES in "
+                               f"config/settings.py and the dashboard health card catches outages early.",
+                "affected_projects": unmonitored + ["empire-dashboard"],
+            })
+
+        # Check for projects with high function count but no logging
+        conn = self.db._conn()
+        no_logging = []
+        for p in api_projects:
+            if p.get("function_count", 0) >= 50:
+                has_logging = conn.execute(
+                    "SELECT 1 FROM functions WHERE project_slug = ? "
+                    "AND (name LIKE '%log%' OR name LIKE '%logger%') LIMIT 1",
+                    (p["slug"],)
+                ).fetchone()
+                if not has_logging:
+                    no_logging.append(p["slug"])
+        conn.close()
+
+        if no_logging:
+            opps.append({
+                "title": f"Add structured logging to {len(no_logging)} services",
+                "type": "monitoring",
+                "impact": "medium",
+                "effort": "low",
+                "description": f"These services have no logging functions, making debugging impossible: "
+                               f"{', '.join(no_logging)}",
+                "affected_projects": no_logging,
+            })
+
+        return opps
+
+    def _find_video_gaps(self, projects: list[dict], sites: list[dict]) -> list[dict]:
+        """Find sites that could use VideoForge but don't."""
+        opps = []
         video_systems = [p for p in projects if p.get("category") == "video-systems"]
         if video_systems:
             for site in sites:
                 site_name = site.get("name", "").lower()
-                # These already have video
                 if any(v in site_name for v in ["witchcraft", "smart"]):
                     continue
-                opp = {
+                opps.append({
                     "title": f"Create video content for {site['name']}",
                     "type": "content_gap",
                     "impact": "medium",
                     "effort": "low",
-                    "description": f"VideoForge engine exists but {site['name']} has no video content pipeline. Could drive traffic via YouTube/TikTok.",
+                    "description": f"VideoForge engine exists but {site['name']} has no video pipeline. "
+                                   f"Could drive traffic via YouTube/TikTok.",
                     "affected_projects": [site["slug"], "videoforge-engine"],
-                }
-                opportunities.append(opp)
+                })
+        return opps
 
-        # Pinterest automation for sites
+    def _find_pinflux_gaps(self, projects: list[dict], sites: list[dict]) -> list[dict]:
+        """Find sites that could use PinFlux but don't."""
+        opps = []
         pinflux = [p for p in projects if "pinflux" in p.get("slug", "")]
         if pinflux:
             for site in sites:
-                opp = {
+                opps.append({
                     "title": f"Enable PinFlux for {site['name']}",
                     "type": "automation",
                     "impact": "medium",
                     "effort": "low",
                     "description": f"PinFlux engine can auto-generate pins from {site['name']} blog posts.",
                     "affected_projects": [site["slug"], "pinflux-engine"],
-                }
-                opportunities.append(opp)
-
-        return opportunities[:20]
+                })
+        return opps
 
     def assess_risks(self) -> list[dict]:
         """Identify current risks across the empire."""
