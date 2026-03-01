@@ -14,8 +14,8 @@ BASE_DIR = Path(__file__).parent.parent
 ENV_FILE = BASE_DIR / ".env"
 
 # Defaults
-ADB = r"C:\Users\ncreighton\AppData\Local\Android\Sdk\platform-tools\adb.exe"
-DEVICE = "100.79.124.62:34647"
+ADB = r"C:\Users\ncreighton\AppData\Roaming\GeeLark\adb\adb.exe"
+DEVICE = "100.79.124.62:5555"
 PHONE_PIN = ""
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 

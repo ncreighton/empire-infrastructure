@@ -238,7 +238,7 @@ def adb_port_scan(host: str) -> int | None:
     import socket
 
     # Common ranges for Android wireless debugging
-    port_ranges = [(37000, 44999)]
+    port_ranges = [(34000, 50000)]
     # Also check well-known ports first
     quick_ports = [5555, 5037]
 
@@ -321,6 +321,22 @@ def check_adb_connection() -> bool:
         new_device = f"{host}:{new_port}"
         logger.info(f"Found ADB on port {new_port}! Updating config...")
         update_device_env(new_device)
+
+        # Re-establish fixed port 5555 if we found a random one
+        if new_port != 5555:
+            logger.info("Re-establishing fixed port 5555 via adb tcpip...")
+            try:
+                subprocess.run(
+                    [ADB, "-s", new_device, "tcpip", "5555"],
+                    capture_output=True, text=True, timeout=15,
+                )
+                time.sleep(5)
+                fixed_device = f"{host}:5555"
+                if adb_try_connect(host, 5555):
+                    update_device_env(fixed_device)
+                    logger.info("Fixed port 5555 restored")
+            except Exception as e:
+                logger.warning(f"tcpip setup failed: {e}, using port {new_port}")
         return True
 
     logger.error("ADB auto-reconnect failed: device unreachable or wireless debugging off")
