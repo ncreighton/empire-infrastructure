@@ -29,6 +29,7 @@ from bmc_config import (
     DATA_DIR,
     SUPPORTERS_LOG,
     STATS_FILE,
+    REVENUE_ATTRIBUTION_FILE,
     TIER_MAP,
 )
 from supporter_notifications import (
@@ -111,6 +112,50 @@ def _update_stats(event_type: str, amount: float = 0):
     _save_json(STATS_FILE, stats)
 
 
+# --- Revenue Attribution ---
+
+def _update_revenue_attribution(event_type: str, amount: float, item: str, attribution: dict):
+    """Track which content sources drive revenue."""
+    data = _load_json(REVENUE_ATTRIBUTION_FILE)
+
+    if "by_source" not in data:
+        data["by_source"] = {}
+    if "by_campaign" not in data:
+        data["by_campaign"] = {}
+    if "events" not in data:
+        data["events"] = []
+
+    # Track by UTM source
+    source = attribution.get("utm_source") or attribution.get("referrer") or "direct"
+    if source not in data["by_source"]:
+        data["by_source"][source] = {"count": 0, "revenue": 0}
+    data["by_source"][source]["count"] += 1
+    data["by_source"][source]["revenue"] += amount
+
+    # Track by campaign
+    campaign = attribution.get("utm_campaign")
+    if campaign:
+        if campaign not in data["by_campaign"]:
+            data["by_campaign"][campaign] = {"count": 0, "revenue": 0}
+        data["by_campaign"][campaign]["count"] += 1
+        data["by_campaign"][campaign]["revenue"] += amount
+
+    # Append event
+    data["events"].append({
+        "type": event_type,
+        "item": item,
+        "amount": amount,
+        "source": source,
+        "campaign": campaign or "",
+        "medium": attribution.get("utm_medium", ""),
+        "timestamp": datetime.now().isoformat(),
+    })
+    data["events"] = data["events"][-500:]
+
+    data["last_updated"] = datetime.now().isoformat()
+    _save_json(REVENUE_ATTRIBUTION_FILE, data)
+
+
 # --- Signature Verification ---
 
 def verify_signature(payload_body: bytes, signature: str) -> bool:
@@ -160,11 +205,20 @@ async def handle_bmc_webhook(
 
     logger.info(f"Received BMC webhook: {event_type}")
 
+    # Extract attribution from payload metadata
+    extra = data.get("extra", data.get("extra_data", {}))
+    referrer = extra.get("referrer", data.get("referrer", ""))
+    utm = {
+        "source": extra.get("utm_source", data.get("utm_source", "")),
+        "medium": extra.get("utm_medium", data.get("utm_medium", "")),
+        "campaign": extra.get("utm_campaign", data.get("utm_campaign", "")),
+    }
+
     # Route to handler
     if event_type == "payment.completed":
-        await _handle_payment(data)
+        await _handle_payment(data, referrer=referrer, utm=utm)
     elif event_type == "membership.started":
-        await _handle_membership_started(data)
+        await _handle_membership_started(data, referrer=referrer, utm=utm)
     elif event_type == "membership.cancelled":
         await _handle_membership_cancelled(data)
     else:
@@ -173,12 +227,22 @@ async def handle_bmc_webhook(
     return {"status": "ok", "event": event_type}
 
 
-async def _handle_payment(data: dict):
+async def _handle_payment(data: dict, referrer: str = "", utm: dict = None):
     """Handle payment.completed — could be a tip or shop purchase."""
     supporter_name = data.get("supporter_name", "Anonymous")
     amount = float(data.get("amount", 0))
     message = data.get("message")
     is_membership = data.get("is_membership_payment", False)
+    email = data.get("supporter_email", data.get("email", ""))
+
+    # Revenue attribution data
+    attribution = {
+        "referrer": referrer,
+        "utm_source": (utm or {}).get("source", ""),
+        "utm_medium": (utm or {}).get("medium", ""),
+        "utm_campaign": (utm or {}).get("campaign", ""),
+        "supporter_email": email,
+    }
 
     # Check if it's a shop purchase (has product info)
     product = data.get("product")
@@ -190,8 +254,10 @@ async def _handle_payment(data: dict):
             "name": supporter_name,
             "product": product_title,
             "amount": amount,
+            **attribution,
         })
         _update_stats("shop", amount)
+        _update_revenue_attribution("shop", amount, product_title, attribution)
         await notify_shop_purchase(supporter_name, product_title, amount)
 
     elif not is_membership:
@@ -203,16 +269,27 @@ async def _handle_payment(data: dict):
             "amount": amount,
             "potions": potions,
             "message": message,
+            **attribution,
         })
         _update_stats("tip", amount)
+        _update_revenue_attribution("tip", amount, f"{potions} potions", attribution)
         await notify_tip(supporter_name, amount, potions, message)
 
 
-async def _handle_membership_started(data: dict):
+async def _handle_membership_started(data: dict, referrer: str = "", utm: dict = None):
     """Handle membership.started — new member joined."""
     supporter_name = data.get("supporter_name", "Anonymous")
     tier_name = data.get("membership_level_name", "Unknown Tier")
     amount = float(data.get("amount", 0))
+    email = data.get("supporter_email", data.get("email", ""))
+
+    attribution = {
+        "referrer": referrer,
+        "utm_source": (utm or {}).get("source", ""),
+        "utm_medium": (utm or {}).get("medium", ""),
+        "utm_campaign": (utm or {}).get("campaign", ""),
+        "supporter_email": email,
+    }
 
     tier_id = TIER_MAP.get(tier_name, "unknown")
     logger.info(f"New member: {supporter_name} joined {tier_name} (${amount:.2f}/mo)")
@@ -222,8 +299,10 @@ async def _handle_membership_started(data: dict):
         "tier": tier_name,
         "tier_id": tier_id,
         "amount": amount,
+        **attribution,
     })
     _update_stats("membership_started", amount)
+    _update_revenue_attribution("membership", amount, tier_name, attribution)
     await notify_membership_started(supporter_name, tier_name, amount)
 
 
@@ -284,6 +363,28 @@ async def get_recent_events(limit: int = 20):
     log = _load_json(SUPPORTERS_LOG)
     events = log.get("events", [])
     return {"events": events[-limit:]}
+
+
+# --- Revenue Attribution ---
+
+@app.get("/webhooks/bmc/revenue")
+async def get_revenue_attribution():
+    """Get revenue attribution breakdown by source and campaign."""
+    data = _load_json(REVENUE_ATTRIBUTION_FILE)
+
+    by_source = data.get("by_source", {})
+    by_campaign = data.get("by_campaign", {})
+
+    # Sort by revenue descending
+    top_sources = sorted(by_source.items(), key=lambda x: x[1]["revenue"], reverse=True)
+    top_campaigns = sorted(by_campaign.items(), key=lambda x: x[1]["revenue"], reverse=True)
+
+    return {
+        "by_source": [{"source": k, **v} for k, v in top_sources[:20]],
+        "by_campaign": [{"campaign": k, **v} for k, v in top_campaigns[:20]],
+        "recent_events": data.get("events", [])[-20:],
+        "last_updated": data.get("last_updated"),
+    }
 
 
 # --- Health Check ---

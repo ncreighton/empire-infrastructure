@@ -30,8 +30,45 @@ class BrainOracle:
         "commerce": {"growth": "high", "competition": "medium", "monetization": "very-high"},
     }
 
+    # Impact multipliers for smarter priority scoring
+    IMPACT_WEIGHT = {"low": 1, "medium": 2, "high": 3, "critical": 5}
+    EFFORT_WEIGHT = {"low": 3, "medium": 2, "high": 1}
+    TYPE_BONUS = {
+        "monetization": 1.5,    # Revenue opportunities score higher
+        "cross_pollination": 1.3,  # Reuse existing work
+        "shared_service": 1.2,  # Reduce maintenance
+        "architecture": 1.0,
+        "monitoring": 0.9,
+        "content_gap": 0.8,
+        "automation": 0.8,
+        "optimization": 1.1,
+    }
+
     def __init__(self, db: Optional[BrainDB] = None):
         self.db = db or BrainDB()
+
+    def _score_opportunity(self, opp: dict) -> float:
+        """Calculate a smarter priority score (0-10) using weighted factors."""
+        impact = self.IMPACT_WEIGHT.get(opp.get("impact", "medium"), 2)
+        effort = self.EFFORT_WEIGHT.get(opp.get("effort", "medium"), 2)
+        type_bonus = self.TYPE_BONUS.get(opp.get("type", "optimization"), 1.0)
+
+        # Base score: impact * effort_ease (higher effort_ease = easier to do)
+        base = impact * effort  # 1-15 range
+
+        # Project count bonus: more projects affected = higher value
+        affected = opp.get("affected_projects", [])
+        project_bonus = min(len(affected) * 0.3, 2.0)  # up to +2
+
+        # Revenue potential: monetization/commerce projects get extra weight
+        revenue_projects = {"bmc-witchcraft", "etsy-agent-v2", "witchcraftforbeginners"}
+        revenue_overlap = len(set(affected) & revenue_projects)
+        revenue_bonus = revenue_overlap * 0.5  # up to +1.5
+
+        raw_score = (base * type_bonus) + project_bonus + revenue_bonus
+
+        # Normalize to 0-10 scale (max raw is ~5*3*1.5+2+1.5 = 26)
+        return round(min(10.0, raw_score / 2.6), 1)
 
     def weekly_forecast(self) -> dict:
         """Generate comprehensive weekly forecast."""
@@ -88,8 +125,9 @@ class BrainOracle:
 
         conn.close()
 
-        # Persist all new opportunities (dedup handled by add_opportunity)
+        # Score and persist all new opportunities (dedup handled by add_opportunity)
         for opp in opportunities:
+            opp["priority_score"] = self._score_opportunity(opp)
             self.db.add_opportunity(
                 title=opp["title"],
                 opp_type=opp["type"],
@@ -97,9 +135,11 @@ class BrainOracle:
                 projects=opp["affected_projects"],
                 impact=opp["impact"],
                 effort=opp["effort"],
+                priority_score=opp["priority_score"],
             )
 
-        return opportunities
+        # Return sorted by priority score descending
+        return sorted(opportunities, key=lambda o: o.get("priority_score", 0), reverse=True)
 
     # ------------------------------------------------------------------
     # Individual opportunity finders
@@ -589,17 +629,37 @@ class BrainOracle:
         return opts
 
     def generate_recommendations(self) -> list[dict]:
-        """Generate prioritized action recommendations."""
+        """Generate prioritized action recommendations with actionable next steps."""
         recs = []
+
+        # Action templates by opportunity type
+        action_map = {
+            "monetization": "Set up tracking → measure baseline → A/B test → scale",
+            "cross_pollination": "Import module → create adapter → wire into pipeline → test",
+            "shared_service": "Extract to shared/ → update imports in consumers → add tests",
+            "architecture": "Design interface → build prototype → migrate one consumer → rollout",
+            "monitoring": "Add /health endpoint → register in dashboard → set alert thresholds",
+            "content_gap": "Create content brief → generate draft → review → publish",
+            "automation": "Configure trigger → build workflow → test with sample → enable",
+            "optimization": "Profile current → identify bottleneck → apply fix → benchmark",
+        }
 
         opportunities = self.db.get_opportunities(status="open")
         for opp in opportunities[:10]:
+            opp_type = opp.get("opportunity_type", "general")
+            try:
+                projects = json.loads(opp.get("affected_projects", "[]"))
+            except (json.JSONDecodeError, TypeError):
+                projects = []
+
             recs.append({
                 "title": opp["title"],
                 "priority": opp.get("priority_score", 0),
-                "type": opp.get("opportunity_type", "general"),
+                "type": opp_type,
                 "impact": opp.get("estimated_impact", "medium"),
                 "effort": opp.get("estimated_effort", "medium"),
+                "affected_projects": projects[:5],
+                "next_steps": action_map.get(opp_type, "Analyze → plan → implement → verify"),
             })
 
         return sorted(recs, key=lambda r: r["priority"], reverse=True)

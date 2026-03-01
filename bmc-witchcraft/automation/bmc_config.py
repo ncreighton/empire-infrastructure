@@ -27,6 +27,7 @@ DATA_DIR.mkdir(exist_ok=True)
 
 SUPPORTERS_LOG = DATA_DIR / "supporters.json"
 STATS_FILE = DATA_DIR / "stats.json"
+REVENUE_ATTRIBUTION_FILE = DATA_DIR / "revenue_attribution.json"
 
 # Tier mapping (BMC tier names → internal IDs)
 TIER_MAP = {

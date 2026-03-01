@@ -400,7 +400,8 @@ class BrainDB:
 
     # --- Opportunities ---
     def add_opportunity(self, title: str, opp_type: str, description: str, projects: list[str],
-                        impact: str = "medium", effort: str = "medium"):
+                        impact: str = "medium", effort: str = "medium",
+                        priority_score: Optional[float] = None):
         conn = self._conn()
         # Deduplicate: skip if an open opportunity with the same title already exists
         existing = conn.execute(
@@ -409,9 +410,12 @@ class BrainDB:
         if existing:
             conn.close()
             return existing["id"]
-        impact_scores = {"low": 1, "medium": 2, "high": 3, "critical": 4}
-        effort_scores = {"low": 3, "medium": 2, "high": 1}
-        priority = impact_scores.get(impact, 2) * effort_scores.get(effort, 2)
+        if priority_score is not None:
+            priority = priority_score
+        else:
+            impact_scores = {"low": 1, "medium": 2, "high": 3, "critical": 4}
+            effort_scores = {"low": 3, "medium": 2, "high": 1}
+            priority = impact_scores.get(impact, 2) * effort_scores.get(effort, 2)
         cur = conn.execute(
             """INSERT INTO opportunities (title, opportunity_type, description, affected_projects,
                estimated_impact, estimated_effort, priority_score)
