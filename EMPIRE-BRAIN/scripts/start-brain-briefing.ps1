@@ -10,4 +10,4 @@ New-Item -ItemType Directory -Path "$BrainDir\logs" -Force | Out-Null
 
 # Run briefing
 Set-Location $BrainDir
-& python agents/briefing_agent.py 2>&1 | Out-File -Append -FilePath $LogFile -Encoding utf8
+& pythonw agents/briefing_agent.py

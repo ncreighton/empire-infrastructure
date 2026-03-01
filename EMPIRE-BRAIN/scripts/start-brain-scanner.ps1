@@ -10,4 +10,4 @@ New-Item -ItemType Directory -Path "$BrainDir\logs" -Force | Out-Null
 
 # Run scanner (single pass)
 Set-Location $BrainDir
-& python agents/scanner_agent.py --once 2>&1 | Out-File -Append -FilePath $LogFile -Encoding utf8
+& pythonw agents/scanner_agent.py --once

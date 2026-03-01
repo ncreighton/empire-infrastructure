@@ -22,7 +22,7 @@ Set-Location $bmcDir
 $env:PYTHONPATH = $bmcDir
 
 try {
-    python -m uvicorn bmc_webhook_handler:app --host 127.0.0.1 --port 8095
+    pythonw -m uvicorn bmc_webhook_handler:app --host 127.0.0.1 --port 8095
 }
 catch {
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"

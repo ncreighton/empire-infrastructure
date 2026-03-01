@@ -20,7 +20,7 @@ Start-Sleep -Seconds 2
 Write-Host "Starting VideoForge API..." -ForegroundColor Cyan
 Set-Location "D:\Claude Code Projects\videoforge-engine"
 $env:PYTHONPATH = "D:\Claude Code Projects\videoforge-engine"
-Start-Process -FilePath "python" -ArgumentList "-m","uvicorn","api.app:app","--host","127.0.0.1","--port","8090" -WindowStyle Hidden
+Start-Process -FilePath "pythonw" -ArgumentList "-m","uvicorn","api.app:app","--host","127.0.0.1","--port","8090" -WindowStyle Hidden
 Start-Sleep -Seconds 3
 
 $health = Invoke-RestMethod -Uri "http://localhost:8090/health" -ErrorAction SilentlyContinue

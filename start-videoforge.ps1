@@ -22,7 +22,7 @@ Set-Location $videoforgeDir
 $env:PYTHONPATH = $videoforgeDir
 
 try {
-    python -m uvicorn api.app:app --host 127.0.0.1 --port 8090
+    pythonw -m uvicorn api.app:app --host 127.0.0.1 --port 8090
 }
 catch {
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"

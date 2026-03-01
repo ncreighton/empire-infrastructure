@@ -25,9 +25,9 @@ if ($WorkDir -and (Test-Path $WorkDir)) {
 }
 
 # Find Python
-$python = "D:\Python314\python.exe"
+$python = "D:\Python314\pythonw.exe"
 if (-not (Test-Path $python)) {
-    $python = "python"
+    $python = "pythonw"
 }
 
 # Build and run command

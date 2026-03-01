@@ -15,4 +15,4 @@ if ($existing) {
 
 # Start MCP server
 Set-Location $BrainDir
-& python -m uvicorn api.brain_mcp:app --host 0.0.0.0 --port 8200 2>&1 | Tee-Object -FilePath "$BrainDir\logs\mcp-server.log"
+& pythonw -m uvicorn api.brain_mcp:app --host 0.0.0.0 --port 8200

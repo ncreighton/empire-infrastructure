@@ -22,7 +22,7 @@ Set-Location $meshDir
 $env:PYTHONPATH = $meshDir
 
 try {
-    python "$meshDir\mesh_daemon.py" --background
+    pythonw "$meshDir\mesh_daemon.py" --background
 }
 catch {
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"

@@ -2,7 +2,7 @@
 $ErrorActionPreference = "SilentlyContinue"
 
 $projectDir = "D:\Claude Code Projects\printables-empire"
-$python = "D:\Python314\python.exe"
+$python = "D:\Python314\pythonw.exe"
 $logFile = "$projectDir\data\daily_publish.log"
 
 # Ensure data dir exists

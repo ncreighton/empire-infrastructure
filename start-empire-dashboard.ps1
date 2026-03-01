@@ -21,7 +21,7 @@ if (-not (Test-Path $dashboardDir)) {
 Set-Location $dashboardDir
 
 try {
-    python -m uvicorn main:app --port 8000
+    pythonw -m uvicorn main:app --port 8000
 }
 catch {
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"

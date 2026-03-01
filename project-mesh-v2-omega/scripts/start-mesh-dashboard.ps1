@@ -22,7 +22,7 @@ Set-Location $meshDir
 $env:PYTHONPATH = $meshDir
 
 try {
-    python -m uvicorn dashboard.api:app --host 0.0.0.0 --port 8100
+    pythonw -m uvicorn dashboard.api:app --host 0.0.0.0 --port 8100
 }
 catch {
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"

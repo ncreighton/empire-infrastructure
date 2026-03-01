@@ -1,7 +1,7 @@
 # Vision Service Startup Script
 # Starts the Vision AI FastAPI service on port 8002
 
-$venvPython = "D:\Claude Code Projects\geelark-automation\.venv-vision\Scripts\python.exe"
+$venvPython = "D:\Claude Code Projects\geelark-automation\.venv-vision\Scripts\pythonw.exe"
 $servicePath = "D:\Claude Code Projects\geelark-automation\services\vision_service.py"
 $logPath = "$env:LOCALAPPDATA\EmpireArchitect\vision-service.log"
 

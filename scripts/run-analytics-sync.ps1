@@ -4,7 +4,7 @@
 
 $logPath = "$env:LOCALAPPDATA\EmpireArchitect\analytics-sync.log"
 $projectDir = "D:\Claude Code Projects"
-$pythonExe = "python"
+$pythonExe = "pythonw"
 $script = "daily_analytics_sync.py"
 
 # Ensure log directory exists

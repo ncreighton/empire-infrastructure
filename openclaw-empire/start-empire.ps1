@@ -87,4 +87,4 @@ Write-Host ""
 
 # Start uvicorn
 Set-Location $ProjectDir
-python -m uvicorn src.api:app --host 0.0.0.0 --port $env:OPENCLAW_API_PORT --reload
+pythonw -m uvicorn src.api:app --host 0.0.0.0 --port $env:OPENCLAW_API_PORT --reload

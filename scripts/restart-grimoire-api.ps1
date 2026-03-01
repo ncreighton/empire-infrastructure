@@ -20,7 +20,7 @@ Start-Sleep -Seconds 2
 Write-Host "Starting Grimoire API..." -ForegroundColor Cyan
 Set-Location "D:\Claude Code Projects\grimoire-intelligence"
 $env:PYTHONPATH = "D:\Claude Code Projects\grimoire-intelligence"
-Start-Process -FilePath "python" -ArgumentList "-m","uvicorn","api.app:app","--host","127.0.0.1","--port","8080" -WindowStyle Hidden
+Start-Process -FilePath "pythonw" -ArgumentList "-m","uvicorn","api.app:app","--host","127.0.0.1","--port","8080" -WindowStyle Hidden
 Start-Sleep -Seconds 3
 
 $health = Invoke-RestMethod -Uri "http://localhost:8080/health" -ErrorAction SilentlyContinue

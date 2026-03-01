@@ -10,4 +10,4 @@ New-Item -ItemType Directory -Path "$EmpireDir\EMPIRE-BRAIN\logs" -Force | Out-N
 
 # Run sync
 Set-Location $EmpireDir
-& python empire_sync.py 2>&1 | Out-File -Append -FilePath $LogFile -Encoding utf8
+& pythonw empire_sync.py

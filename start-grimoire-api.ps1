@@ -22,7 +22,7 @@ Set-Location $grimoireDir
 $env:PYTHONPATH = $grimoireDir
 
 try {
-    python -m uvicorn api.app:app --host 127.0.0.1 --port 8080
+    pythonw -m uvicorn api.app:app --host 127.0.0.1 --port 8080
 }
 catch {
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"

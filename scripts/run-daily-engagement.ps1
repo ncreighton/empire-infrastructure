@@ -4,7 +4,7 @@
 
 $logPath = "$env:LOCALAPPDATA\EmpireArchitect\daily-engagement.log"
 $projectDir = "D:\Claude Code Projects\geelark-automation"
-$pythonExe = "python"
+$pythonExe = "pythonw"
 $script = "run_daily.py"
 
 # Ensure log directory exists

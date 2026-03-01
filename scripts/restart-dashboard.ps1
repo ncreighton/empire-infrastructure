@@ -19,7 +19,7 @@ Start-Sleep -Seconds 2
 
 Write-Host "Starting dashboard..." -ForegroundColor Cyan
 Set-Location "D:\Claude Code Projects\empire-dashboard"
-Start-Process -FilePath "python" -ArgumentList "-m","uvicorn","main:app","--port","8000" -WindowStyle Hidden
+Start-Process -FilePath "pythonw" -ArgumentList "-m","uvicorn","main:app","--port","8000" -WindowStyle Hidden
 Start-Sleep -Seconds 3
 
 $health = Invoke-RestMethod -Uri "http://localhost:8000/health" -ErrorAction SilentlyContinue
