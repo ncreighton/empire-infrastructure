@@ -927,8 +927,12 @@ class ChromeCDPEngagement:
         )
         time.sleep(10)
 
-        # Forward CDP port
-        CDP_PORT = 9222
+        # Forward CDP port (9222 conflicts with Edge on this machine)
+        CDP_PORT = 9223
+        subprocess.run(
+            [ADB, "-s", DEVICE, "forward", "--remove", f"tcp:{CDP_PORT}"],
+            capture_output=True, timeout=10,
+        )
         subprocess.run(
             [ADB, "-s", DEVICE, "forward", f"tcp:{CDP_PORT}",
              "localabstract:chrome_devtools_remote"],
@@ -950,9 +954,51 @@ class ChromeCDPEngagement:
             None,
         )
         if not notes_page:
-            logger.error("Notes feed page not found in CDP")
-            go_home()
-            return self.actions
+            # No Substack tab — navigate an existing tab to notes feed
+            any_page = next(
+                (p for p in pages if p.get("type") == "page" and p.get("webSocketDebuggerUrl")),
+                None,
+            )
+            if not any_page:
+                logger.error("No usable CDP page found for notes feed")
+                go_home()
+                return self.actions
+            logger.info(f"No Substack tab — navigating to notes feed via CDP...")
+            try:
+                import websocket as _ws_nav
+                nav_ws = _ws_nav.create_connection(
+                    any_page["webSocketDebuggerUrl"], suppress_origin=True, timeout=15)
+                nav_ws.send(json.dumps({
+                    "id": 1, "method": "Page.navigate",
+                    "params": {"url": feed_url},
+                }))
+                deadline = time.time() + 15
+                while time.time() < deadline:
+                    raw = nav_ws.recv()
+                    r = json.loads(raw)
+                    if r.get("id") == 1:
+                        break
+                nav_ws.close()
+            except Exception as e:
+                logger.error(f"CDP Page.navigate failed: {e}")
+                go_home()
+                return self.actions
+            time.sleep(10)
+            try:
+                resp = urllib.request.urlopen(f"http://localhost:{CDP_PORT}/json", timeout=5)
+                pages = json.loads(resp.read())
+            except Exception as e:
+                logger.error(f"CDP re-fetch failed: {e}")
+                go_home()
+                return self.actions
+            notes_page = next(
+                (p for p in pages if "notes" in p.get("url", "").lower() or "substack" in p.get("url", "").lower()),
+                None,
+            )
+            if not notes_page:
+                logger.error("Notes feed still not found after navigate")
+                go_home()
+                return self.actions
 
         try:
             import websocket

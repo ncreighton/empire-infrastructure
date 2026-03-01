@@ -532,7 +532,7 @@ def post_via_chrome_cdp(text: str) -> bool:
         logger.error("websocket-client not installed: pip install websocket-client")
         return False
 
-    CDP_PORT = 9222
+    CDP_PORT = 9223  # 9222 conflicts with Edge on this machine
     DASHBOARD_URL = "https://incompetenceoffice.substack.com/publish"
 
     logger.info("Posting via Chrome CDP (dashboard -> New note)...")
@@ -548,7 +548,11 @@ def post_via_chrome_cdp(text: str) -> bool:
     logger.info("Opened Substack dashboard, waiting for page load...")
     time.sleep(10)
 
-    # Forward CDP port
+    # Forward CDP port (remove stale forward first)
+    subprocess.run(
+        [ADB, "-s", DEVICE, "forward", "--remove", f"tcp:{CDP_PORT}"],
+        capture_output=True, timeout=10,
+    )
     subprocess.run(
         [ADB, "-s", DEVICE, "forward", f"tcp:{CDP_PORT}",
          "localabstract:chrome_devtools_remote"],
@@ -568,10 +572,61 @@ def post_via_chrome_cdp(text: str) -> bool:
         (p for p in pages if "substack.com" in p.get("url", "")),
         None,
     )
+
     if not dash_page:
-        logger.error(f"Substack page not found in CDP. Pages: {[p.get('url','')[:60] for p in pages]}")
-        go_home()
-        return False
+        # No Substack tab — navigate an existing tab to the dashboard URL
+        any_page = next(
+            (p for p in pages if p.get("type") == "page" and p.get("webSocketDebuggerUrl")),
+            None,
+        )
+        if not any_page:
+            logger.error(f"No usable CDP page found. Pages: {[p.get('url','')[:60] for p in pages]}")
+            go_home()
+            return False
+
+        logger.info(f"No Substack tab — navigating {any_page['url'][:40]} to dashboard...")
+        ws_url = any_page["webSocketDebuggerUrl"]
+        try:
+            nav_ws = _ws.create_connection(ws_url, suppress_origin=True, timeout=15)
+            nav_msg = _json.dumps({
+                "id": 1,
+                "method": "Page.navigate",
+                "params": {"url": DASHBOARD_URL},
+            })
+            nav_ws.send(nav_msg)
+            # Wait for navigation response
+            deadline = time.time() + 15
+            while time.time() < deadline:
+                raw = nav_ws.recv()
+                result = _json.loads(raw)
+                if result.get("id") == 1:
+                    break
+            nav_ws.close()
+        except Exception as e:
+            logger.error(f"CDP Page.navigate failed: {e}")
+            go_home()
+            return False
+
+        logger.info("Navigated to Substack dashboard, waiting for page load...")
+        time.sleep(10)
+
+        # Re-fetch pages to get updated URL / ws endpoint
+        try:
+            resp = _urllib.urlopen(f"http://localhost:{CDP_PORT}/json", timeout=5)
+            pages = _json.loads(resp.read())
+        except Exception as e:
+            logger.error(f"CDP re-fetch pages failed: {e}")
+            go_home()
+            return False
+
+        dash_page = next(
+            (p for p in pages if "substack.com" in p.get("url", "")),
+            None,
+        )
+        if not dash_page:
+            logger.error(f"Substack page still not found after navigate. Pages: {[p.get('url','')[:60] for p in pages]}")
+            go_home()
+            return False
 
     ws_url = dash_page["webSocketDebuggerUrl"]
     logger.info(f"CDP connected: {dash_page['url'][:60]}")
