@@ -15,6 +15,7 @@ events/
 
 # Reports & sync logs
 sync/sync-log.json
+sync/rollback/
 testing/latest-report.json
 sentinel/latest-report.json
 knowledge-base/knowledge-index.json

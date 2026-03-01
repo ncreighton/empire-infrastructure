@@ -23,6 +23,60 @@ from datetime import datetime, timezone
 from collections import defaultdict
 from typing import Dict, List, Set, Tuple
 
+
+# ---------------------------------------------------------------------------
+# SECRET SANITIZATION — strips credentials before they enter knowledge base
+# ---------------------------------------------------------------------------
+
+_SECRET_PATTERNS = [
+    # GitHub tokens
+    (re.compile(r'ghp_[A-Za-z0-9]{36,}'), 'REDACTED_GITHUB_PAT'),
+    (re.compile(r'gho_[A-Za-z0-9]{36,}'), 'REDACTED_GITHUB_OAUTH'),
+    (re.compile(r'github_pat_[A-Za-z0-9_]{40,}'), 'REDACTED_GITHUB_PAT'),
+    # WordPress app passwords (XXXX XXXX XXXX XXXX XXXX XXXX)
+    (re.compile(r'(?:wp_app_password|app_password|application.password)[:\s="\']*'
+                r'[A-Za-z0-9]{4}\s+[A-Za-z0-9]{4}\s+[A-Za-z0-9]{4}\s+'
+                r'[A-Za-z0-9]{4}\s+[A-Za-z0-9]{4}\s+[A-Za-z0-9]{4}', re.IGNORECASE),
+     'REDACTED_WP_APP_PASSWORD'),
+    # Standalone WP app password pattern (6 groups of 4 chars)
+    (re.compile(r'\b[A-Z][a-z0-9]{3}\s[A-Z][a-z0-9]{3}\s[A-Z][a-z0-9]{3}\s'
+                r'[A-Z][a-z0-9]{3}\s[A-Z][a-z0-9]{3}\s[A-Z][a-z0-9]{3}\b'),
+     'REDACTED_WP_APP_PASSWORD'),
+    # Generic API keys (common env var patterns)
+    (re.compile(r'(?:API_KEY|APIKEY|SECRET_KEY|SECRET|ACCESS_TOKEN|AUTH_TOKEN)'
+                r'[:\s="\']+[A-Za-z0-9\-_.]{20,}', re.IGNORECASE),
+     'REDACTED_API_KEY'),
+    # AWS-style keys
+    (re.compile(r'AKIA[0-9A-Z]{16}'), 'REDACTED_AWS_KEY'),
+    # Anthropic API keys
+    (re.compile(r'sk-ant-[A-Za-z0-9\-]{20,}'), 'REDACTED_ANTHROPIC_KEY'),
+    # OpenAI API keys
+    (re.compile(r'sk-[A-Za-z0-9]{40,}'), 'REDACTED_OPENAI_KEY'),
+    # ElevenLabs API keys
+    (re.compile(r'(?:ELEVENLABS_API_KEY|elevenlabs_api_key)[:\s="\']+[A-Za-z0-9]{20,}',
+                re.IGNORECASE), 'REDACTED_ELEVENLABS_KEY'),
+    # FAL keys
+    (re.compile(r'(?:FAL_KEY|fal_key)[:\s="\']+[A-Za-z0-9\-:]{20,}',
+                re.IGNORECASE), 'REDACTED_FAL_KEY'),
+    # Creatomate
+    (re.compile(r'(?:CREATOMATE_API_KEY|creatomate_api_key)[:\s="\']+[A-Za-z0-9]{20,}',
+                re.IGNORECASE), 'REDACTED_CREATOMATE_KEY'),
+    # Bearer tokens
+    (re.compile(r'Bearer\s+[A-Za-z0-9\-_.]{20,}'), 'Bearer REDACTED_TOKEN'),
+    # Generic long hex/base64 secrets (40+ chars after common secret labels)
+    (re.compile(r'(?:password|secret|token|credential)[:\s="\']+[A-Za-z0-9+/=\-_.]{40,}',
+                re.IGNORECASE), 'REDACTED_SECRET'),
+]
+
+
+def sanitize_secrets(text: str) -> str:
+    """Strip known credential patterns from text before storage."""
+    if not text:
+        return text
+    for pattern, replacement in _SECRET_PATTERNS:
+        text = pattern.sub(replacement, text)
+    return text
+
 # Add mesh root to sys.path so we can import knowledge.graph_engine
 MESH_ROOT = Path(__file__).resolve().parent.parent
 if str(MESH_ROOT) not in sys.path:
@@ -517,7 +571,17 @@ def harvest(hub: Path, fast: bool = False) -> dict:
         if entry["id"] not in seen_ids:
             seen_ids.add(entry["id"])
             unique_entries.append(entry)
-    
+
+    # 5b. Sanitize secrets — strip credentials before they enter knowledge base
+    secrets_stripped = 0
+    for entry in unique_entries:
+        original = entry["text"]
+        entry["text"] = sanitize_secrets(original)
+        if entry["text"] != original:
+            secrets_stripped += 1
+    if secrets_stripped:
+        print(f"\n  [SECURITY] Stripped secrets from {secrets_stripped} entries")
+
     # 6. Build the index
     index = {
         "version": "2.0.0",

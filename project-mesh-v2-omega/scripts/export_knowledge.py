@@ -16,6 +16,16 @@ import textwrap
 from collections import defaultdict
 from pathlib import Path
 
+# Add mesh root to sys.path so we can import sibling modules
+_SCRIPT_DIR = Path(__file__).resolve().parent
+_MESH_ROOT = _SCRIPT_DIR.parent
+if str(_MESH_ROOT) not in sys.path:
+    sys.path.insert(0, str(_MESH_ROOT))
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+
+from knowledge_harvester import sanitize_secrets
+
 # Paths
 BASE_DIR = Path(__file__).resolve().parent.parent
 DB_PATH = BASE_DIR / "knowledge" / "empire_graph.db"
@@ -235,7 +245,7 @@ def load_db_entries():
 
     entries = []
     for row in cursor.fetchall():
-        text = row["text"] or ""
+        text = sanitize_secrets(row["text"] or "")
         entries.append({
             "text": text,
             "source_project": row["source_project"] or "unknown",
@@ -264,7 +274,7 @@ def load_json_entries():
     raw_entries = data.get("entries", [])
     entries = []
     for e in raw_entries:
-        text = e.get("text", "")
+        text = sanitize_secrets(e.get("text", ""))
         entries.append({
             "text": text,
             "source_project": e.get("source_project", "unknown"),

@@ -579,6 +579,25 @@ class MeshDaemon:
                     return
                 time.sleep(1)
     
+    def _cleanup_old_rollbacks(self, max_age_days: int = 7):
+        """Delete rollback tarballs older than max_age_days."""
+        rollback_dir = self.hub / "sync" / "rollback"
+        if not rollback_dir.exists():
+            return
+        cutoff = datetime.now() - timedelta(days=max_age_days)
+        removed = 0
+        for f in rollback_dir.iterdir():
+            if f.suffix in (".gz", ".tar", ".tgz") and f.is_file():
+                try:
+                    mtime = datetime.fromtimestamp(f.stat().st_mtime)
+                    if mtime < cutoff:
+                        f.unlink()
+                        removed += 1
+                except OSError:
+                    pass
+        if removed:
+            log.info(f"  Cleaned up {removed} rollback file(s) older than {max_age_days} days")
+
     def _health_loop(self):
         """Periodic health logging."""
         while self._running:
@@ -590,9 +609,15 @@ class MeshDaemon:
                     f"project-code={stats.get('project_code_changes',0)} | "
                     f"Pending: {stats.get('pending_syncs',0)} syncs, "
                     f"{stats.get('pending_compiles',0)} compiles")
-            
+
             self._update_status("idle", stats)
-            
+
+            # Cleanup old rollback files every health cycle
+            try:
+                self._cleanup_old_rollbacks()
+            except Exception as exc:
+                log.warning(f"  Rollback cleanup error: {exc}")
+
             for _ in range(HEALTH_LOG_INTERVAL):
                 if not self._running:
                     return
