@@ -378,13 +378,17 @@ class BatchCampaign:
         if not zw.connect():
             error = "ZimmWriter not running or not found"
             self.state["errors"].append(f"optimize_profiles: {error}")
-            self._mark_step_completed("optimize_profiles", {"status": "failed", "error": error})
+            self.state["step_results"]["optimize_profiles"] = {"status": "failed", "error": error}
+            self._save_state()
             raise RuntimeError(error)
 
-        # Navigate to Bulk Writer screen
+        # Navigate to Bulk Writer screen (retry up to 3 times)
         title = zw.get_window_title()
-        if "Bulk" not in title:
-            logger.info("Not on Bulk Writer (on '%s'), navigating...", title)
+        for nav_attempt in range(3):
+            if "Bulk" in title:
+                break
+            logger.info("Not on Bulk Writer (on '%s'), navigating (attempt %d)...",
+                        title, nav_attempt + 1)
             try:
                 zw._dismiss_error_dialogs()
             except Exception:
@@ -395,21 +399,23 @@ class BatchCampaign:
                     zw.back_to_menu()
                     time.sleep(2)
                     zw.connect()
+                    title = zw.get_window_title()
                 except Exception:
                     pass
             try:
                 zw.open_bulk_writer()
-                time.sleep(2)
-                zw.connect()
+                # open_bulk_writer() calls connect() internally — don't call again
+                time.sleep(3)
                 title = zw.get_window_title()
             except Exception:
                 pass
             logger.info("Now on '%s'", title)
-            if "Bulk" not in title:
-                error = f"Could not navigate to Bulk Writer (stuck on '{title}')"
-                self.state["errors"].append(f"optimize_profiles: {error}")
-                self._mark_step_completed("optimize_profiles", {"status": "failed", "error": error})
-                raise RuntimeError(error)
+        if "Bulk" not in title:
+            error = f"Could not navigate to Bulk Writer (stuck on '{title}')"
+            self.state["errors"].append(f"optimize_profiles: {error}")
+            self.state["step_results"]["optimize_profiles"] = {"status": "failed", "error": error}
+            self._save_state()
+            raise RuntimeError(error)
 
         # Check that profiles exist in the Load Profile dropdown
         domains_to_process = list(self.domains)
@@ -422,7 +428,8 @@ class BatchCampaign:
                 if not domains_to_process:
                     error = "No profiles found in dropdown"
                     self.state["errors"].append(f"optimize_profiles: {error}")
-                    self._mark_step_completed("optimize_profiles", {"status": "failed", "error": error})
+                    self.state["step_results"]["optimize_profiles"] = {"status": "failed", "error": error}
+                    self._save_state()
                     raise RuntimeError(error)
         except Exception as e:
             logger.warning("Could not read profile dropdown: %s", e)
@@ -469,7 +476,6 @@ class BatchCampaign:
                         try:
                             zw.open_bulk_writer()
                             time.sleep(3)
-                            zw.connect()
                             title = zw.get_window_title()
                             if "Bulk" in title:
                                 break
@@ -516,7 +522,6 @@ class BatchCampaign:
                         try:
                             zw.open_bulk_writer()
                             time.sleep(3)
-                            zw.connect()
                             title = zw.get_window_title()
                             if "Bulk" in title:
                                 break

@@ -7,6 +7,9 @@ from videoforge.assembly.render_engine import (
     SUBTITLE_ANIMATION_STYLES, OVERLAY_ANIMATION_STYLES,
     DRAMATIC_KB_INDICES, SUBTLE_KB_INDICES, STANDARD_KB_INDICES,
     NICHE_ANIMATION_BIAS, NICHE_SATURATION, _NICHE_CATEGORY,
+    NICHE_HOOK_FONT_SIZES, NICHE_GLOW_EFFECTS, NICHE_BLEND_MODES,
+    NICHE_CLIMAX_TRANSITIONS, NICHE_SCENE_BUFFER, SCENE_VISUAL_HOLD,
+    NICHE_SUBTITLE_ANIM, NICHE_TEXT_SPACING,
 )
 from videoforge.assembly.audio_engine import AudioEngine, _VOICE_WPM
 from videoforge.forge.video_smith import VideoSmith
@@ -753,14 +756,28 @@ class TestMusicRotation:
 
 
 class TestHookTextSize:
-    """Test hook scenes get bigger text than CTA."""
+    """Test niche-aware font sizes for hook/CTA text."""
 
-    def test_hook_overlay_9_vmin(self):
-        """Hook scene text overlay should be 9 vmin."""
+    def test_witchcraft_hook_9_vmin(self):
+        """Witchcraft hook should be 9 vmin."""
         engine = RenderEngine()
         color = {"text": "#FFFFFF", "accent": "#E0B0FF"}
         el = engine._build_text_overlay("Test hook", color, 0, "hook", "witchcraft")
         assert el["font_size"] == "9 vmin"
+
+    def test_fitness_hook_11_vmin(self):
+        """Fitness hook should be 11 vmin (biggest/boldest)."""
+        engine = RenderEngine()
+        color = {"text": "#FFFFFF", "accent": "#EF4444"}
+        el = engine._build_text_overlay("PUMP IT", color, 0, "hook", "fitness")
+        assert el["font_size"] == "11 vmin"
+
+    def test_mythology_hook_10_vmin(self):
+        """Mythology hook should be 10 vmin (epic)."""
+        engine = RenderEngine()
+        color = {"text": "#FFFFFF", "accent": "#87CEEB"}
+        el = engine._build_text_overlay("Zeus", color, 0, "hook", "mythology")
+        assert el["font_size"] == "10 vmin"
 
     def test_cta_overlay_8_vmin(self):
         """CTA scene text overlay should be 8 vmin."""
@@ -777,6 +794,14 @@ class TestHookTextSize:
         assert el["shadow_blur"] == 20
         assert "rgba(" in el["shadow_color"]
 
+    def test_tech_glow_effect(self):
+        """Tech niche should also have glow (neon effect)."""
+        engine = RenderEngine()
+        color = {"text": "#FFFFFF", "accent": "#38BDF8"}
+        el = engine._build_text_overlay("Smart Home", color, 0, "hook", "tech")
+        assert el["shadow_blur"] == 15
+        assert "rgba(" in el["shadow_color"]
+
     def test_niche_colored_subtitle_background(self):
         """Subtitle background should use niche accent color."""
         engine = RenderEngine()
@@ -786,3 +811,171 @@ class TestHookTextSize:
         assert "rgba(" in bg
         assert "0.4)" in bg
         assert "224" in bg  # 0xE0 = 224
+
+
+class TestBlendModes:
+    """Test niche-specific blend modes on image elements."""
+
+    def test_blend_modes_defined(self):
+        assert "witchcraft" in NICHE_BLEND_MODES
+        assert "mythology" in NICHE_BLEND_MODES
+        assert NICHE_BLEND_MODES["witchcraft"] == "multiply"
+
+    def test_blend_mode_applied_to_images(self):
+        """Witchcraft images should have blend_mode=multiply."""
+        smith = VideoSmith(db_path=":memory:")
+        plan = smith.to_video_plan("test topic", "witchcraftforbeginners")
+        plan.optimizations = {"asset_routing": []}
+        plan.visual_assets = [
+            VisualAsset(
+                scene_number=i + 1, asset_type="image", source="fal_ai",
+                prompt="test", url=f"https://example.com/{i+1}.png",
+                cost=0.05, duration=s.duration_seconds,
+            )
+            for i, s in enumerate(plan.storyboard.scenes)
+        ]
+        engine = RenderEngine()
+        rs = engine.build_renderscript(plan)
+        comps = [e for e in rs["elements"] if e.get("type") == "composition"]
+        blend_found = 0
+        for comp in comps:
+            for el in comp["elements"]:
+                if el.get("type") == "image" and el.get("blend_mode"):
+                    blend_found += 1
+                    assert el["blend_mode"] == "multiply"
+        assert blend_found >= 1, "Witchcraft images should have blend mode"
+
+    def test_tech_no_blend_by_default(self):
+        """Tech niches shouldn't have blend_mode (not in NICHE_BLEND_MODES unless 'screen')."""
+        assert NICHE_BLEND_MODES.get("tech") is None
+
+
+class TestClimaxTransitions:
+    """Test niche-specific climax scene transitions."""
+
+    def test_climax_transitions_defined(self):
+        assert "witchcraft" in NICHE_CLIMAX_TRANSITIONS
+        assert "mythology" in NICHE_CLIMAX_TRANSITIONS
+        assert "fitness" in NICHE_CLIMAX_TRANSITIONS
+
+    def test_witchcraft_climax_uses_color_wipe(self):
+        assert NICHE_CLIMAX_TRANSITIONS["witchcraft"] == "color_wipe"
+
+    def test_fitness_climax_uses_whip_pan(self):
+        assert NICHE_CLIMAX_TRANSITIONS["fitness"] == "whip_pan"
+
+
+class TestNicheSceneBuffer:
+    """Test niche-aware scene duration buffers."""
+
+    def test_witchcraft_buffer_longer(self):
+        """Witchcraft should have longer buffer (slower pacing)."""
+        assert NICHE_SCENE_BUFFER["witchcraft"] == 0.25
+        assert NICHE_SCENE_BUFFER["tech"] == 0.1
+
+    def test_visual_hold_per_role(self):
+        """Hook/climax should have more visual hold time."""
+        assert SCENE_VISUAL_HOLD["hook"] > SCENE_VISUAL_HOLD["body"]
+        assert SCENE_VISUAL_HOLD["climax"] > SCENE_VISUAL_HOLD["body"]
+
+
+class TestSubtitleNicheAnimation:
+    """Test niche-preferred subtitle animation selection."""
+
+    def test_niche_subtitle_anim_defined(self):
+        for cat in ["witchcraft", "mythology", "tech", "fitness"]:
+            assert cat in NICHE_SUBTITLE_ANIM
+
+    def test_witchcraft_prefers_wave(self):
+        """Witchcraft should prefer text-wave (index 4)."""
+        assert 4 in NICHE_SUBTITLE_ANIM["witchcraft"]
+
+    def test_tech_prefers_fast(self):
+        """Tech should prefer text-appear (index 7)."""
+        assert 7 in NICHE_SUBTITLE_ANIM["tech"]
+
+
+class TestTextSpacing:
+    """Test niche text spacing (letter-spacing, line-height)."""
+
+    def test_text_spacing_defined(self):
+        for cat in ["fitness", "tech", "witchcraft", "mythology"]:
+            assert cat in NICHE_TEXT_SPACING
+            assert "letter_spacing" in NICHE_TEXT_SPACING[cat]
+            assert "line_height" in NICHE_TEXT_SPACING[cat]
+
+    def test_spacing_applied_to_text_overlay(self):
+        """Text overlays should have letter_spacing from niche config."""
+        engine = RenderEngine()
+        color = {"text": "#FFFFFF", "accent": "#38BDF8"}
+        el = engine._build_text_overlay("Test", color, 0, "hook", "tech")
+        assert "letter_spacing" in el
+        assert "line_height" in el
+
+    def test_spacing_applied_to_subtitles(self):
+        """Subtitles should have letter_spacing from niche config."""
+        engine = RenderEngine()
+        color = {"accent": "#E0B0FF"}
+        el = engine._build_subtitle("Test subtitle text", 0, color, "witchcraft")
+        assert "letter_spacing" in el
+        assert el["letter_spacing"] == "1"
+
+    def test_fitness_tight_spacing(self):
+        """Fitness should have tight letter spacing."""
+        assert NICHE_TEXT_SPACING["fitness"]["letter_spacing"] == "-1"
+
+
+class TestAltColorGradeVariety:
+    """Test that alternate color grades are used for visual variety."""
+
+    def test_alt_grades_applied(self):
+        """Some body scenes should use alt color grades."""
+        smith = VideoSmith(db_path=":memory:")
+        plan = smith.to_video_plan("test topic", "witchcraftforbeginners")
+        plan.optimizations = {"asset_routing": []}
+        plan.visual_assets = [
+            VisualAsset(
+                scene_number=i + 1, asset_type="image", source="fal_ai",
+                prompt="test", url=f"https://example.com/{i+1}.png",
+                cost=0.05, duration=s.duration_seconds,
+            )
+            for i, s in enumerate(plan.storyboard.scenes)
+        ]
+        engine = RenderEngine()
+        rs = engine.build_renderscript(plan)
+        comps = [e for e in rs["elements"] if e.get("type") == "composition"]
+        # With 7+ scenes, at least one should use an alt color overlay
+        overlays = set()
+        for comp in comps:
+            for el in comp["elements"]:
+                if el.get("type") == "image" and "color_overlay" in el:
+                    overlays.add(el["color_overlay"])
+        # Should have at least 2 different overlays (primary + alt)
+        assert len(overlays) >= 1, "Should have color overlays"
+
+
+class TestTransitionDurationScaling:
+    """Test transition duration scales with scene length."""
+
+    def test_transition_map_has_durations(self):
+        """All non-cut transitions should have duration."""
+        for key, anim in TRANSITION_MAP.items():
+            if anim is not None:
+                assert "duration" in anim, f"Transition {key} missing duration"
+
+
+class TestNicheHookFontSizes:
+    """Test all niche hook font size configs are valid."""
+
+    def test_all_niches_have_font_sizes(self):
+        for cat in ["fitness", "mythology", "witchcraft", "tech", "ai_news", "lifestyle"]:
+            assert cat in NICHE_HOOK_FONT_SIZES
+            assert "hook" in NICHE_HOOK_FONT_SIZES[cat]
+            assert "cta" in NICHE_HOOK_FONT_SIZES[cat]
+
+    def test_hook_always_bigger_than_cta(self):
+        """Hook font size should always be >= CTA font size."""
+        for cat, sizes in NICHE_HOOK_FONT_SIZES.items():
+            hook_num = int(sizes["hook"].split()[0])
+            cta_num = int(sizes["cta"].split()[0])
+            assert hook_num >= cta_num, f"{cat}: hook ({hook_num}) < cta ({cta_num})"

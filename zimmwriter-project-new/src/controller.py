@@ -1670,32 +1670,81 @@ class ZimmWriterController:
         except Exception as e:
             logger.error(f"Style Mimic config failed: {e}")
         finally:
+            # IMPORTANT: Do NOT use _close_config_window (ESC) for Style Mimic.
+            # ESC cancels the feature enable state, reverting the toggle to Disabled.
+            # Instead, switch focus to the main Bulk Writer window directly.
             self._dismiss_dialog(timeout=1)
-            self._close_config_window(win)
+            try:
+                config_handle = win.handle if win else None
+                # Method 1: Focus the main Bulk Writer window by handle
+                main_hwnd = self.main_window.handle
+                ctypes.windll.user32.SetForegroundWindow(main_hwnd)
+                time.sleep(1.0)
+                # Check if config window auto-closed
+                if config_handle and ctypes.windll.user32.IsWindow(config_handle):
+                    # Method 2: Send WM_CLOSE (may or may not work on AutoIt)
+                    _SM = ctypes.windll.user32.SendMessageW
+                    _SM.argtypes = [wintypes.HWND, wintypes.UINT,
+                                    wintypes.WPARAM, wintypes.LPARAM]
+                    _SM.restype = ctypes.c_long
+                    _SM(config_handle, 0x0010, 0, 0)  # WM_CLOSE
+                    time.sleep(0.5)
+                if config_handle and ctypes.windll.user32.IsWindow(config_handle):
+                    # Method 3: Alt+F4 (different from ESC — may preserve state)
+                    try:
+                        win.set_focus()
+                        time.sleep(0.2)
+                        send_keys("%{F4}", pause=0.1)
+                        time.sleep(0.5)
+                    except Exception:
+                        pass
+                if config_handle and ctypes.windll.user32.IsWindow(config_handle):
+                    # Method 4: Last resort — ESC (will cancel enable state)
+                    logger.warning("Style Mimic: falling back to ESC close")
+                    self._close_config_window(win)
+            except Exception:
+                self._close_config_window(win)
             self._dismiss_dialog(timeout=1)
 
-        # Verify the feature is actually Enabled after closing.
-        # If the window close reverted it to Disabled, re-enable it.
-        try:
-            self.ensure_connected()
-            btn = self._find_child(control_type="Button",
-                                    auto_id=self.FEATURE_TOGGLE_IDS["style_mimic"])
-            if "Disabled" in btn.window_text():
-                logger.info("Style Mimic reverted to Disabled after close, re-enabling")
+        # Verify the feature is Enabled and re-enable if needed.
+        # Full reconnect clears stale handles from the closed config window.
+        for re_enable_attempt in range(3):
+            try:
+                self.connect()
+                self.bring_to_front()
+                time.sleep(0.5)
+                btn = self._find_child(control_type="Button",
+                                        auto_id=self.FEATURE_TOGGLE_IDS["style_mimic"])
+                if "Enabled" in btn.window_text():
+                    logger.info("Style Mimic: Enabled after close")
+                    break
+                logger.info("Style Mimic shows '%s' after close, re-enabling (attempt %d)",
+                            btn.window_text(), re_enable_attempt + 1)
+                self.bring_to_front()
+                time.sleep(0.3)
                 btn.click_input()
-                time.sleep(1.5)
-                # If a config window opens, close it — the mimic is already saved
+                time.sleep(2)
+                # Dismiss any config window that opens (mimic already saved)
                 escaped = re.escape(self.FEATURE_CONFIG_WINDOWS["style_mimic"])
-                reopen_win = self._wait_for_window(escaped, timeout=2)
+                reopen_win = self._wait_for_window(escaped, timeout=3)
                 if reopen_win:
-                    self._close_config_window(reopen_win)
+                    # Close reopened window the same way (avoid ESC)
+                    main_hwnd = self.main_window.handle
+                    ctypes.windll.user32.SetForegroundWindow(main_hwnd)
+                    time.sleep(1.0)
+                    if ctypes.windll.user32.IsWindow(reopen_win.handle):
+                        self._close_config_window(reopen_win)
                     self._dismiss_dialog(timeout=1)
-                # Check again
+                    self.connect()
+                    time.sleep(0.5)
+                self._control_cache.clear()
                 btn = self._find_child(control_type="Button",
                                         auto_id=self.FEATURE_TOGGLE_IDS["style_mimic"])
                 logger.info(f"Style Mimic button now: '{btn.window_text()}'")
-        except Exception as e:
-            logger.warning(f"Style Mimic post-close verify failed: {e}")
+                if "Enabled" in btn.window_text():
+                    break
+            except Exception as e:
+                logger.warning(f"Style Mimic re-enable attempt {re_enable_attempt + 1} failed: {e}")
 
         logger.info("Style Mimic configured")
         return True
@@ -2035,22 +2084,38 @@ class ZimmWriterController:
             self._close_config_window(win)
             self._dismiss_dialog()
 
-        # Verify the feature is Enabled after closing
-        try:
-            self.ensure_connected()
-            btn = self._find_child(control_type="Button",
-                                    auto_id=self.FEATURE_TOGGLE_IDS["custom_prompt"])
-            if "Disabled" in btn.window_text():
-                logger.info("Custom Prompt reverted to Disabled, re-enabling")
+        # Verify the feature is Enabled after closing.
+        # ESC close can revert the toggle — force reconnect + re-enable.
+        for re_enable_attempt in range(3):
+            try:
+                self.connect()
+                self.bring_to_front()
+                time.sleep(0.5)
+                btn = self._find_child(control_type="Button",
+                                        auto_id=self.FEATURE_TOGGLE_IDS["custom_prompt"])
+                if "Enabled" in btn.window_text():
+                    break
+                logger.info("Custom Prompt shows '%s', re-enabling (attempt %d)",
+                            btn.window_text(), re_enable_attempt + 1)
+                self.bring_to_front()
+                time.sleep(0.3)
                 btn.click_input()
-                time.sleep(1.5)
+                time.sleep(2)
                 escaped = re.escape(self.FEATURE_CONFIG_WINDOWS["custom_prompt"])
-                reopen_win = self._wait_for_window(escaped, timeout=2)
+                reopen_win = self._wait_for_window(escaped, timeout=3)
                 if reopen_win:
                     self._close_config_window(reopen_win)
                     self._dismiss_dialog(timeout=1)
-        except Exception as e:
-            logger.warning(f"Custom Prompt post-close verify failed: {e}")
+                    self.connect()
+                    time.sleep(0.5)
+                self._control_cache.clear()
+                btn = self._find_child(control_type="Button",
+                                        auto_id=self.FEATURE_TOGGLE_IDS["custom_prompt"])
+                logger.info(f"Custom Prompt button now: '{btn.window_text()}'")
+                if "Enabled" in btn.window_text():
+                    break
+            except Exception as e:
+                logger.warning(f"Custom Prompt re-enable attempt {re_enable_attempt + 1} failed: {e}")
 
         logger.info(
             f"Custom Prompts: {saved_count} saved, {assigned_count} sections assigned"

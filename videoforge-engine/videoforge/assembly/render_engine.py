@@ -324,6 +324,80 @@ NICHE_SATURATION = {
     "fitness": 115,
 }
 
+# ── Niche-Aware Styling Constants ────────────────────────────────────
+
+# Niche-aware hook/CTA text font sizes
+NICHE_HOOK_FONT_SIZES = {
+    "fitness": {"hook": "11 vmin", "cta": "9 vmin"},
+    "mythology": {"hook": "10 vmin", "cta": "8 vmin"},
+    "witchcraft": {"hook": "9 vmin", "cta": "8 vmin"},
+    "tech": {"hook": "9 vmin", "cta": "8 vmin"},
+    "ai_news": {"hook": "9 vmin", "cta": "8 vmin"},
+    "lifestyle": {"hook": "9 vmin", "cta": "8 vmin"},
+}
+
+# Niche glow/shadow effects for text overlays
+NICHE_GLOW_EFFECTS = {
+    "witchcraft": {"blur": 20, "opacity": 0.6},
+    "lifestyle": {"blur": 18, "opacity": 0.5},
+    "tech": {"blur": 15, "opacity": 0.5},
+    "ai_news": {"blur": 15, "opacity": 0.5},
+    "fitness": {"blur": 18, "opacity": 0.5},
+    "mythology": {"blur": 16, "opacity": 0.5},
+}
+
+# Blend modes per niche for image elements
+NICHE_BLEND_MODES = {
+    "witchcraft": "multiply",
+    "mythology": "multiply",
+    "ai_news": "screen",
+}
+
+# Scene-role-aware transition overrides per niche (climax gets dramatic)
+NICHE_CLIMAX_TRANSITIONS = {
+    "witchcraft": "color_wipe",
+    "mythology": "color_wipe",
+    "fitness": "whip_pan",
+    "tech": "wipe",
+    "ai_news": "flash",
+}
+
+# Scene duration safety buffers per niche
+NICHE_SCENE_BUFFER = {
+    "witchcraft": 0.25,
+    "mythology": 0.3,
+    "lifestyle": 0.2,
+    "tech": 0.1,
+    "fitness": 0.15,
+}
+
+# Visual hold time added per scene role (on top of audio duration)
+SCENE_VISUAL_HOLD = {
+    "hook": 0.4,
+    "climax": 0.5,
+    "cta": 0.3,
+    "body": 0.15,
+}
+
+# Niche-preferred subtitle animation indices (into SUBTITLE_ANIMATION_STYLES)
+NICHE_SUBTITLE_ANIM = {
+    "witchcraft": [4, 3],    # text-wave, text-reveal (flowing)
+    "mythology": [5, 1],     # typewriter, text-slide (documentary)
+    "tech": [7, 0],          # text-appear, text-fly (snappy)
+    "ai_news": [7, 5],       # text-appear, typewriter (news)
+    "fitness": [2, 6],       # text-scale, text-bounce (energetic)
+    "lifestyle": [3, 0],     # text-reveal, text-fly (gentle)
+}
+
+# Letter-spacing and line-height per niche
+NICHE_TEXT_SPACING = {
+    "fitness": {"letter_spacing": "-1", "line_height": "130%"},
+    "tech": {"letter_spacing": "0", "line_height": "140%"},
+    "witchcraft": {"letter_spacing": "1", "line_height": "150%"},
+    "mythology": {"letter_spacing": "0.5", "line_height": "145%"},
+    "lifestyle": {"letter_spacing": "0", "line_height": "145%"},
+}
+
 # Text animation styles — rotated across scenes for variety
 SUBTITLE_ANIMATION_STYLES = [
     # 0: word-fly (current default)
@@ -443,6 +517,11 @@ class RenderEngine:
         color = get_color_grade(niche=plan.niche)
         sub_style = get_subtitle_style(sb.subtitle_style or "hormozi")
 
+        # Build alt color grade list for visual variety across scenes
+        from ..knowledge.color_grades import NICHE_ALT_GRADES
+        alt_grade_keys = NICHE_ALT_GRADES.get(plan.niche, [])
+        alt_colors = [get_color_grade(key=k) for k in alt_grade_keys] if alt_grade_keys else []
+
         # Build visual asset map from plan
         asset_map = {}
         for asset in (plan.visual_assets or []):
@@ -458,8 +537,12 @@ class RenderEngine:
         for i, scene in enumerate(sb.scenes):
             asset = asset_map.get(scene.scene_number)
             audio_data = audio_map.get(scene.scene_number)
+            # Every 3rd body scene uses an alternate color grade for variety
+            scene_color = color
+            if alt_colors and i % 3 == 2 and i > 0 and i < len(sb.scenes) - 1:
+                scene_color = alt_colors[i % len(alt_colors)]
             comp = self._build_scene_composition(
-                scene, i, plan, color, sub_style, spec, asset, audio_data
+                scene, i, plan, scene_color, sub_style, spec, asset, audio_data
             )
             scene_elements.append(comp)
 
@@ -730,6 +813,11 @@ class RenderEngine:
             # Apply niche-specific color grading (accent overlay + contrast + saturation)
             self._apply_color_grade(visual_el, color, niche_category)
 
+            # Blend mode for atmospheric niche aesthetics
+            blend = NICHE_BLEND_MODES.get(niche_category)
+            if blend:
+                visual_el["blend_mode"] = blend
+
             elements.append(visual_el)
         else:
             # No real image — use gradient background with subtle color variation
@@ -771,13 +859,13 @@ class RenderEngine:
                 elements.append(audio_el)
 
         # Sync composition duration with actual audio — audio is the source of truth.
-        # Use audio duration + small buffer, NOT the WPM-estimated scene duration
-        # which inflates pauses. Fall back to scene duration only if no audio data.
+        # Niche-aware safety buffer + scene-role visual hold time.
         comp_duration = scene.duration_seconds
         if audio_data and audio_data.get("duration_estimate"):
             audio_dur = audio_data["duration_estimate"]
-            # Audio-driven: actual speech + 0.15s breathing room
-            comp_duration = audio_dur + 0.15
+            safety = NICHE_SCENE_BUFFER.get(niche_category, 0.15)
+            hold = SCENE_VISUAL_HOLD.get(role, 0.15)
+            comp_duration = audio_dur + safety + hold
 
         # Build the composition — track 2 ensures scenes auto-sequence
         composition = {
@@ -789,8 +877,21 @@ class RenderEngine:
 
         # Add transition animation on compositions 2+ (not the first scene)
         if scene_index > 0:
-            transition_anim = self._get_transition_animation(scene.transition_in)
+            # Climax scenes get niche-specific dramatic transitions
+            transition_key = scene.transition_in
+            if role == "climax":
+                override = NICHE_CLIMAX_TRANSITIONS.get(niche_category)
+                if override:
+                    transition_key = override
+
+            transition_anim = self._get_transition_animation(transition_key)
             if transition_anim:
+                # Scale transition duration based on scene length
+                if comp_duration < 2.5:
+                    transition_anim["duration"] = min(transition_anim.get("duration", 0.5), 0.25)
+                elif comp_duration > 8:
+                    transition_anim["duration"] = max(transition_anim.get("duration", 0.5), 0.7)
+
                 composition["animations"] = [{
                     **transition_anim,
                     "transition": True,
@@ -852,8 +953,9 @@ class RenderEngine:
         anim_style = OVERLAY_ANIMATION_STYLES[h % len(OVERLAY_ANIMATION_STYLES)]
         animations = [dict(a) for a in anim_style]
 
-        # Hook scenes get bigger text
-        font_size = "9 vmin" if role == "hook" else "8 vmin"
+        # Niche-aware font sizes
+        sizes = NICHE_HOOK_FONT_SIZES.get(niche_category, {"hook": "9 vmin", "cta": "8 vmin"})
+        font_size = sizes.get(role, sizes.get("hook", "9 vmin"))
 
         el = {
             "type": "text",
@@ -876,13 +978,20 @@ class RenderEngine:
             "animations": animations,
         }
 
-        # Niche glow effect — colored shadow for witchcraft/lifestyle
-        if niche_category in ("witchcraft", "lifestyle"):
+        # Niche glow effect — colored shadow for atmospheric niches
+        glow = NICHE_GLOW_EFFECTS.get(niche_category)
+        if glow:
             accent = color.get("accent", "rgba(147,51,234,0.6)")
             if accent.startswith("#"):
                 r, g, b = self._hex_to_rgb(accent)
-                el["shadow_color"] = f"rgba({r},{g},{b},0.6)"
-            el["shadow_blur"] = 20
+                el["shadow_color"] = f"rgba({r},{g},{b},{glow['opacity']})"
+            el["shadow_blur"] = glow["blur"]
+
+        # Niche text spacing
+        spacing = NICHE_TEXT_SPACING.get(niche_category)
+        if spacing:
+            el["letter_spacing"] = spacing["letter_spacing"]
+            el["line_height"] = spacing["line_height"]
 
         return el
 
@@ -892,15 +1001,20 @@ class RenderEngine:
 
         Uses heavy stroke + shadow + niche-colored background pill for
         readability on any image. No full-screen gradient needed.
-        Animation style selected via content hash for variety.
+        Animation style selected with niche preference (60/40 weighting).
         """
         # Truncate at word boundary around 80 chars
         if len(text) > 80:
             text = text[:80].rsplit(" ", 1)[0] + "..."
 
-        # Pick animation style via content hash for varied but deterministic selection
+        # Pick animation style — niche-preferred with 60% chance, else content hash
         h = int(hashlib.md5(text.encode()).hexdigest(), 16)
-        anim_style = SUBTITLE_ANIMATION_STYLES[h % len(SUBTITLE_ANIMATION_STYLES)]
+        niche_prefs = NICHE_SUBTITLE_ANIM.get(niche_category)
+        if niche_prefs and (h % 100) < 60:
+            anim_idx = niche_prefs[(h >> 8) % len(niche_prefs)]
+        else:
+            anim_idx = h % len(SUBTITLE_ANIMATION_STYLES)
+        anim_style = SUBTITLE_ANIMATION_STYLES[anim_idx]
         animations = [dict(a) for a in anim_style]
 
         # Niche-colored background pill for brand consistency
@@ -911,7 +1025,7 @@ class RenderEngine:
                 r, g, b = self._hex_to_rgb(accent)
                 bg_color = f"rgba({r},{g},{b},0.4)"
 
-        return {
+        el = {
             "type": "text",
             "text": text,
             "x": "50%",
@@ -933,6 +1047,14 @@ class RenderEngine:
             "background_border_radius": 10,
             "animations": animations,
         }
+
+        # Niche text spacing for readability
+        spacing = NICHE_TEXT_SPACING.get(niche_category)
+        if spacing:
+            el["letter_spacing"] = spacing["letter_spacing"]
+            el["line_height"] = spacing["line_height"]
+
+        return el
 
     def _get_transition_animation(self, transition_key: str) -> dict:
         """Convert a transition key to a Creatomate animation dict.

@@ -5,7 +5,7 @@
 # Project: VideoForge Engine
 # Category: intelligence-systems
 # Priority: high
-# Compiled: 2026-02-28 22:11
+# Compiled: 2026-02-28 22:26
 # -----------------------------------------------------------
 
 # EMPIRE GLOBAL RULES
@@ -209,17 +209,25 @@ ENRICH → EXPAND → FORTIFY → ANTICIPATE → OPTIMIZE → VALIDATE
   - ALL scenes get real images (no text_card black screens)
   - Each composition: image (Ken Burns + entrance/exit anims + color grade) + text/subtitle + narration audio
   - NO full-screen gradient overlay — text readability via heavy stroke + shadow + background pill
-  - Hook/CTA scenes: large centered text overlay (hook=9 vmin, CTA=8 vmin, varied animations: text-fly/text-spin/text-scale/text-slide)
-  - Witchcraft/lifestyle hook text gets colored shadow glow (accent color at 60% opacity, 20px blur)
-  - Other scenes: bottom subtitle (82%, stroke + shadow + niche-colored bg pill, varied animations)
+  - Hook/CTA scenes: large centered text overlay (niche-specific sizes: fitness=11vmin, mythology=10vmin, others=9vmin)
+  - All niches get colored shadow glow on hook text (niche-specific blur 15-20px, opacity 50-60%)
+  - Other scenes: bottom subtitle (82%, stroke + shadow + niche-colored bg pill, niche-preferred animation styles)
   - Scene-aware animation intensity: _infer_scene_role() detects hook/climax/body/CTA
     - Hook/climax: dramatic Ken Burns (zoom_in_dramatic, rack_focus_push, etc.) + bold entrances
     - CTA: subtle Ken Burns (breathe, slow_drift, parallax) + gentle entrances
     - Body: standard pool with full variety
   - Niche animation preferences: 60% chance to pick from niche-preferred pool (witchcraft→drifts, mythology→zooms, tech→pans)
+  - Niche subtitle animation preferences: witchcraft→wave, mythology→slide-up, tech→appear, fitness→bounce
   - 18 Ken Burns variants with easing + 10 entrance animations + 10 exit animations
   - 8 subtitle animation styles + 6 hook/overlay animation styles
   - Color grading per niche: accent overlay 8% + contrast filter (115% cap for mythology/witchcraft, 110% others) + niche saturation boost (mythology 120%, witchcraft 115%, lifestyle 110%)
+  - Alt color grade variety: every 3rd body scene uses NICHE_ALT_GRADES for visual variation
+  - Blend modes per niche: witchcraft/mythology→multiply, ai_news→screen (applied to image compositions)
+  - Niche-specific text spacing: letter_spacing + line_height tuned per niche (e.g. witchcraft 1px/150%, tech 0/140%)
+  - Climax transitions: niche-specific (witchcraft→color_wipe, mythology→color_wipe, fitness→whip_pan, tech→wipe)
+  - Transition duration scaling: short scenes (<4s) get 0.3s transitions, long scenes (>8s) get 0.6s
+  - Niche scene buffers: witchcraft=0.25s, mythology=0.3s (default 0.3s for unlisted)
+  - Scene visual hold time: hook=0.4s, climax=0.5s, body=0.15s, CTA=0.3s (extra time after narration)
   - Music rotation: random.choice across 3 tracks per mood (was always tracks[0])
   - Music re-hosting: tries all 3 tracks before giving up, uses real browser headers (User-Agent + Referer)
   - 21 scene transitions with easing (incl. blur, bounce, squash, rotate)
@@ -267,7 +275,7 @@ cd videoforge-engine
 python -m pytest tests/ -v
 ```
 
-290+ tests covering all modules.
+443 tests covering all modules.
 
 ## Dependencies
 
