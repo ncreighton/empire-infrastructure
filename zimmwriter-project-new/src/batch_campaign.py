@@ -356,7 +356,9 @@ class BatchCampaign:
     def step_optimize_profiles(self) -> Dict:
         """Update all 14 ZimmWriter profiles with full settings.
 
-        Requires ZimmWriter to be running. Uses the save_all_profiles logic.
+        Requires ZimmWriter to be running. Uses the save_all_profiles logic
+        with full recovery handling (ZimmWriter crash recovery, navigation
+        to Bulk Writer, stale window cleanup).
         """
         self._mark_step_started("optimize_profiles")
 
@@ -368,7 +370,7 @@ class BatchCampaign:
         from scripts.save_all_profiles import (
             update_profile_for_site,
             configure_model_options_prepass,
-            ACTIVE_SITES,
+            read_combo_items,
         )
         from .controller import ZimmWriterController
 
@@ -379,31 +381,164 @@ class BatchCampaign:
             self._mark_step_completed("optimize_profiles", {"status": "failed", "error": error})
             raise RuntimeError(error)
 
+        # Navigate to Bulk Writer screen
+        title = zw.get_window_title()
+        if "Bulk" not in title:
+            logger.info("Not on Bulk Writer (on '%s'), navigating...", title)
+            try:
+                zw._dismiss_error_dialogs()
+            except Exception:
+                pass
+            time.sleep(1)
+            if "Menu" not in title or "Option" in title:
+                try:
+                    zw.back_to_menu()
+                    time.sleep(2)
+                    zw.connect()
+                except Exception:
+                    pass
+            try:
+                zw.open_bulk_writer()
+                time.sleep(2)
+                zw.connect()
+                title = zw.get_window_title()
+            except Exception:
+                pass
+            logger.info("Now on '%s'", title)
+            if "Bulk" not in title:
+                error = f"Could not navigate to Bulk Writer (stuck on '{title}')"
+                self.state["errors"].append(f"optimize_profiles: {error}")
+                self._mark_step_completed("optimize_profiles", {"status": "failed", "error": error})
+                raise RuntimeError(error)
+
+        # Check that profiles exist in the Load Profile dropdown
+        domains_to_process = list(self.domains)
+        try:
+            existing_profiles = read_combo_items(zw, "27")
+            missing = [d for d in domains_to_process if not any(d in item for item in existing_profiles)]
+            if missing:
+                logger.warning("%d profiles not found in dropdown: %s", len(missing), missing)
+                domains_to_process = [d for d in domains_to_process if d not in missing]
+                if not domains_to_process:
+                    error = "No profiles found in dropdown"
+                    self.state["errors"].append(f"optimize_profiles: {error}")
+                    self._mark_step_completed("optimize_profiles", {"status": "failed", "error": error})
+                    raise RuntimeError(error)
+        except Exception as e:
+            logger.warning("Could not read profile dropdown: %s", e)
+
         results = {}
 
         # Phase 0: Image model options pre-pass
         try:
-            model_results = configure_model_options_prepass(zw, self.domains)
+            model_results = configure_model_options_prepass(zw, domains_to_process)
             results["model_options"] = model_results
         except Exception as e:
             logger.error("Image model options pre-pass failed: %s", e)
             results["model_options"] = {"error": str(e)}
 
-        # Phase 1: Update each profile
+        # Phase 1: Update each profile with full recovery handling
         profile_results = []
-        for domain in self.domains:
+        for i, domain in enumerate(domains_to_process, 1):
             preset = get_preset(domain)
             if not preset:
                 profile_results.append({"domain": domain, "status": "skipped", "errors": ["no preset"]})
                 continue
 
+            # ── Pre-site health check & recovery ──
             try:
-                # Ensure healthy connection
+                title = zw.get_window_title()
+            except Exception:
+                title = ""
+
+            # Check if ZimmWriter process is alive — wait for auto-restart if dead
+            if not zw._is_process_alive():
+                logger.info("ZimmWriter died, waiting for restart...")
+                for wait in range(30):
+                    time.sleep(1)
+                    if zw._is_process_alive():
+                        break
+                time.sleep(5)
                 try:
                     zw.connect()
+                    title = zw.get_window_title()
                 except Exception:
-                    pass
+                    title = ""
+                if "Bulk" not in title:
+                    for nav_attempt in range(3):
+                        try:
+                            zw.open_bulk_writer()
+                            time.sleep(3)
+                            zw.connect()
+                            title = zw.get_window_title()
+                            if "Bulk" in title:
+                                break
+                        except Exception:
+                            time.sleep(2)
+                            try:
+                                zw.connect()
+                            except Exception:
+                                pass
+                logger.info("Recovered, now on '%s'", title)
 
+            elif "Bulk" not in title:
+                # Not dead but wrong screen — navigate back
+                logger.info("Recovering — was on '%s'", title)
+                for attempt in range(5):
+                    try:
+                        zw._dismiss_dialog(timeout=2)
+                        time.sleep(1)
+                        zw.main_window = zw.app.top_window()
+                        zw._control_cache.clear()
+                        title = zw.main_window.window_text()
+                        if "Error" not in title:
+                            break
+                    except Exception:
+                        pass
+                    try:
+                        for w in zw.app.windows():
+                            if "Error" in w.window_text():
+                                for child in w.children():
+                                    if child.window_text() in ("OK", "&OK", "Yes", "&Yes"):
+                                        child.click_input()
+                                        time.sleep(1)
+                                        break
+                    except Exception:
+                        pass
+
+                try:
+                    zw.connect()
+                    title = zw.get_window_title()
+                except Exception:
+                    title = ""
+                if "Bulk" not in title:
+                    for nav_attempt in range(3):
+                        try:
+                            zw.open_bulk_writer()
+                            time.sleep(3)
+                            zw.connect()
+                            title = zw.get_window_title()
+                            if "Bulk" in title:
+                                break
+                        except Exception:
+                            time.sleep(2)
+                            try:
+                                zw.connect()
+                            except Exception:
+                                pass
+
+            # Clean slate: close stale config windows from previous site
+            try:
+                zw._close_stale_config_windows()
+                zw._dismiss_dialog(timeout=1)
+                zw.bring_to_front()
+                time.sleep(0.5)
+            except Exception:
+                pass
+
+            logger.info("[%d/%d] %s", i, len(domains_to_process), domain)
+
+            try:
                 result = update_profile_for_site(zw, domain, preset)
                 profile_results.append(result)
                 logger.info("  %s: %s", domain, result.get("status", "unknown"))

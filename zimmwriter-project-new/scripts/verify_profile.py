@@ -20,43 +20,43 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.controller import ZimmWriterController
 from src.site_presets import get_preset
 
-# Dropdown auto_id -> preset key mapping
+# Dropdown auto_id -> preset key mapping (v10.870 IDs from controller.py)
 DROPDOWN_CHECK = {
-    "38": "h2_count",
-    "40": ("h2_auto_limit", str),   # preset stores int, dropdown shows str
-    "42": ("h2_lower_limit", str),
-    "44": "ai_outline_quality",
-    "46": "section_length",
-    "59": "intro",
-    "61": "faq",
-    "63": "voice",
-    "65": "audience_personality",
-    "67": "ai_model",
-    "77": "featured_image",
-    "81": "subheading_image_quantity",
-    "83": "subheading_images_model",
-    "87": "ai_model_image_prompts",
-    "91": "ai_model_translation",
+    "40": "h2_count",
+    "42": ("h2_auto_limit", str),   # preset stores int, dropdown shows str
+    "44": ("h2_lower_limit", str),
+    "46": "ai_outline_quality",
+    "48": "section_length",
+    "61": "intro",
+    "63": "faq",
+    "65": "voice",
+    "67": "audience_personality",
+    "69": "ai_model",
+    "79": "featured_image",
+    "83": "subheading_image_quantity",
+    "85": "subheading_images_model",
+    "89": "ai_model_image_prompts",
+    "93": "ai_model_translation",
 }
 
-# Checkbox auto_id -> preset key mapping
+# Checkbox auto_id -> preset key mapping (v10.870 IDs from controller.py)
 CHECKBOX_CHECK = {
-    "47": "literary_devices",
-    "48": "lists",
-    "49": "tables",
-    "50": "blockquotes",
-    "51": "nuke_ai_words",
-    "52": "bold_readability",
-    "53": "key_takeaways",
-    "54": "enable_h3",
-    "55": "disable_skinny_paragraphs",
-    "56": "disable_active_voice",
-    "57": "disable_conclusion",
-    "71": "auto_style",
-    "72": "automatic_keywords",
-    "73": "image_prompt_per_h2",
-    "74": "progress_indicator",
-    "75": "overwrite_url_cache",
+    "49": "literary_devices",
+    "50": "lists",
+    "51": "tables",
+    "52": "blockquotes",
+    "53": "nuke_ai_words",
+    "54": "bold_readability",
+    "55": "key_takeaways",
+    "56": "enable_h3",
+    "57": "disable_skinny_paragraphs",
+    "58": "disable_active_voice",
+    "59": "disable_conclusion",
+    "73": "auto_style",
+    "74": "automatic_keywords",
+    "75": "image_prompt_per_h2",
+    "76": "progress_indicator",
+    "77": "overwrite_url_cache",
 }
 
 
@@ -306,10 +306,10 @@ def main():
 
         keywords = NICHE_KEYWORDS.get(domain, [])
 
-        # Check featured image prompt (P button id=79)
-        print(f"  Checking featured image prompt (P id=79)...")
+        # Check featured image prompt (P button id=81, v10.870)
+        print(f"  Checking featured image prompt (P id=81)...")
         feat_result = check_image_prompt_window(
-            zw, "79", "Set Featured Image Prompt", keywords, "featured"
+            zw, "81", "Set Featured Image Prompt", keywords, "featured"
         )
         if feat_result["found"] and feat_result["has_content"]:
             kw_count = feat_result["keyword_matches"]
@@ -325,10 +325,10 @@ def main():
             print(f"  [XX] Featured prompt window NOT FOUND")
             img_fail += 1
 
-        # Check subheading image prompt (P button id=85)
-        print(f"  Checking subheading image prompt (P id=85)...")
+        # Check subheading image prompt (P button id=87, v10.870)
+        print(f"  Checking subheading image prompt (P id=87)...")
         sub_result = check_image_prompt_window(
-            zw, "85", "Set Subheading Image Prompt", keywords, "subheading"
+            zw, "87", "Set Subheading Image Prompt", keywords, "subheading"
         )
         if sub_result["found"] and sub_result["has_content"]:
             kw_count = sub_result["keyword_matches"]
