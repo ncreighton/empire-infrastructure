@@ -36,37 +36,37 @@
     "shared-core": [
       {
         "system": "content-pipeline",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "criticality": "critical",
         "usage_frequency": "daily"
       },
       {
         "system": "image-optimization",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "criticality": "high",
         "usage_frequency": "daily"
       },
       {
         "system": "seo-toolkit",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "criticality": "critical",
         "usage_frequency": "daily"
       },
       {
         "system": "api-retry",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "criticality": "high",
         "usage_frequency": "hourly"
       },
       {
         "system": "wordpress-automation",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "criticality": "high",
         "usage_frequency": "daily"
       },
       {
         "system": "affiliate-link-manager",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "criticality": "high",
         "usage_frequency": "weekly"
       }
