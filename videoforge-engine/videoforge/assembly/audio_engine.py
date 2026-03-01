@@ -161,13 +161,14 @@ class AudioEngine:
         if not file_path or not os.path.exists(file_path):
             return ""
 
-        # Try catbox.moe (permanent hosting, direct links)
-        url = self._upload_catbox(file_path)
+        # Try tmpfiles.org first — Creatomate can fetch without User-Agent
+        # (catbox.moe blocks requests without UA, which Creatomate doesn't send)
+        url = self._upload_tmpfiles(file_path)
         if url:
             return url
 
-        # Try tmpfiles.org (temporary, auto-expires)
-        url = self._upload_tmpfiles(file_path)
+        # Fallback to catbox.moe (works for non-Creatomate consumers)
+        url = self._upload_catbox(file_path)
         if url:
             return url
 
@@ -302,7 +303,9 @@ class AudioEngine:
         }
 
     def measure_mp3_duration(self, file_path: str) -> float:
-        """Measure actual MP3 duration in seconds using frame header parsing.
+        """Measure actual MP3 duration in seconds.
+
+        Canonical: project-mesh-v2-omega/shared-core/systems/elevenlabs-tts/src/tts.py:measure_duration
 
         Falls back to estimation if parsing fails.
         """

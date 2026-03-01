@@ -136,22 +136,14 @@ class TestRenderEngine:
         animated = [el for el in image_comps if "animations" in el]
         assert len(animated) >= 3, "Image scenes should have Ken Burns animations"
 
-    def test_transitions_on_later_compositions(self, render_engine, plan):
+    def test_no_transitions_on_compositions(self, render_engine, plan):
+        """Transitions are disabled — they cause audio overlap between scenes."""
         rs = render_engine.build_renderscript(plan)
         compositions = [e for e in rs["elements"] if e.get("type") == "composition"]
-        # First composition should NOT have a transition
-        first = compositions[0]
-        assert "animations" not in first or not any(
-            a.get("transition") for a in first.get("animations", [])
-        )
-        # At least some later compositions should have transitions
-        transitions_found = 0
-        for comp in compositions[1:]:
-            if "animations" in comp:
-                for anim in comp["animations"]:
-                    if anim.get("transition"):
-                        transitions_found += 1
-        assert transitions_found >= 2, "Later scenes should have transition animations"
+        for comp in compositions:
+            for anim in comp.get("animations", []):
+                assert not anim.get("transition"), \
+                    "Transitions should be disabled (cause dual audio playback)"
 
     def test_audio_in_compositions_with_urls(self, render_engine, plan_with_assets):
         """When audio_data has URLs, narration should use hosted audio URLs."""
@@ -824,15 +816,14 @@ class TestHookTextSize:
 
 
 class TestBlendModes:
-    """Test niche-specific blend modes on image elements."""
+    """Blend modes are disabled — multiply makes images invisible on black bg."""
 
-    def test_blend_modes_defined(self):
+    def test_blend_modes_still_defined(self):
+        """Constants exist for reference but are not applied."""
         assert "witchcraft" in NICHE_BLEND_MODES
-        assert "mythology" in NICHE_BLEND_MODES
-        assert NICHE_BLEND_MODES["witchcraft"] == "multiply"
 
-    def test_blend_mode_applied_to_images(self):
-        """Witchcraft images should have blend_mode=multiply."""
+    def test_blend_mode_not_applied_to_images(self):
+        """Blend modes should NOT be applied — multiply with black bg = invisible."""
         smith = VideoSmith(db_path=":memory:")
         plan = smith.to_video_plan("test topic", "witchcraftforbeginners")
         plan.optimizations = {"asset_routing": []}
@@ -847,17 +838,11 @@ class TestBlendModes:
         engine = RenderEngine()
         rs = engine.build_renderscript(plan)
         comps = [e for e in rs["elements"] if e.get("type") == "composition"]
-        blend_found = 0
         for comp in comps:
             for el in comp["elements"]:
-                if el.get("type") == "image" and el.get("blend_mode"):
-                    blend_found += 1
-                    assert el["blend_mode"] == "multiply"
-        assert blend_found >= 1, "Witchcraft images should have blend mode"
-
-    def test_tech_no_blend_by_default(self):
-        """Tech niches shouldn't have blend_mode (not in NICHE_BLEND_MODES unless 'screen')."""
-        assert NICHE_BLEND_MODES.get("tech") is None
+                if el.get("type") == "image":
+                    assert "blend_mode" not in el, \
+                        "Blend mode should not be applied (causes invisible images)"
 
 
 class TestClimaxTransitions:

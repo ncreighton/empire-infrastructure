@@ -80,6 +80,8 @@ _OPENAI_SIZE_MAP = {
 def _brighten_prompt(prompt: str) -> str:
     """Strip dark/shadow terms from prompts and ensure brightness keywords.
 
+    Canonical: project-mesh-v2-omega/shared-core/systems/fal-image-gen/src/image_gen.py:brighten_prompt
+
     AI-generated visual directions often default to dark/moody imagery.
     This ensures images are vivid and well-lit for video content.
     """
@@ -240,44 +242,53 @@ class VisualEngine:
                 asset = self._generate_with_fallback(scene, storyboard)
                 assets.append(asset)
 
-        # Re-host all images to permanent URLs (catbox.moe).
+        # Re-host all images to permanent CDN URLs.
         # AI provider URLs (FAL.ai, Runware, OpenAI) are temporary and expire
         # before Creatomate's render queue processes them.
+        # Uses freeimage.host (iili.io CDN) — Creatomate can fetch without UA.
         for asset in assets:
             if asset.url and asset.url.startswith("http"):
                 permanent_url = self._rehost_image(asset.url)
                 if permanent_url:
                     asset.url = permanent_url
+                else:
+                    logger.error(f"FAILED to re-host image, keeping original: {asset.url[:60]}")
 
         return assets
 
     def _rehost_image(self, url: str) -> str:
-        """Download an image from a temporary URL and re-host to a permanent CDN.
+        """Download an image from a temporary URL and re-host to a CDN.
 
         AI providers (FAL.ai, Runware, OpenAI) return temporary URLs that expire
         in minutes. Creatomate renders are queued and may fetch images later,
-        so we must re-host to a permanent URL first.
+        so we must re-host to a URL that Creatomate can fetch (no User-Agent
+        requirement — catbox.moe is NOT compatible).
 
-        Uses freeimage.host (iili.io CDN) — no API key needed, permanent URLs,
-        no User-Agent requirement (Creatomate can fetch without issues).
+        Tries freeimage.host first (permanent), tmpfiles.org as fallback.
         """
         import base64
 
-        # Skip if already on a permanent host
-        if "iili.io" in url or "freeimage.host" in url:
+        # Skip if already on a compatible host
+        if "iili.io" in url or "freeimage.host" in url or "tmpfiles.org" in url:
             return url
 
+        # Download the image from the temporary provider URL
         try:
-            # Download the image from the temporary provider URL
             resp = requests.get(url, timeout=30)
             resp.raise_for_status()
+        except Exception as e:
+            logger.warning(f"Failed to download image from {url[:60]}: {e}")
+            return ""
 
-            if len(resp.content) < 100:
-                logger.warning(f"Image too small ({len(resp.content)} bytes), skipping re-host")
-                return ""
+        if len(resp.content) < 100:
+            logger.warning(f"Image too small ({len(resp.content)} bytes), skipping re-host")
+            return ""
 
-            # Upload to freeimage.host via base64 API
-            b64_data = base64.b64encode(resp.content).decode()
+        image_data = resp.content
+
+        # Try 1: freeimage.host (permanent, iili.io CDN)
+        try:
+            b64_data = base64.b64encode(image_data).decode()
             upload_resp = requests.post(
                 "https://freeimage.host/api/1/upload",
                 data={
@@ -289,14 +300,37 @@ class VisualEngine:
             )
             upload_resp.raise_for_status()
             result = upload_resp.json()
-
             permanent_url = result.get("image", {}).get("url", "")
             if permanent_url and permanent_url.startswith("http"):
-                logger.info(f"Re-hosted image: {url[:50]}... -> {permanent_url}")
+                logger.info(f"Re-hosted image (freeimage): {url[:50]}... -> {permanent_url}")
                 return permanent_url
-
+            logger.warning(f"freeimage.host returned no URL: {result}")
         except Exception as e:
-            logger.warning(f"Failed to re-host image from {url[:50]}...: {e}")
+            logger.warning(f"freeimage.host upload failed: {e}")
+
+        # Try 2: tmpfiles.org (temporary but Creatomate-compatible)
+        try:
+            import tempfile as _tf
+            import os as _os
+            ext = ".jpg" if b"JFIF" in image_data[:20] else ".png"
+            tmp_path = _os.path.join(_tf.gettempdir(), f"vf_rehost{ext}")
+            with open(tmp_path, "wb") as f:
+                f.write(image_data)
+            with open(tmp_path, "rb") as f:
+                upload_resp = requests.post(
+                    "https://tmpfiles.org/api/v1/upload",
+                    files={"file": (f"image{ext}", f, f"image/{ext[1:]}")},
+                    timeout=30,
+                )
+                upload_resp.raise_for_status()
+                data = upload_resp.json()
+                if data.get("status") == "success":
+                    view_url = data["data"]["url"]
+                    dl_url = view_url.replace("tmpfiles.org/", "tmpfiles.org/dl/")
+                    logger.info(f"Re-hosted image (tmpfiles): {url[:50]}... -> {dl_url}")
+                    return dl_url
+        except Exception as e:
+            logger.warning(f"tmpfiles.org image upload failed: {e}")
 
         return ""
 

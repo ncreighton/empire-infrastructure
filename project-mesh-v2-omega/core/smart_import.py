@@ -47,6 +47,7 @@ _SYSTEM_MAP = {
     "fastapi_service": "fastapi-service",
     "sqlite_codex": "sqlite-codex",
     "brand_config": "brand-config",
+    "v0dev_generator": "v0dev-generator",
 }
 
 

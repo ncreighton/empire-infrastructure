@@ -182,9 +182,10 @@ class Orchestrator:
             pass
 
     def run_all(self, delay_between: int = 10) -> List[Dict]:
-        """
-        Run all queued jobs sequentially.
-        Returns list of result dicts.
+        """Run all queued jobs sequentially. Returns list of result dicts.
+
+        Canonical: project-mesh-v2-omega/shared-core/systems/content-pipeline/src/pipeline.py
+        NOTE: Uses Dict instead of JobResult dataclass for ZimmWriter controller compat.
         """
         if not self.controller._connected:
             self.controller.connect()

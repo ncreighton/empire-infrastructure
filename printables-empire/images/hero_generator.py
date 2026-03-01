@@ -26,7 +26,10 @@ HERO_SIZE = (1200, 630)
 
 
 def get_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
-    """Load a font, falling back to default if system fonts unavailable."""
+    """Load a font, falling back to default if system fonts unavailable.
+
+    Canonical: project-mesh-v2-omega/shared-core/systems/image-optimization/src/optimizer.py
+    """
     font_paths = [
         # Windows
         "C:/Windows/Fonts/segoeui.ttf",

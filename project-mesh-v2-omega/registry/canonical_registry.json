@@ -244,6 +244,14 @@
       "version": "1.0.0",
       "consumers": ["project-mesh-v2-omega"],
       "description": "Regex-based credential stripping — GitHub PATs, WP passwords, API keys"
+    },
+    "v0dev_generator": {
+      "canonical_project": "project-mesh-v2-omega",
+      "canonical_path": "project-mesh-v2-omega/shared-core/systems/v0dev-generator/src/generator.py",
+      "version": "1.0.0",
+      "consumers": ["ai-in-action-hub", "ai-discovery-digest", "bullet-journals", "celebration-season", "clear-ai-news", "family-flourish", "manifest-and-align", "mythical-archives", "pulse-gear-reviews", "smart-home-gear-reviews", "smart-home-wizards", "sprout-and-spruce", "the-connected-haven", "wealth-from-ai", "wearable-gear-reviews", "witchcraft-for-beginners"],
+      "alternatives_deprecated": ["scripts/v0_generate.py (root)", "*/v0_generate.py (per-site copies)"],
+      "description": "v0.dev API component generator — React/Tailwind UI components"
     }
   }
 }

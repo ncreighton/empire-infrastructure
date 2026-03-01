@@ -813,10 +813,12 @@ class RenderEngine:
             # Apply niche-specific color grading (accent overlay + contrast + saturation)
             self._apply_color_grade(visual_el, color, niche_category)
 
-            # Blend mode for atmospheric niche aesthetics
-            blend = NICHE_BLEND_MODES.get(niche_category)
-            if blend:
-                visual_el["blend_mode"] = blend
+            # Blend mode DISABLED — "multiply" makes images invisible against
+            # black composition background (black × image = black).
+            # Color overlay + color_filter already provide atmospheric effects.
+            # blend = NICHE_BLEND_MODES.get(niche_category)
+            # if blend:
+            #     visual_el["blend_mode"] = blend
 
             elements.append(visual_el)
         else:
@@ -878,27 +880,26 @@ class RenderEngine:
             "elements": elements,
         }
 
-        # Add transition animation on compositions 2+ (not the first scene)
-        if scene_index > 0:
-            # Climax scenes get niche-specific dramatic transitions
-            transition_key = scene.transition_in
-            if role == "climax":
-                override = NICHE_CLIMAX_TRANSITIONS.get(niche_category)
-                if override:
-                    transition_key = override
-
-            transition_anim = self._get_transition_animation(transition_key)
-            if transition_anim:
-                # Scale transition duration based on scene length
-                if comp_duration < 2.5:
-                    transition_anim["duration"] = min(transition_anim.get("duration", 0.5), 0.25)
-                elif comp_duration > 8:
-                    transition_anim["duration"] = max(transition_anim.get("duration", 0.5), 0.7)
-
-                composition["animations"] = [{
-                    **transition_anim,
-                    "transition": True,
-                }]
+        # Transition DISABLED — "transition: true" causes compositions to
+        # OVERLAP, making audio from two scenes play simultaneously.
+        # Entrance/exit animations on images already provide visual variety
+        # between scenes without the audio overlap problem.
+        # if scene_index > 0:
+        #     transition_key = scene.transition_in
+        #     if role == "climax":
+        #         override = NICHE_CLIMAX_TRANSITIONS.get(niche_category)
+        #         if override:
+        #             transition_key = override
+        #     transition_anim = self._get_transition_animation(transition_key)
+        #     if transition_anim:
+        #         if comp_duration < 2.5:
+        #             transition_anim["duration"] = min(transition_anim.get("duration", 0.5), 0.25)
+        #         elif comp_duration > 8:
+        #             transition_anim["duration"] = max(transition_anim.get("duration", 0.5), 0.7)
+        #         composition["animations"] = [{
+        #             **transition_anim,
+        #             "transition": True,
+        #         }]
 
         return composition
 
@@ -1222,7 +1223,7 @@ class RenderEngine:
         return music_el
 
     def _rehost_music(self, source_url: str, mood_key: str) -> str:
-        """Download music from source and re-upload to catbox.moe.
+        """Download music from source and re-upload to tmpfiles.org.
 
         Caches re-hosted URLs in data/music_cache.json to avoid re-uploading.
         Uses real browser headers to bypass Pixabay hotlink protection.
@@ -1260,16 +1261,19 @@ class RenderEngine:
             with open(tmp_path, "wb") as f:
                 f.write(response.content)
 
-            # Upload to catbox.moe
+            # Upload to tmpfiles.org (Creatomate can fetch without User-Agent)
             with open(tmp_path, "rb") as f:
                 upload_resp = requests.post(
-                    "https://catbox.moe/user/api.php",
-                    data={"reqtype": "fileupload"},
-                    files={"fileToUpload": (f"{mood_key}.mp3", f, "audio/mpeg")},
+                    "https://tmpfiles.org/api/v1/upload",
+                    files={"file": (f"{mood_key}.mp3", f, "audio/mpeg")},
                     timeout=120,
                 )
                 upload_resp.raise_for_status()
-                hosted_url = upload_resp.text.strip()
+                data = upload_resp.json()
+                hosted_url = ""
+                if data.get("status") == "success":
+                    view_url = data["data"]["url"]
+                    hosted_url = view_url.replace("tmpfiles.org/", "tmpfiles.org/dl/")
 
             if hosted_url.startswith("http"):
                 # Cache the result
