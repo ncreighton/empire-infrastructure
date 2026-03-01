@@ -5,7 +5,7 @@
 # Project: OpenClaw Empire
 # Category: content-tools
 # Priority: high
-# Compiled: 2026-03-01 13:35
+# Compiled: 2026-03-01 14:16
 # -----------------------------------------------------------
 
 # EMPIRE GLOBAL RULES
@@ -103,8 +103,20 @@
 
 | System | Version | Criticality | Usage |
 |--------|---------|-------------|-------|
-| api-retry | 1.0.0 [OK] | high | hourly |
+| api-retry | 1.1.0 [OK] | high | hourly |
 
+
+## Relevant Knowledge Base Entries
+
+- AI Vertical Context
+- Content Guidelines Summary
+- Content Vertical Context
+- FORGE + AMPLIFY Intelligence System (INSTALLED)
+- Family Vertical Context
+- API Cost Optimization Rules
+- COMMANDS
+- AVOID: [X] NEVER use Yoast SEO plugin
+- API Patterns
 
 ## Self-Check Before Starting Work
 Before writing any code or content for OpenClaw Empire:

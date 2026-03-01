@@ -5,7 +5,7 @@
 # Project: ZimmWriter Pipeline
 # Category: content-tools
 # Priority: high
-# Compiled: 2026-03-01 13:36
+# Compiled: 2026-03-01 14:16
 # -----------------------------------------------------------
 
 # EMPIRE GLOBAL RULES
@@ -103,8 +103,20 @@
 
 | System | Version | Criticality | Usage |
 |--------|---------|-------------|-------|
-| api-retry | 1.0.0 [OK] | high | hourly |
+| api-retry | 1.1.0 [OK] | high | hourly |
 
+
+## Relevant Knowledge Base Entries
+
+- API Endpoints
+- AVOID: [X] NEVER use GPT/OpenAI for content generation
+- AVOID: [X] NEVER use Puppeteer directly
+- AVOID: [X] NEVER use ZimmWriter or ZimmWriter API
+- Browser Automation
+- API Cost Optimization Rules
+- Important Notes
+- AVOID: [X] NEVER use Yoast SEO plugin
+- API Patterns
 
 ## Self-Check Before Starting Work
 Before writing any code or content for ZimmWriter Pipeline:

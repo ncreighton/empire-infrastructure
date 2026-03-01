@@ -5,7 +5,7 @@
 # Project: Printables Empire
 # Category: ecommerce
 # Priority: normal
-# Compiled: 2026-03-01 13:35
+# Compiled: 2026-03-01 14:16
 # -----------------------------------------------------------
 
 # EMPIRE GLOBAL RULES
@@ -98,8 +98,16 @@
 
 | System | Version | Criticality | Usage |
 |--------|---------|-------------|-------|
-| api-retry | 1.0.0 [OK] | high | hourly |
+| api-retry | 1.1.0 [OK] | high | hourly |
 
+
+## Relevant Knowledge Base Entries
+
+- API Patterns
+- AVOID: Deprecated Pattern
+- AVOID: [X] NEVER edit theme files directly
+- AVOID: [X] NEVER hardcode webhook URLs
+- AVOID: [X] NEVER make API calls without retry logic
 
 ## Self-Check Before Starting Work
 Before writing any code or content for Printables Empire:

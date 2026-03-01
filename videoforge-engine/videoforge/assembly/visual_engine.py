@@ -211,6 +211,8 @@ class VisualEngine:
 
         Uses niche-based provider routing with automatic fallback.
         Pexels only when routing explicitly says 'pexels_override'.
+        All images are re-hosted to catbox.moe because AI provider URLs
+        (FAL.ai, Runware) are temporary and expire within minutes.
         """
         assets = []
         routing_map = {}
@@ -238,7 +240,65 @@ class VisualEngine:
                 asset = self._generate_with_fallback(scene, storyboard)
                 assets.append(asset)
 
+        # Re-host all images to permanent URLs (catbox.moe).
+        # AI provider URLs (FAL.ai, Runware, OpenAI) are temporary and expire
+        # before Creatomate's render queue processes them.
+        for asset in assets:
+            if asset.url and asset.url.startswith("http"):
+                permanent_url = self._rehost_image(asset.url)
+                if permanent_url:
+                    asset.url = permanent_url
+
         return assets
+
+    def _rehost_image(self, url: str) -> str:
+        """Download an image from a temporary URL and re-host to a permanent CDN.
+
+        AI providers (FAL.ai, Runware, OpenAI) return temporary URLs that expire
+        in minutes. Creatomate renders are queued and may fetch images later,
+        so we must re-host to a permanent URL first.
+
+        Uses freeimage.host (iili.io CDN) — no API key needed, permanent URLs,
+        no User-Agent requirement (Creatomate can fetch without issues).
+        """
+        import base64
+
+        # Skip if already on a permanent host
+        if "iili.io" in url or "freeimage.host" in url:
+            return url
+
+        try:
+            # Download the image from the temporary provider URL
+            resp = requests.get(url, timeout=30)
+            resp.raise_for_status()
+
+            if len(resp.content) < 100:
+                logger.warning(f"Image too small ({len(resp.content)} bytes), skipping re-host")
+                return ""
+
+            # Upload to freeimage.host via base64 API
+            b64_data = base64.b64encode(resp.content).decode()
+            upload_resp = requests.post(
+                "https://freeimage.host/api/1/upload",
+                data={
+                    "key": "6d207e02198a847aa98d0a2a901485a5",
+                    "source": b64_data,
+                    "format": "json",
+                },
+                timeout=60,
+            )
+            upload_resp.raise_for_status()
+            result = upload_resp.json()
+
+            permanent_url = result.get("image", {}).get("url", "")
+            if permanent_url and permanent_url.startswith("http"):
+                logger.info(f"Re-hosted image: {url[:50]}... -> {permanent_url}")
+                return permanent_url
+
+        except Exception as e:
+            logger.warning(f"Failed to re-host image from {url[:50]}...: {e}")
+
+        return ""
 
     def _generate_single_provider(self, provider: str, scene, storyboard: Storyboard) -> VisualAsset:
         """Try a single specific provider."""

@@ -5,7 +5,7 @@
 # Project: VideoForge Engine
 # Category: intelligence-systems
 # Priority: high
-# Compiled: 2026-03-01 13:36
+# Compiled: 2026-03-01 14:16
 # -----------------------------------------------------------
 
 # EMPIRE GLOBAL RULES
@@ -105,8 +105,19 @@
 
 | System | Version | Criticality | Usage |
 |--------|---------|-------------|-------|
-| api-retry | 1.0.0 [OK] | high | hourly |
+| api-retry | 1.1.0 [OK] | high | hourly |
 
+
+## Relevant Knowledge Base Entries
+
+- API Endpoints
+- AVOID: [X] NEVER use GPT/OpenAI for content generation
+- AVOID: [X] NEVER use Puppeteer directly
+- AVOID: [X] NEVER use ZimmWriter or ZimmWriter API
+- Browser Automation
+- AI Vertical Context
+- API Cost Optimization Rules
+- API Patterns
 
 ## Self-Check Before Starting Work
 Before writing any code or content for VideoForge Engine:
