@@ -222,9 +222,9 @@ class TestNicheSpecificSuffixes:
         assert "film grain" not in suffix
 
     def test_niche_specific_suffix_mythology(self):
-        """Mythology should get 'epic oil painting' style."""
+        """Mythology should get vivid digital painting style."""
         suffix = _get_niche_suffix("mythicalarchives", "short")
-        assert "oil painting" in suffix or "chiaroscuro" in suffix
+        assert "digital painting" in suffix or "illustration" in suffix
         assert "product photography" not in suffix
 
     def test_niche_specific_suffix_lifestyle(self):

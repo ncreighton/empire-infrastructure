@@ -183,12 +183,23 @@ def get_music_source(mood: str) -> dict:
 def get_music_url(mood: str) -> str:
     """Get a direct music track URL for a mood.
 
-    Returns first available track URL, or empty string if none configured.
+    Rotates through available tracks randomly instead of always returning
+    the first one, giving variety across renders.
     """
+    import random
+
     tracks = MUSIC_TRACKS.get(mood, [])
     if tracks:
-        return tracks[0]
+        return random.choice(tracks)
 
     # Try lo_fi as universal fallback
     fallback = MUSIC_TRACKS.get("lo_fi", [])
-    return fallback[0] if fallback else ""
+    return random.choice(fallback) if fallback else ""
+
+
+def get_all_tracks(mood: str) -> list:
+    """Get all track URLs for a mood, for try-all-tracks logic."""
+    tracks = MUSIC_TRACKS.get(mood, [])
+    if tracks:
+        return list(tracks)
+    return list(MUSIC_TRACKS.get("lo_fi", []))

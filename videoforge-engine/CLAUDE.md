@@ -1,3 +1,123 @@
+<!-- MESH:START -->
+
+# -----------------------------------------------------------
+# PROJECT MESH v2.0   AUTO-GENERATED CONTEXT
+# Project: VideoForge Engine
+# Category: intelligence-systems
+# Priority: high
+# Compiled: 2026-02-28 22:11
+# -----------------------------------------------------------
+
+# EMPIRE GLOBAL RULES
+> These rules apply to EVERY project. No exceptions.
+
+## Core Principles
+1. **Never hardcode API keys, webhook URLs, or secrets** — Use environment variables
+2. **Always use shared-core systems when available** — Check the registry first
+3. **All API calls must use retry logic** — Use the api-retry shared system
+4. **Images must be optimized before upload** — Use image-optimization system
+5. **Content must pass SEO validation** — Use seo-toolkit system
+6. **Never reference deprecated methods** — Check BLACKLIST.md below
+
+## Technical Standards
+- All WordPress sites use Blocksy or Astra themes on Hostinger
+- All automation runs through n8n (ZimmWriter is DEPRECATED)
+- All content generation uses Claude API (never GPT)
+- All sites use LiteSpeed cache
+- All affiliate links use affiliate-link-manager system
+
+## Quality Standards
+- Content demonstrates E-E-A-T signals
+- Target featured snippets where applicable
+- Proper schema markup on every page
+- Images have alt text with target keywords
+- Internal linking follows topical cluster strategy
+
+## Brand Voice
+- Each site has its own voice (see category context below)
+- Never use generic AI-sounding language
+- Never reference being AI-generated
+- Content must feel human-written and authentic
+
+## n8n Automation
+- All content pipelines run through n8n workflows
+- Use Steel.dev for browser automation with 10min keep-alive pings
+- BrowserUse as fallback when Steel.dev fails
+- All webhooks use environment variables, never hardcoded URLs
+
+# DEPRECATED METHODS — NEVER USE THESE
+
+> This file is auto-included in every project's CLAUDE.md.
+> Updated: 2026-02-28
+
+## Content Generation
+### ❌ NEVER use ZimmWriter or ZimmWriter API
+- **Replacement**: n8n content pipeline + Claude API
+- **Reason**: Deprecated in favor of Claude-native workflows
+- **Stage**: REMOVED
+
+### ❌ NEVER use GPT/OpenAI for content generation
+- **Replacement**: Claude API (Anthropic)
+- **Reason**: All content uses Claude for consistency and quality
+
+## API Patterns
+### ❌ NEVER hardcode webhook URLs
+- **Replacement**: Use environment variables or config.get('webhooks.name')
+- **Reason**: Security risk and maintenance nightmare
+
+### ❌ NEVER make API calls without retry logic
+- **Replacement**: Use shared-core/api-retry system
+- **Reason**: APIs fail. Always retry with exponential backoff.
+
+### ❌ NEVER use fetch() directly for external APIs
+- **Replacement**: Use the api-retry wrapper which handles retries, timeouts, and error logging
+- **Reason**: Raw fetch has no retry, no timeout, no error handling
+
+## WordPress
+### ❌ NEVER use Yoast SEO plugin
+- **Replacement**: RankMath
+- **Reason**: Standardized across all sites on RankMath
+
+### ❌ NEVER edit theme files directly
+- **Replacement**: Use child theme or Blocksy customizer
+- **Reason**: Updates will overwrite direct edits
+
+## Substack
+### ❌ NEVER use witchcraftforbeginners.substack.com
+- **Replacement**: witchcraftb.substack.com
+- **Reason**: Correct URL is witchcraftb.substack.com
+
+## Browser Automation
+### ❌ NEVER use Puppeteer directly
+- **Replacement**: Steel.dev with BrowserUse fallback
+- **Reason**: Standardized on Steel.dev for session management
+- **Note**: Steel.dev sessions expire after 15min idle — implement keep-alive pings
+
+## Intelligence Systems Context
+- **Pattern**: FORGE+AMPLIFY pipeline (scout, enrich, expand, validate)
+- **Common stack**: Python, FastAPI, SQLite knowledge codex, OpenRouter LLM
+- **Projects**: Grimoire (witchcraft), VideoForge (video), VelvetVeil (printables)
+- **Key principle**: Algorithmic intelligence first, LLM only for generation tasks
+- **Testing**: Every system must have unit tests for all FORGE modules
+
+
+## Shared Systems (Current Versions)
+
+| System | Version | Criticality | Usage |
+|--------|---------|-------------|-------|
+| api-retry | 1.0.0 [OK] | high | hourly |
+
+
+## Self-Check Before Starting Work
+Before writing any code or content for VideoForge Engine:
+1. [OK] Am I using the latest shared systems? (Check version table above)
+2. [OK] Am I avoiding ALL deprecated methods? (Check blacklist above)  
+3. [OK] Am I using the correct brand voice for intelligence-systems vertical?
+4. [OK] Am I using api-retry for all external API calls?
+5. [OK] Am I using environment variables for secrets/webhooks?
+
+<!-- MESH:END -->
+
 # VideoForge Intelligence System
 
 Self-hosted video creation pipeline with FORGE+AMPLIFY intelligence.
@@ -89,11 +209,19 @@ ENRICH → EXPAND → FORTIFY → ANTICIPATE → OPTIMIZE → VALIDATE
   - ALL scenes get real images (no text_card black screens)
   - Each composition: image (Ken Burns + entrance/exit anims + color grade) + text/subtitle + narration audio
   - NO full-screen gradient overlay — text readability via heavy stroke + shadow + background pill
-  - Hook/CTA scenes: large centered text overlay (8 vmin, varied animations: text-fly/text-spin/text-scale/text-slide)
-  - Other scenes: bottom subtitle (82%, stroke + shadow + rounded bg, varied animations: text-fly/text-slide/text-scale/text-reveal/text-wave)
-  - 18 Ken Burns variants with easing + 10 entrance animations + 5 exit animations
+  - Hook/CTA scenes: large centered text overlay (hook=9 vmin, CTA=8 vmin, varied animations: text-fly/text-spin/text-scale/text-slide)
+  - Witchcraft/lifestyle hook text gets colored shadow glow (accent color at 60% opacity, 20px blur)
+  - Other scenes: bottom subtitle (82%, stroke + shadow + niche-colored bg pill, varied animations)
+  - Scene-aware animation intensity: _infer_scene_role() detects hook/climax/body/CTA
+    - Hook/climax: dramatic Ken Burns (zoom_in_dramatic, rack_focus_push, etc.) + bold entrances
+    - CTA: subtle Ken Burns (breathe, slow_drift, parallax) + gentle entrances
+    - Body: standard pool with full variety
+  - Niche animation preferences: 60% chance to pick from niche-preferred pool (witchcraft→drifts, mythology→zooms, tech→pans)
+  - 18 Ken Burns variants with easing + 10 entrance animations + 10 exit animations
   - 8 subtitle animation styles + 6 hook/overlay animation styles
-  - Color grading per niche (accent overlay 8% + contrast filter) — now auto-applied to all images
+  - Color grading per niche: accent overlay 8% + contrast filter (115% cap for mythology/witchcraft, 110% others) + niche saturation boost (mythology 120%, witchcraft 115%, lifestyle 110%)
+  - Music rotation: random.choice across 3 tracks per mood (was always tracks[0])
+  - Music re-hosting: tries all 3 tracks before giving up, uses real browser headers (User-Agent + Referer)
   - 21 scene transitions with easing (incl. blur, bounce, squash, rotate)
   - Music ducking: volume keyframes lower music during narration, raise between scenes
   - Voice-specific WPM timing (Drew=140, Dave=135, Brian=155, etc.) — prevents audio overlap

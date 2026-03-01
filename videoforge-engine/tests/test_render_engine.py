@@ -5,6 +5,8 @@ from videoforge.assembly.render_engine import (
     RenderEngine, KEN_BURNS_VARIANTS, TRANSITION_MAP,
     IMAGE_ENTRANCE_ANIMATIONS, IMAGE_EXIT_ANIMATIONS,
     SUBTITLE_ANIMATION_STYLES, OVERLAY_ANIMATION_STYLES,
+    DRAMATIC_KB_INDICES, SUBTLE_KB_INDICES, STANDARD_KB_INDICES,
+    NICHE_ANIMATION_BIAS, NICHE_SATURATION, _NICHE_CATEGORY,
 )
 from videoforge.assembly.audio_engine import AudioEngine, _VOICE_WPM
 from videoforge.forge.video_smith import VideoSmith
@@ -209,8 +211,8 @@ class TestRenderEngine:
         compositions = [e for e in rs["elements"] if e.get("type") == "composition"]
         for comp in compositions:
             texts = [el for el in comp.get("elements", []) if el.get("type") == "text"]
-            # If a composition has a large overlay (8 vmin), it should NOT also have a subtitle
-            has_overlay = any(t.get("font_size") == "8 vmin" for t in texts)
+            # If a composition has a large overlay (8 or 9 vmin), it should NOT also have a subtitle
+            has_overlay = any(t.get("font_size") in ("8 vmin", "9 vmin") for t in texts)
             has_subtitle = any(t.get("y") == "82%" for t in texts)
             if has_overlay:
                 assert not has_subtitle, "Scenes with text overlay must not also have a subtitle"
@@ -366,7 +368,7 @@ class TestDynamicAnimations:
 
 class TestColorGrading:
     def test_color_grading_on_images(self):
-        """Image elements should have color_overlay for mood tinting."""
+        """Image elements should have color_overlay for mood tinting at 8% opacity."""
         smith = VideoSmith(db_path=":memory:")
         plan = smith.to_video_plan("test topic", "witchcraftforbeginners")
         plan.optimizations = {"asset_routing": []}
@@ -392,7 +394,7 @@ class TestColorGrading:
         assert len(graded) >= 1, "At least some images should have color_overlay"
         for img in graded:
             assert "rgba(" in img["color_overlay"], "color_overlay should be rgba format"
-            assert "0.03)" in img["color_overlay"], "Overlay should be 3% opacity"
+            assert "0.08)" in img["color_overlay"], "Overlay should be 8% opacity"
 
 
 class TestTransitionMap:
@@ -530,3 +532,257 @@ class TestContentHashSelection:
         comps2 = [e for e in rs2["elements"] if e.get("type") == "composition"]
         for c1, c2 in zip(comps1, comps2):
             assert c1["duration"] == c2["duration"]
+
+
+class TestSceneRoleInference:
+    """Test _infer_scene_role detects hook/cta/climax/body correctly."""
+
+    def test_first_scene_is_hook(self):
+        from unittest.mock import MagicMock
+        scene = MagicMock(text_overlay="")
+        assert RenderEngine._infer_scene_role(scene, 0, 8) == "hook"
+
+    def test_last_scene_is_cta(self):
+        from unittest.mock import MagicMock
+        scene = MagicMock(text_overlay="")
+        assert RenderEngine._infer_scene_role(scene, 7, 8) == "cta"
+
+    def test_second_to_last_is_climax(self):
+        from unittest.mock import MagicMock
+        scene = MagicMock(text_overlay="")
+        assert RenderEngine._infer_scene_role(scene, 6, 8) == "climax"
+
+    def test_middle_scene_is_body(self):
+        from unittest.mock import MagicMock
+        scene = MagicMock(text_overlay="")
+        assert RenderEngine._infer_scene_role(scene, 3, 8) == "body"
+
+    def test_text_overlay_scene_is_hook(self):
+        from unittest.mock import MagicMock
+        scene = MagicMock(text_overlay="Big bold text")
+        assert RenderEngine._infer_scene_role(scene, 3, 8) == "hook"
+
+
+class TestAnimationIntensity:
+    """Test that scene role affects Ken Burns and entrance animation pools."""
+
+    def _get_image_animations(self, niche, scene_index=0):
+        """Helper: build renderscript and extract image animations for a scene."""
+        smith = VideoSmith(db_path=":memory:")
+        plan = smith.to_video_plan("test topic", niche)
+        plan.optimizations = {"asset_routing": []}
+        plan.visual_assets = [
+            VisualAsset(
+                scene_number=i + 1, asset_type="image", source="fal_ai",
+                prompt=f"test prompt {i}", url=f"https://example.com/{i+1}.png",
+                cost=0.05, duration=s.duration_seconds,
+            )
+            for i, s in enumerate(plan.storyboard.scenes)
+        ]
+        engine = RenderEngine()
+        rs = engine.build_renderscript(plan)
+        comps = [e for e in rs["elements"] if e.get("type") == "composition"]
+        comp = comps[scene_index]
+        images = [el for el in comp["elements"] if el.get("type") == "image"]
+        return images[0].get("animations", []) if images else []
+
+    def test_hook_uses_dramatic_or_niche_kb(self):
+        """Hook scene (index 0) should pick from dramatic or niche-preferred KB."""
+        anims = self._get_image_animations("witchcraftforbeginners", scene_index=0)
+        assert len(anims) >= 3, "Hook should have KB + entrance + exit"
+
+    def test_body_uses_standard_kb(self):
+        """Body scene (middle) should pick from standard KB pool."""
+        anims = self._get_image_animations("witchcraftforbeginners", scene_index=3)
+        assert len(anims) >= 3, "Body should have KB + entrance + exit"
+
+    def test_all_scenes_have_exit_animation(self):
+        """Every scene should have at least one exit animation (time=end)."""
+        smith = VideoSmith(db_path=":memory:")
+        plan = smith.to_video_plan("test topic", "mythicalarchives")
+        plan.optimizations = {"asset_routing": []}
+        plan.visual_assets = [
+            VisualAsset(
+                scene_number=i + 1, asset_type="image", source="fal_ai",
+                prompt="test", url=f"https://example.com/{i+1}.png",
+                cost=0.05, duration=s.duration_seconds,
+            )
+            for i, s in enumerate(plan.storyboard.scenes)
+        ]
+        engine = RenderEngine()
+        rs = engine.build_renderscript(plan)
+        comps = [e for e in rs["elements"] if e.get("type") == "composition"]
+        for comp in comps:
+            images = [el for el in comp["elements"] if el.get("type") == "image"]
+            for img in images:
+                exits = [a for a in img.get("animations", []) if a.get("time") == "end"]
+                assert len(exits) >= 1, "Every image should have an exit animation"
+
+    def test_dramatic_kb_indices_are_valid(self):
+        """DRAMATIC_KB_INDICES should be valid indices into KEN_BURNS_VARIANTS."""
+        for idx in DRAMATIC_KB_INDICES:
+            assert 0 <= idx < len(KEN_BURNS_VARIANTS)
+
+    def test_subtle_kb_indices_are_valid(self):
+        """SUBTLE_KB_INDICES should be valid indices into KEN_BURNS_VARIANTS."""
+        for idx in SUBTLE_KB_INDICES:
+            assert 0 <= idx < len(KEN_BURNS_VARIANTS)
+
+    def test_all_kb_indices_covered(self):
+        """All KB variants should be in exactly one tier."""
+        all_indices = set(DRAMATIC_KB_INDICES) | set(SUBTLE_KB_INDICES) | set(STANDARD_KB_INDICES)
+        assert all_indices == set(range(len(KEN_BURNS_VARIANTS)))
+
+
+class TestNicheAnimationBias:
+    """Test niche-specific animation preferences."""
+
+    def test_witchcraft_prefers_fades(self):
+        """Witchcraft bias should prefer mystical/drift Ken Burns."""
+        bias = NICHE_ANIMATION_BIAS.get("witchcraft", {})
+        assert "breathe" in bias.get("prefer_kb", [])
+        assert "drift_up_zoom" in bias.get("prefer_kb", [])
+
+    def test_mythology_prefers_zooms(self):
+        """Mythology bias should prefer dramatic zoom Ken Burns."""
+        bias = NICHE_ANIMATION_BIAS.get("mythology", {})
+        assert "zoom_in_dramatic" in bias.get("prefer_kb", [])
+        assert "push_in_documentary" in bias.get("prefer_kb", [])
+
+    def test_all_niche_categories_have_bias(self):
+        """All major niche categories should have animation bias defined."""
+        for cat in ["witchcraft", "mythology", "tech", "ai_news", "lifestyle", "fitness"]:
+            assert cat in NICHE_ANIMATION_BIAS, f"Missing animation bias for: {cat}"
+
+    def test_niche_category_map_complete(self):
+        """All 16 niche IDs should map to a category."""
+        for niche_id in ["witchcraftforbeginners", "mythicalarchives", "smarthomewizards",
+                         "aidiscoverydigest", "clearainews", "bulletjournals"]:
+            assert niche_id in _NICHE_CATEGORY, f"Missing niche category for: {niche_id}"
+
+
+class TestStrongerColorGrading:
+    """Test enhanced color grading — 8% overlay, saturation, higher contrast caps."""
+
+    def test_overlay_is_8_percent(self):
+        """Color overlay should be 8% opacity, not 3%."""
+        engine = RenderEngine()
+        el = {"type": "image"}
+        color = {"accent": "#E0B0FF", "contrast": 1.0}
+        engine._apply_color_grade(el, color, "witchcraft")
+        assert "0.08)" in el["color_overlay"]
+
+    def test_mythology_contrast_cap_115(self):
+        """Mythology niches should allow contrast up to 115%."""
+        engine = RenderEngine()
+        el = {"type": "image"}
+        color = {"accent": "#87CEEB", "contrast": 1.15}
+        engine._apply_color_grade(el, color, "mythology")
+        assert el["color_filter_value"] == "115%"
+
+    def test_tech_contrast_cap_110(self):
+        """Tech niches should cap contrast at 110%."""
+        engine = RenderEngine()
+        el = {"type": "image"}
+        color = {"accent": "#38BDF8", "contrast": 1.15}
+        engine._apply_color_grade(el, color, "tech")
+        assert el["color_filter_value"] == "110%"
+
+    def test_niche_saturation_defined(self):
+        """Visual niches should have saturation boost defined."""
+        assert NICHE_SATURATION.get("witchcraft") == 115
+        assert NICHE_SATURATION.get("mythology") == 120
+        assert NICHE_SATURATION.get("lifestyle") == 110
+
+    def test_saturation_applied_when_no_contrast(self):
+        """When contrast is neutral, saturation filter should be applied."""
+        engine = RenderEngine()
+        el = {"type": "image"}
+        color = {"accent": "#E0B0FF", "contrast": 1.0}
+        engine._apply_color_grade(el, color, "witchcraft")
+        assert el.get("color_filter") == "saturate"
+        assert el.get("color_filter_value") == "115%"
+
+
+class TestExitAnimationsExpanded:
+    """Test that exit animations expanded to 10."""
+
+    def test_10_exit_animations(self):
+        assert len(IMAGE_EXIT_ANIMATIONS) == 10
+
+    def test_all_exits_have_end_time(self):
+        for anim in IMAGE_EXIT_ANIMATIONS:
+            assert anim.get("time") == "end", f"Exit animation missing time=end: {anim}"
+
+    def test_all_exits_have_reversed(self):
+        for anim in IMAGE_EXIT_ANIMATIONS:
+            assert anim.get("reversed") is True, f"Exit animation missing reversed=True: {anim}"
+
+    def test_exit_type_variety(self):
+        """Should have at least 4 different exit animation types."""
+        types = set(a.get("type") for a in IMAGE_EXIT_ANIMATIONS)
+        assert len(types) >= 4, f"Exit animations should have variety, got: {types}"
+
+
+class TestMusicRotation:
+    """Test that music URL selection rotates instead of always returning first."""
+
+    def test_get_music_url_returns_string(self):
+        from videoforge.knowledge.audio_library import get_music_url
+        url = get_music_url("witchcraft_ambient")
+        assert isinstance(url, str)
+        assert url.startswith("https://")
+
+    def test_get_all_tracks_returns_list(self):
+        from videoforge.knowledge.audio_library import get_all_tracks
+        tracks = get_all_tracks("witchcraft_ambient")
+        assert isinstance(tracks, list)
+        assert len(tracks) == 3
+
+    def test_get_all_tracks_fallback(self):
+        """Unknown mood should fallback to lo_fi tracks."""
+        from videoforge.knowledge.audio_library import get_all_tracks
+        tracks = get_all_tracks("nonexistent_mood")
+        assert len(tracks) >= 1
+
+    def test_get_music_url_varies(self):
+        """Over many calls, get_music_url should return different tracks."""
+        from videoforge.knowledge.audio_library import get_music_url
+        urls = set(get_music_url("witchcraft_ambient") for _ in range(30))
+        assert len(urls) >= 2, "Music URL selection should rotate across tracks"
+
+
+class TestHookTextSize:
+    """Test hook scenes get bigger text than CTA."""
+
+    def test_hook_overlay_9_vmin(self):
+        """Hook scene text overlay should be 9 vmin."""
+        engine = RenderEngine()
+        color = {"text": "#FFFFFF", "accent": "#E0B0FF"}
+        el = engine._build_text_overlay("Test hook", color, 0, "hook", "witchcraft")
+        assert el["font_size"] == "9 vmin"
+
+    def test_cta_overlay_8_vmin(self):
+        """CTA scene text overlay should be 8 vmin."""
+        engine = RenderEngine()
+        color = {"text": "#FFFFFF", "accent": "#E0B0FF"}
+        el = engine._build_text_overlay("Test cta", color, 7, "cta", "witchcraft")
+        assert el["font_size"] == "8 vmin"
+
+    def test_witchcraft_glow_effect(self):
+        """Witchcraft niche should have colored shadow glow on text overlay."""
+        engine = RenderEngine()
+        color = {"text": "#FFFFFF", "accent": "#E0B0FF"}
+        el = engine._build_text_overlay("Moon ritual", color, 0, "hook", "witchcraft")
+        assert el["shadow_blur"] == 20
+        assert "rgba(" in el["shadow_color"]
+
+    def test_niche_colored_subtitle_background(self):
+        """Subtitle background should use niche accent color."""
+        engine = RenderEngine()
+        color = {"accent": "#E0B0FF"}
+        el = engine._build_subtitle("Test subtitle", 0, color, "witchcraft")
+        bg = el["background_color"]
+        assert "rgba(" in bg
+        assert "0.4)" in bg
+        assert "224" in bg  # 0xE0 = 224

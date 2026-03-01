@@ -3,12 +3,14 @@
 Each scene is a composition containing: visual + subtitle text + narration audio.
 Supports Ken Burns effects, entrance/exit animations, text animations, transitions,
 background music, and embedded audio. No full-screen gradient overlays.
+Scene-aware animation intensity and niche-specific animation preferences.
 """
 
 import os
 import sys
 import json
 import time
+import random
 import hashlib
 import logging
 import requests
@@ -209,22 +211,118 @@ IMAGE_ENTRANCE_ANIMATIONS = [
      "start_scale": "120%", "end_scale": "100%", "fade": True},
 ]
 
-# Image exit animations — smooth outgoing transitions
+# Image exit animations — smooth outgoing transitions (10 total, matches entrance count)
 IMAGE_EXIT_ANIMATIONS = [
     {"type": "fade", "time": "end", "duration": 0.3, "reversed": True,
      "easing": "quadratic-in"},
     {"type": "scale", "time": "end", "duration": 0.4, "reversed": True,
      "easing": "quadratic-in", "end_scale": "105%", "fade": True},
-    # New: slide-out
+    # slide-out left
     {"type": "slide", "time": "end", "duration": 0.3, "reversed": True,
      "direction": "180°", "distance": "5%", "easing": "quadratic-in"},
-    # New: blur-out — fade out
+    # fade-out cubic
     {"type": "fade", "time": "end", "duration": 0.3, "reversed": True,
      "easing": "cubic-in"},
-    # New: scale-out — shrink and fade
+    # scale-out — shrink and fade
     {"type": "scale", "time": "end", "duration": 0.3, "reversed": True,
      "easing": "quadratic-in", "end_scale": "80%", "fade": True},
+    # wipe-out
+    {"type": "wipe", "time": "end", "duration": 0.3, "reversed": True,
+     "direction": "180°", "easing": "quadratic-in"},
+    # circular-wipe-out
+    {"type": "circular-wipe", "time": "end", "duration": 0.4, "reversed": True,
+     "easing": "quadratic-in"},
+    # slide-out down
+    {"type": "slide", "time": "end", "duration": 0.3, "reversed": True,
+     "direction": "90°", "distance": "5%", "easing": "cubic-in"},
+    # spin-out
+    {"type": "spin", "time": "end", "duration": 0.3, "reversed": True,
+     "easing": "quadratic-in", "fade": True},
+    # slide-out right
+    {"type": "slide", "time": "end", "duration": 0.3, "reversed": True,
+     "direction": "0°", "distance": "5%", "easing": "cubic-in"},
 ]
+
+# ── Scene-Aware Animation Intensity Tiers ────────────────────────────
+
+# Ken Burns variants split by intensity — indices into KEN_BURNS_VARIANTS
+# Dramatic: big motion for hooks/climax scenes
+DRAMATIC_KB_NAMES = {"zoom_in_dramatic", "zoom_out_reveal", "push_in_documentary",
+                     "orbital_zoom", "rack_focus_push", "wide_reveal", "diagonal_sweep"}
+# Subtle: gentle for body/CTA scenes
+SUBTLE_KB_NAMES = {"slow_drift_right", "breathe", "parallax_drift",
+                   "drift_up_zoom", "drift_down_reveal"}
+
+DRAMATIC_KB_INDICES = [i for i, v in enumerate(KEN_BURNS_VARIANTS) if v["name"] in DRAMATIC_KB_NAMES]
+SUBTLE_KB_INDICES = [i for i, v in enumerate(KEN_BURNS_VARIANTS) if v["name"] in SUBTLE_KB_NAMES]
+STANDARD_KB_INDICES = [i for i in range(len(KEN_BURNS_VARIANTS))
+                       if i not in DRAMATIC_KB_INDICES and i not in SUBTLE_KB_INDICES]
+
+# Entrance animations split by intensity
+DRAMATIC_ENTRANCE_INDICES = [4, 7, 9, 5]  # circular-wipe, spin, scale-from-large, wipe
+SUBTLE_ENTRANCE_INDICES = [0, 8, 1]  # fade, slide-from-top, scale-back-out
+
+# Niche category map for animation/grading decisions
+_NICHE_CATEGORY = {
+    "witchcraftforbeginners": "witchcraft",
+    "moonrituallibrary": "witchcraft",
+    "manifestandalign": "witchcraft",
+    "mythicalarchives": "mythology",
+    "smarthomewizards": "tech",
+    "smarthomegearreviews": "tech",
+    "pulsegearreviews": "fitness",
+    "wearablegearreviews": "tech",
+    "aidiscoverydigest": "ai_news",
+    "aiinactionhub": "tech",
+    "clearainews": "ai_news",
+    "wealthfromai": "business",
+    "bulletjournals": "lifestyle",
+    "theconnectedhaven": "lifestyle",
+    "familyflourish": "lifestyle",
+    "celebrationseason": "lifestyle",
+}
+
+# Niche-specific animation preferences — 60% chance to pick from preferred pool
+NICHE_ANIMATION_BIAS = {
+    "witchcraft": {
+        "prefer_kb": ["drift_up_zoom", "breathe", "slow_drift_right", "parallax_drift"],
+        "prefer_entrance": [0, 4],  # fade, circular-wipe
+        "prefer_transition": ["crossfade", "fade_black"],
+    },
+    "mythology": {
+        "prefer_kb": ["zoom_in_dramatic", "push_in_documentary", "orbital_zoom", "zoom_out_reveal", "wide_reveal"],
+        "prefer_entrance": [1, 5],  # scale, wipe
+        "prefer_transition": ["color_wipe", "slide_left"],
+    },
+    "tech": {
+        "prefer_kb": ["pan_left_sweep", "pan_right_sweep", "tilt_up_reveal"],
+        "prefer_entrance": [2, 0],  # slide, fade
+        "prefer_transition": ["slide_left", "slide_right", "wipe"],
+    },
+    "ai_news": {
+        "prefer_kb": ["pan_left_sweep", "zoom_in_dramatic", "push_in_documentary"],
+        "prefer_entrance": [2, 1],  # slide, scale
+        "prefer_transition": ["slide_left", "flash"],
+    },
+    "lifestyle": {
+        "prefer_kb": ["breathe", "slow_drift_right", "drift_up_zoom"],
+        "prefer_entrance": [0, 2],  # fade, slide
+        "prefer_transition": ["crossfade", "slide_left"],
+    },
+    "fitness": {
+        "prefer_kb": ["zoom_in_dramatic", "diagonal_sweep", "rack_focus_push"],
+        "prefer_entrance": [7, 9],  # spin, scale-from-large
+        "prefer_transition": ["flash", "whip_pan"],
+    },
+}
+
+# Niche-specific saturation filters
+NICHE_SATURATION = {
+    "witchcraft": 115,
+    "mythology": 120,
+    "lifestyle": 110,
+    "fitness": 115,
+}
 
 # Text animation styles — rotated across scenes for variety
 SUBTITLE_ANIMATION_STYLES = [
@@ -520,10 +618,53 @@ class RenderEngine:
 
     # ── Scene Composition Builder ──────────────────────────────────────
 
+    @staticmethod
+    def _infer_scene_role(scene, scene_index: int, total_scenes: int) -> str:
+        """Infer scene purpose from position and content.
+
+        Returns: "hook", "cta", "climax", or "body"
+        """
+        if scene_index == 0:
+            return "hook"
+        if scene_index == total_scenes - 1:
+            return "cta"
+        if scene_index == total_scenes - 2:
+            return "climax"
+        if bool(scene.text_overlay):
+            return "hook"
+        return "body"
+
+    def _pick_weighted_animation(self, pool_indices: list, full_pool_size: int,
+                                  h: int, niche_category: str,
+                                  prefer_key: str, shift: int = 0) -> int:
+        """Pick an animation index with niche bias.
+
+        60% chance to pick from niche-preferred pool (if any), 40% from given pool.
+        """
+        bias = NICHE_ANIMATION_BIAS.get(niche_category, {})
+        preferred_names = bias.get(prefer_key, [])
+
+        if preferred_names and isinstance(preferred_names[0], str):
+            # KB names → resolve to indices
+            preferred_indices = [i for i, v in enumerate(KEN_BURNS_VARIANTS)
+                                 if v["name"] in preferred_names and i in pool_indices]
+        elif preferred_names and isinstance(preferred_names[0], int):
+            # Direct entrance/exit indices
+            preferred_indices = [i for i in preferred_names if i < full_pool_size]
+        else:
+            preferred_indices = []
+
+        # Use hash bits for deterministic but varied selection
+        pick_val = (h >> shift) % 100
+        if preferred_indices and pick_val < 60:
+            return preferred_indices[(h >> (shift + 8)) % len(preferred_indices)]
+        return pool_indices[(h >> (shift + 4)) % len(pool_indices)]
+
     def _build_scene_composition(self, scene, scene_index, plan, color,
                                   sub_style, spec, asset, audio_data):
         """Build a Creatomate composition element for a single scene.
 
+        Scene-aware: animation intensity adapts to scene role (hook/climax/body/CTA).
         Every scene gets:
         1. Image with Ken Burns + entrance/exit animations + color grading (ALL scenes)
         2. Text overlay if scene has text_overlay (hook/CTA — large centered text)
@@ -532,6 +673,9 @@ class RenderEngine:
         3. Narration audio
         """
         elements = []
+        total_scenes = len(plan.storyboard.scenes) if plan.storyboard else 1
+        role = self._infer_scene_role(scene, scene_index, total_scenes)
+        niche_category = _NICHE_CATEGORY.get(plan.niche, "tech")
 
         # 1. Visual element — ALL scenes get an image
         has_real_url = asset and asset.url and asset.url.startswith("http")
@@ -546,24 +690,45 @@ class RenderEngine:
                 "height": "100%",
                 "fit": "cover",
             }
-            # Ken Burns animation — content-hash for deterministic but varied selection
+            # Ken Burns animation — scene-role-aware intensity
             content_seed = scene.narration or scene.visual_prompt or f"scene_{scene_index}"
             h = int(hashlib.md5(content_seed.encode()).hexdigest(), 16)
-            kb_variant = KEN_BURNS_VARIANTS[h % len(KEN_BURNS_VARIANTS)]
+
+            # Select KB pool based on scene role
+            if role in ("hook", "climax"):
+                kb_pool = DRAMATIC_KB_INDICES if DRAMATIC_KB_INDICES else list(range(len(KEN_BURNS_VARIANTS)))
+                entrance_pool = DRAMATIC_ENTRANCE_INDICES
+            elif role == "cta":
+                kb_pool = SUBTLE_KB_INDICES if SUBTLE_KB_INDICES else list(range(len(KEN_BURNS_VARIANTS)))
+                entrance_pool = SUBTLE_ENTRANCE_INDICES
+            else:
+                kb_pool = STANDARD_KB_INDICES if STANDARD_KB_INDICES else list(range(len(KEN_BURNS_VARIANTS)))
+                entrance_pool = list(range(len(IMAGE_ENTRANCE_ANIMATIONS)))
+
+            # Pick KB with niche weighting
+            kb_idx = self._pick_weighted_animation(
+                kb_pool, len(KEN_BURNS_VARIANTS), h, niche_category, "prefer_kb", shift=0
+            )
+            kb_variant = KEN_BURNS_VARIANTS[kb_idx]
             animations = [dict(a) for a in kb_variant["animations"]]
 
-            # Entrance animation — offset hash for independent selection
-            entrance = IMAGE_ENTRANCE_ANIMATIONS[(h >> 8) % len(IMAGE_ENTRANCE_ANIMATIONS)]
+            # Entrance animation — role-aware pool with niche weighting
+            ent_idx = self._pick_weighted_animation(
+                entrance_pool, len(IMAGE_ENTRANCE_ANIMATIONS), h, niche_category,
+                "prefer_entrance", shift=8
+            )
+            entrance = IMAGE_ENTRANCE_ANIMATIONS[ent_idx]
             animations.append(dict(entrance))
 
-            # Exit animation — further offset
-            exit_anim = IMAGE_EXIT_ANIMATIONS[(h >> 16) % len(IMAGE_EXIT_ANIMATIONS)]
+            # Exit animation — further offset hash
+            exit_idx = (h >> 16) % len(IMAGE_EXIT_ANIMATIONS)
+            exit_anim = IMAGE_EXIT_ANIMATIONS[exit_idx]
             animations.append(dict(exit_anim))
 
             visual_el["animations"] = animations
 
-            # Apply niche-specific color grading (subtle accent overlay + contrast)
-            self._apply_color_grade(visual_el, color)
+            # Apply niche-specific color grading (accent overlay + contrast + saturation)
+            self._apply_color_grade(visual_el, color, niche_category)
 
             elements.append(visual_el)
         else:
@@ -586,12 +751,14 @@ class RenderEngine:
         # 2. Text overlay for hook/CTA scenes (large centered text on top of image)
         has_text_overlay = bool(scene.text_overlay)
         if has_text_overlay:
-            elements.append(self._build_text_overlay(scene.text_overlay, color, scene_index))
+            elements.append(self._build_text_overlay(
+                scene.text_overlay, color, scene_index, role, niche_category
+            ))
 
         # 3. Subtitle — only if scene has narration AND no text_overlay
         subtitle_text = scene.subtitle_text or scene.narration
         if subtitle_text and not has_text_overlay:
-            elements.append(self._build_subtitle(subtitle_text, scene_index))
+            elements.append(self._build_subtitle(subtitle_text, scene_index, color, niche_category))
 
         # 4. Narration audio
         narration_text = audio_data.get("text", "") if audio_data else ""
@@ -631,23 +798,34 @@ class RenderEngine:
 
         return composition
 
-    def _apply_color_grade(self, visual_el: dict, color: dict):
-        """Apply subtle color grading to an image element.
+    def _apply_color_grade(self, visual_el: dict, color: dict,
+                           niche_category: str = "tech"):
+        """Apply color grading to an image element.
 
-        Very light touch — 3% opacity tint + mild contrast only.
-        Skipped entirely if contrast is neutral (1.0) to keep images clean.
+        8% opacity accent tint + contrast boost + niche saturation filter.
         """
         accent = color.get("accent", "")
         contrast = color.get("contrast", 1.0)
         if accent:
-            # Convert hex to rgba with 3% opacity for barely-visible tint
+            # Convert hex to rgba with 8% opacity for visible but not overwhelming tint
             r, g, b = self._hex_to_rgb(accent)
-            visual_el["color_overlay"] = f"rgba({r},{g},{b},0.03)"
-        # Only boost contrast if explicitly above neutral — cap at 110%
+            visual_el["color_overlay"] = f"rgba({r},{g},{b},0.08)"
+
+        # Contrast boost — higher cap for dramatic niches (mythology/witchcraft: 115%)
         if contrast and contrast > 1.02:
-            capped = min(contrast, 1.10)
+            if niche_category in ("mythology", "witchcraft"):
+                capped = min(contrast, 1.15)
+            else:
+                capped = min(contrast, 1.10)
             visual_el["color_filter"] = "contrast"
-            visual_el["color_filter_value"] = f"{int(capped * 100)}%"
+            visual_el["color_filter_value"] = f"{round(capped * 100)}%"
+
+        # Niche saturation boost — stacks with contrast via Creatomate filter array
+        sat_pct = NICHE_SATURATION.get(niche_category)
+        if sat_pct and sat_pct > 100:
+            if "color_filter" not in visual_el:
+                visual_el["color_filter"] = "saturate"
+                visual_el["color_filter_value"] = f"{sat_pct}%"
 
     @staticmethod
     def _hex_to_rgb(hex_color: str) -> tuple:
@@ -661,18 +839,23 @@ class RenderEngine:
             return (0, 0, 0)
 
     def _build_text_overlay(self, text: str, color: dict,
-                            scene_index: int = 0) -> dict:
+                            scene_index: int = 0, role: str = "hook",
+                            niche_category: str = "tech") -> dict:
         """Build a large centered text overlay for hook/CTA scenes.
 
         Text readability via heavy stroke + dual shadows (no gradient overlay needed).
-        Animation style selected via content hash for variety.
+        Hook scenes get bigger text (9 vmin), CTA stays at 8 vmin.
+        Witchcraft/lifestyle niches get a colored glow effect.
         """
         # Pick animation style via content hash for varied but deterministic selection
         h = int(hashlib.md5(text.encode()).hexdigest(), 16)
         anim_style = OVERLAY_ANIMATION_STYLES[h % len(OVERLAY_ANIMATION_STYLES)]
         animations = [dict(a) for a in anim_style]
 
-        return {
+        # Hook scenes get bigger text
+        font_size = "9 vmin" if role == "hook" else "8 vmin"
+
+        el = {
             "type": "text",
             "text": text,
             "x": "50%",
@@ -682,7 +865,7 @@ class RenderEngine:
             "y_alignment": "50%",
             "font_family": "Montserrat",
             "font_weight": "900",
-            "font_size": "8 vmin",
+            "font_size": font_size,
             "fill_color": color.get("text", "#FFFFFF"),
             "stroke_color": "rgba(0,0,0,0.9)",
             "stroke_width": "0.2 vmin",
@@ -693,10 +876,21 @@ class RenderEngine:
             "animations": animations,
         }
 
-    def _build_subtitle(self, text: str, scene_index: int = 0) -> dict:
+        # Niche glow effect — colored shadow for witchcraft/lifestyle
+        if niche_category in ("witchcraft", "lifestyle"):
+            accent = color.get("accent", "rgba(147,51,234,0.6)")
+            if accent.startswith("#"):
+                r, g, b = self._hex_to_rgb(accent)
+                el["shadow_color"] = f"rgba({r},{g},{b},0.6)"
+            el["shadow_blur"] = 20
+
+        return el
+
+    def _build_subtitle(self, text: str, scene_index: int = 0,
+                         color: dict = None, niche_category: str = "tech") -> dict:
         """Build a professional subtitle element with strong readability.
 
-        Uses heavy stroke + shadow + semi-transparent background pill for
+        Uses heavy stroke + shadow + niche-colored background pill for
         readability on any image. No full-screen gradient needed.
         Animation style selected via content hash for variety.
         """
@@ -708,6 +902,14 @@ class RenderEngine:
         h = int(hashlib.md5(text.encode()).hexdigest(), 16)
         anim_style = SUBTITLE_ANIMATION_STYLES[h % len(SUBTITLE_ANIMATION_STYLES)]
         animations = [dict(a) for a in anim_style]
+
+        # Niche-colored background pill for brand consistency
+        bg_color = "rgba(0,0,0,0.5)"
+        if color:
+            accent = color.get("accent", "")
+            if accent and accent.startswith("#"):
+                r, g, b = self._hex_to_rgb(accent)
+                bg_color = f"rgba({r},{g},{b},0.4)"
 
         return {
             "type": "text",
@@ -725,7 +927,7 @@ class RenderEngine:
             "shadow_blur": 10,
             "shadow_x": 1,
             "shadow_y": 1,
-            "background_color": "rgba(0,0,0,0.5)",
+            "background_color": bg_color,
             "background_x_padding": "15%",
             "background_y_padding": "10%",
             "background_border_radius": 10,
@@ -814,23 +1016,28 @@ class RenderEngine:
 
         Downloads music from source and re-hosts on catbox.moe to avoid
         hotlink protection issues (e.g., Pixabay blocks direct downloads
-        from third-party services).
+        from third-party services). Tries all tracks for a mood before giving up.
         """
         if not plan.audio_plan:
             return None
 
-        from ..knowledge.audio_library import get_music_url
+        from ..knowledge.audio_library import get_all_tracks
 
         mood_key = plan.audio_plan.music_track
-        music_url = get_music_url(mood_key)
+        all_tracks = get_all_tracks(mood_key)
 
-        if not music_url:
+        if not all_tracks:
             return None
 
-        # Re-host music to avoid 403 from hotlink-protected CDNs
-        hosted_url = self._rehost_music(music_url, mood_key)
+        # Try all tracks for this mood before giving up
+        hosted_url = ""
+        for track_url in all_tracks:
+            hosted_url = self._rehost_music(track_url, mood_key)
+            if hosted_url:
+                break
+
         if not hosted_url:
-            logger.warning(f"Could not re-host music for mood '{mood_key}', skipping")
+            logger.warning(f"Could not re-host any music track for mood '{mood_key}', skipping")
             return None
 
         total_duration = sum(
@@ -886,6 +1093,7 @@ class RenderEngine:
         """Download music from source and re-upload to catbox.moe.
 
         Caches re-hosted URLs in data/music_cache.json to avoid re-uploading.
+        Uses real browser headers to bypass Pixabay hotlink protection.
         """
         import tempfile
 
@@ -905,11 +1113,13 @@ class RenderEngine:
         if mood_key in cache and cache[mood_key].startswith("http"):
             return cache[mood_key]
 
-        # Download from source
+        # Download from source with real browser headers to bypass hotlink protection
         try:
             response = requests.get(source_url, timeout=30, headers={
-                "User-Agent": "Mozilla/5.0 (VideoForge Pipeline)",
-                "Referer": "https://pixabay.com/",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                "Referer": "https://pixabay.com/music/",
+                "Accept": "audio/mpeg,audio/*;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9",
             })
             response.raise_for_status()
 
@@ -939,7 +1149,7 @@ class RenderEngine:
                 return hosted_url
 
         except Exception as e:
-            logger.warning(f"Failed to re-host music '{mood_key}': {e}")
+            logger.warning(f"Failed to re-host music from '{source_url}': {e}")
 
         return ""
 
