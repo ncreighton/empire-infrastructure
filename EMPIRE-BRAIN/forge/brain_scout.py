@@ -49,6 +49,16 @@ class BrainScout:
         "seo-link-building-agents-for-forums-and-q&a-sites---haro,-quora,-reddit": "automation",
     }
 
+    # Duplicate slugs to skip — these are empty hyphenated variants of non-hyphenated project dirs
+    SKIP_SLUGS = {
+        "ai-discovery-digest", "ai-in-action-hub", "bullet-journals",
+        "celebration-season", "clear-ai-news", "manifest-and-align",
+        "moon-ritual-library", "mythical-archives", "pulse-gear-reviews",
+        "smart-home-gear-reviews", "smart-home-wizards", "the-connected-haven",
+        "wealth-from-ai", "wearable-gear-reviews", "witchcraft-for-beginners",
+        "sprout-and-spruce",
+    }
+
     def __init__(self, db: Optional[BrainDB] = None):
         self.db = db or BrainDB()
         self.stats = {"projects": 0, "skills": 0, "functions": 0, "classes": 0, "endpoints": 0, "files": 0}
@@ -79,6 +89,8 @@ class BrainScout:
 
             if has_claude or has_claude_dir or has_code or has_package:
                 slug = item.name.lower().replace(" ", "-")
+                if slug in self.SKIP_SLUGS:
+                    continue
                 proj = {
                     "slug": slug,
                     "name": item.name,
