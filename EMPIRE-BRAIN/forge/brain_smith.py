@@ -8,6 +8,7 @@ Generates actionable outputs:
 - Daily briefings
 """
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -16,12 +17,31 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from knowledge.brain_db import BrainDB
 
+log = logging.getLogger(__name__)
+
 
 class BrainSmith:
     """Generates solutions, recommendations, and reports."""
 
     def __init__(self, db: Optional[BrainDB] = None):
         self.db = db or BrainDB()
+        self._grimoire = None
+
+    def _get_grimoire(self):
+        """Lazy-load Grimoire connector for witchcraft content enrichment."""
+        if self._grimoire is None:
+            try:
+                from connectors.grimoire_connector import GrimoireConnector
+                gc = GrimoireConnector()
+                if gc.is_loaded:
+                    self._grimoire = gc
+                    log.info("Grimoire connector loaded for content enrichment")
+                else:
+                    self._grimoire = False  # Mark as unavailable
+            except Exception as e:
+                log.debug("Grimoire connector not available: %s", e)
+                self._grimoire = False
+        return self._grimoire if self._grimoire else None
 
     def generate_briefing(self) -> dict:
         """Generate daily morning briefing."""
@@ -37,6 +57,34 @@ class BrainSmith:
             etype = e.get("event_type", "unknown")
             event_summary[etype] = event_summary.get(etype, 0) + 1
 
+        # Grimoire seasonal context (for witchcraft content awareness)
+        grimoire_context = None
+        gc = self._get_grimoire()
+        if gc:
+            energy = gc.get_current_energy()
+            sabbat = gc.get_sabbat_context()
+            # moon_phase is a string (e.g. "Waxing Gibbous"), not a nested dict
+            moon_name = energy.get("moon_phase") if energy else None
+            # sabbat current/next may be dicts with "name" or plain strings
+            current_sab = sabbat.get("current") if sabbat else None
+            next_sab = sabbat.get("next") if sabbat else None
+            grimoire_context = {
+                "current_moon": moon_name,
+                "moon_energy": energy.get("magical_energy") if energy else None,
+                "current_sabbat": current_sab.get("name") if isinstance(current_sab, dict) else current_sab,
+                "next_sabbat": next_sab.get("name") if isinstance(next_sab, dict) else next_sab,
+                "content_suggestion": None,
+            }
+            # Generate seasonal content suggestion
+            if grimoire_context["current_sabbat"]:
+                grimoire_context["content_suggestion"] = (
+                    f"Align witchcraft content with {grimoire_context['current_sabbat']} season"
+                )
+            elif grimoire_context["current_moon"]:
+                grimoire_context["content_suggestion"] = (
+                    f"Create {grimoire_context['current_moon']} ritual/spell content"
+                )
+
         briefing = {
             "date": datetime.now().strftime("%Y-%m-%d"),
             "timestamp": datetime.now().isoformat(),
@@ -50,7 +98,8 @@ class BrainSmith:
                 "open_opportunities": len(opportunities),
             },
             "top_opportunities": [
-                {"title": o["title"], "impact": o.get("estimated_impact"), "type": o.get("opportunity_type")}
+                {"title": o["title"], "impact": o.get("estimated_impact"),
+                 "type": o.get("opportunity_type"), "score": o.get("priority_score", 0)}
                 for o in opportunities[:5]
             ],
             "recent_patterns": [
@@ -61,6 +110,7 @@ class BrainSmith:
                 {"content": l["content"][:200], "source": l.get("source"), "category": l.get("category")}
                 for l in learnings
             ],
+            "grimoire_context": grimoire_context,
             "event_activity": event_summary,
             "action_items": self._generate_action_items(opportunities, patterns),
         }

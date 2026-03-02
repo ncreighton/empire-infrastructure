@@ -47,6 +47,7 @@ SERVICES = {
     "bmc_webhook": {"port": 8095, "health": "/health"},
     "zimmwriter": {"port": 8765, "health": "/health"},
     "brain_mcp": {"port": 8200, "health": "/health"},
+    "api_gateway": {"port": 8888, "health": "/health"},
 }
 
 # File patterns to scan
