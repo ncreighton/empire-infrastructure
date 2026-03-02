@@ -2,10 +2,15 @@
 
 Merged from project-mesh-v2-omega's graph_engine.py with Brain-specific tables.
 Persistent local intelligence that grows smarter over time.
+
+17 core tables + 4 evolution tables = 21 total.
+All evolution methods use try/finally for connection safety.
+Content hashing normalized (lowercase, stripped whitespace) for better dedup.
 """
 import sqlite3
 import hashlib
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -16,21 +21,47 @@ DB_PATH = Path(__file__).parent / "brain.db"
 def get_db(db_path: Optional[Path] = None) -> sqlite3.Connection:
     path = db_path or DB_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path))
+    conn = sqlite3.connect(str(path), timeout=10.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA busy_timeout=5000")
     return conn
 
 
 def init_db(db_path: Optional[Path] = None):
     conn = get_db(db_path)
-    conn.executescript(SCHEMA)
-    conn.close()
+    try:
+        conn.executescript(SCHEMA)
+        # Migrate existing tables: add new columns if missing
+        _migrate(conn)
+    finally:
+        conn.close()
+
+
+def _migrate(conn: sqlite3.Connection):
+    """Add columns to existing tables that were created before schema updates."""
+    migrations = [
+        ("discoveries", "urgency", "TEXT DEFAULT 'low'"),
+        ("discoveries", "implementation_steps", "TEXT"),
+        ("discoveries", "evolution_id", "INTEGER"),
+        ("ideas", "evolution_id", "INTEGER"),
+        ("enhancements", "line_number", "INTEGER"),
+        ("enhancements", "confidence", "REAL DEFAULT 0.5"),
+        ("enhancements", "evolution_id", "INTEGER"),
+    ]
+    for table, column, col_type in migrations:
+        try:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+    conn.commit()
 
 
 def content_hash(text: str) -> str:
-    return hashlib.md5(text.encode()).hexdigest()
+    """Normalized content hash — strips whitespace, lowercases for better dedup."""
+    normalized = re.sub(r'\s+', ' ', text.strip().lower())
+    return hashlib.md5(normalized.encode()).hexdigest()
 
 
 SCHEMA = """
@@ -254,6 +285,84 @@ CREATE TABLE IF NOT EXISTS dependencies (
     FOREIGN KEY (to_project) REFERENCES projects(slug)
 );
 
+-- Evolution Cycles (tracks autonomous evolution runs)
+CREATE TABLE IF NOT EXISTS evolutions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cycle_type TEXT NOT NULL,       -- quick_enhance, deep_discover, full_evolution
+    started_at TEXT,
+    completed_at TEXT,
+    duration_seconds REAL,
+    discoveries_count INTEGER DEFAULT 0,
+    ideas_count INTEGER DEFAULT 0,
+    enhancements_count INTEGER DEFAULT 0,
+    skills_generated INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'running',  -- running, completed, failed
+    summary TEXT,
+    details TEXT                    -- JSON
+);
+
+-- Discoveries (APIs, tools, MCP servers found by APIScout)
+CREATE TABLE IF NOT EXISTS discoveries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    discovery_type TEXT NOT NULL,   -- api, tool, mcp_server, python_package, platform
+    description TEXT,
+    url TEXT,
+    relevance_score REAL DEFAULT 0,
+    cost_tier TEXT,
+    features TEXT,                  -- JSON array
+    recommended_for TEXT,           -- JSON array of project slugs
+    integration_code TEXT,
+    urgency TEXT DEFAULT 'low',     -- low, medium, high
+    implementation_steps TEXT,      -- JSON array of steps
+    status TEXT DEFAULT 'discovered',  -- discovered, evaluated, recommended, integrated, dismissed
+    discovered_by TEXT DEFAULT 'api_scout',
+    evolution_id INTEGER,           -- FK to evolutions table for cycle tracking
+    content_hash TEXT UNIQUE,
+    created_at TEXT DEFAULT (datetime('now')),
+    evaluated_at TEXT
+);
+
+-- Ideas (innovation proposals from IdeaEngine)
+CREATE TABLE IF NOT EXISTS ideas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    idea_type TEXT NOT NULL,        -- feature_gap, enhancement, new_project, cross_pollination, automation
+    description TEXT,
+    rationale TEXT,
+    affected_projects TEXT,         -- JSON array
+    estimated_impact TEXT,
+    estimated_effort TEXT,
+    priority_score REAL DEFAULT 0,
+    status TEXT DEFAULT 'proposed', -- proposed, approved, in_progress, completed, rejected
+    generated_by TEXT DEFAULT 'idea_engine',
+    evolution_id INTEGER,           -- FK to evolutions table for cycle tracking
+    content_hash TEXT UNIQUE,
+    created_at TEXT DEFAULT (datetime('now')),
+    reviewed_at TEXT
+);
+
+-- Enhancements (code improvement proposals from CodeEnhancer)
+CREATE TABLE IF NOT EXISTS enhancements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    enhancement_type TEXT NOT NULL, -- outdated_api, deprecated_pattern, duplicate_code, missing_test, refactor, performance, security, missing_skill, skill_enhancement, pattern_skill, missing_health, outdated_dep
+    project_slug TEXT,
+    file_path TEXT,
+    line_number INTEGER,
+    current_code TEXT,
+    proposed_code TEXT,
+    rationale TEXT,
+    severity TEXT DEFAULT 'suggestion',  -- suggestion, recommended, important, critical
+    confidence REAL DEFAULT 0.5,         -- 0.0-1.0, how confident in this finding
+    status TEXT DEFAULT 'pending',       -- pending, approved, applied, rejected
+    generated_by TEXT DEFAULT 'code_enhancer',
+    evolution_id INTEGER,                -- FK to evolutions table for cycle tracking
+    content_hash TEXT UNIQUE,
+    created_at TEXT DEFAULT (datetime('now')),
+    applied_at TEXT
+);
+
 -- Indexes for fast search
 CREATE INDEX IF NOT EXISTS idx_projects_slug ON projects(slug);
 CREATE INDEX IF NOT EXISTS idx_projects_category ON projects(category);
@@ -271,6 +380,18 @@ CREATE INDEX IF NOT EXISTS idx_learnings_hash ON learnings(content_hash);
 CREATE INDEX IF NOT EXISTS idx_opportunities_status ON opportunities(status);
 CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
 CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_slug);
+CREATE INDEX IF NOT EXISTS idx_evolutions_type ON evolutions(cycle_type);
+CREATE INDEX IF NOT EXISTS idx_evolutions_status ON evolutions(status);
+CREATE INDEX IF NOT EXISTS idx_discoveries_status ON discoveries(status);
+CREATE INDEX IF NOT EXISTS idx_discoveries_type ON discoveries(discovery_type);
+CREATE INDEX IF NOT EXISTS idx_discoveries_hash ON discoveries(content_hash);
+CREATE INDEX IF NOT EXISTS idx_ideas_status ON ideas(status);
+CREATE INDEX IF NOT EXISTS idx_ideas_type ON ideas(idea_type);
+CREATE INDEX IF NOT EXISTS idx_ideas_hash ON ideas(content_hash);
+CREATE INDEX IF NOT EXISTS idx_enhancements_status ON enhancements(status);
+CREATE INDEX IF NOT EXISTS idx_enhancements_type ON enhancements(enhancement_type);
+CREATE INDEX IF NOT EXISTS idx_enhancements_project ON enhancements(project_slug);
+CREATE INDEX IF NOT EXISTS idx_enhancements_hash ON enhancements(content_hash);
 """
 
 
@@ -503,13 +624,311 @@ class BrainDB:
         # Filter empty
         return {k: v for k, v in results.items() if v}
 
+    # --- Evolutions ---
+    def start_evolution(self, cycle_type: str) -> int:
+        """Start tracking an evolution cycle. Returns cycle ID."""
+        conn = self._conn()
+        try:
+            cur = conn.execute(
+                "INSERT INTO evolutions (cycle_type, started_at, status) VALUES (?, datetime('now'), 'running')",
+                (cycle_type,)
+            )
+            conn.commit()
+            return cur.lastrowid
+        finally:
+            conn.close()
+
+    def complete_evolution(self, evo_id: int, summary: str, details: dict,
+                           discoveries: int = 0, ideas: int = 0,
+                           enhancements: int = 0, skills: int = 0):
+        """Mark evolution cycle as completed with stats."""
+        conn = self._conn()
+        try:
+            started = conn.execute("SELECT started_at FROM evolutions WHERE id = ?", (evo_id,)).fetchone()
+            duration = 0.0
+            if started and started["started_at"]:
+                try:
+                    start_dt = datetime.fromisoformat(started["started_at"])
+                    duration = (datetime.now(timezone.utc).replace(tzinfo=None) - start_dt).total_seconds()
+                except (ValueError, TypeError):
+                    pass
+            conn.execute(
+                """UPDATE evolutions SET completed_at = datetime('now'), duration_seconds = ?,
+                   discoveries_count = ?, ideas_count = ?, enhancements_count = ?,
+                   skills_generated = ?, status = 'completed', summary = ?, details = ?
+                   WHERE id = ?""",
+                (duration, discoveries, ideas, enhancements, skills, summary,
+                 json.dumps(details, default=str), evo_id)
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def fail_evolution(self, evo_id: int, error: str):
+        """Mark evolution cycle as failed."""
+        conn = self._conn()
+        try:
+            conn.execute(
+                "UPDATE evolutions SET completed_at = datetime('now'), status = 'failed', summary = ? WHERE id = ?",
+                (error[:2000], evo_id)  # Truncate long error messages
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def recent_evolutions(self, limit: int = 10) -> list[dict]:
+        """Get recent evolution cycles ordered by newest first."""
+        conn = self._conn()
+        try:
+            rows = conn.execute(
+                "SELECT * FROM evolutions ORDER BY id DESC LIMIT ?", (limit,)
+            ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            conn.close()
+
+    def invalidate_evolution(self, evo_id: int):
+        """Bulk-invalidate all items from a bad evolution cycle."""
+        conn = self._conn()
+        try:
+            conn.execute("UPDATE discoveries SET status = 'dismissed' WHERE evolution_id = ?", (evo_id,))
+            conn.execute("UPDATE ideas SET status = 'rejected' WHERE evolution_id = ?", (evo_id,))
+            conn.execute("UPDATE enhancements SET status = 'rejected' WHERE evolution_id = ?", (evo_id,))
+            conn.execute("UPDATE evolutions SET status = 'invalidated' WHERE id = ?", (evo_id,))
+            conn.commit()
+        finally:
+            conn.close()
+
+    def adoption_metrics(self) -> dict:
+        """Track how many proposals get approved/applied vs total generated."""
+        conn = self._conn()
+        try:
+            metrics = {}
+            for table, approved_states, total_states in [
+                ("enhancements", ("approved", "applied"), ("pending", "approved", "applied", "rejected")),
+                ("ideas", ("approved", "in_progress", "completed"), ("proposed", "approved", "in_progress", "completed", "rejected")),
+                ("discoveries", ("recommended", "integrated"), ("discovered", "evaluated", "recommended", "integrated", "dismissed")),
+            ]:
+                approved = conn.execute(
+                    f"SELECT COUNT(*) FROM {table} WHERE status IN ({','.join('?' for _ in approved_states)})",
+                    approved_states
+                ).fetchone()[0]
+                total = conn.execute(
+                    f"SELECT COUNT(*) FROM {table} WHERE status IN ({','.join('?' for _ in total_states)})",
+                    total_states
+                ).fetchone()[0]
+                metrics[table] = {
+                    "approved": approved,
+                    "total": total,
+                    "adoption_rate": round(approved / total * 100, 1) if total > 0 else 0,
+                }
+            return metrics
+        finally:
+            conn.close()
+
+    # --- Discoveries ---
+    def add_discovery(self, name: str, discovery_type: str, description: str = "",
+                      url: str = "", relevance_score: float = 0, cost_tier: str = "",
+                      features: list = None, recommended_for: list = None,
+                      integration_code: str = "", discovered_by: str = "api_scout",
+                      urgency: str = "low", implementation_steps: list = None,
+                      evolution_id: int = None) -> int:
+        """Add a discovery with dedup. Returns existing ID if duplicate."""
+        conn = self._conn()
+        try:
+            h = content_hash(f"{name}:{discovery_type}:{description}")
+            existing = conn.execute("SELECT id FROM discoveries WHERE content_hash = ?", (h,)).fetchone()
+            if existing:
+                return existing["id"]
+            cur = conn.execute(
+                """INSERT INTO discoveries (name, discovery_type, description, url, relevance_score,
+                   cost_tier, features, recommended_for, integration_code, discovered_by,
+                   urgency, implementation_steps, evolution_id, content_hash)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (name, discovery_type, description, url, relevance_score, cost_tier,
+                 json.dumps(features or []), json.dumps(recommended_for or []),
+                 integration_code, discovered_by, urgency,
+                 json.dumps(implementation_steps or []), evolution_id, h)
+            )
+            conn.commit()
+            return cur.lastrowid
+        finally:
+            conn.close()
+
+    def get_discoveries(self, status: Optional[str] = None, discovery_type: Optional[str] = None,
+                        limit: int = 50, min_relevance: float = 0) -> list[dict]:
+        """Get discoveries with optional filters."""
+        conn = self._conn()
+        try:
+            query = "SELECT * FROM discoveries WHERE 1=1"
+            params = []
+            if status:
+                query += " AND status = ?"
+                params.append(status)
+            if discovery_type:
+                query += " AND discovery_type = ?"
+                params.append(discovery_type)
+            if min_relevance > 0:
+                query += " AND relevance_score >= ?"
+                params.append(min_relevance)
+            query += " ORDER BY relevance_score DESC LIMIT ?"
+            params.append(limit)
+            rows = conn.execute(query, params).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            conn.close()
+
+    def update_discovery_status(self, discovery_id: int, status: str):
+        conn = self._conn()
+        try:
+            extra = ", evaluated_at = datetime('now')" if status in ("evaluated", "recommended", "integrated", "dismissed") else ""
+            conn.execute(f"UPDATE discoveries SET status = ?{extra} WHERE id = ?", (status, discovery_id))
+            conn.commit()
+        finally:
+            conn.close()
+
+    # --- Ideas ---
+    def add_idea(self, title: str, idea_type: str, description: str = "", rationale: str = "",
+                 projects: list = None, impact: str = "medium", effort: str = "medium",
+                 priority_score: float = 0, generated_by: str = "idea_engine",
+                 evolution_id: int = None) -> int:
+        """Add an idea with dedup. Returns existing ID if duplicate."""
+        conn = self._conn()
+        try:
+            h = content_hash(f"{title}:{idea_type}:{description}")
+            existing = conn.execute("SELECT id FROM ideas WHERE content_hash = ?", (h,)).fetchone()
+            if existing:
+                return existing["id"]
+            cur = conn.execute(
+                """INSERT INTO ideas (title, idea_type, description, rationale, affected_projects,
+                   estimated_impact, estimated_effort, priority_score, generated_by,
+                   evolution_id, content_hash)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (title, idea_type, description, rationale, json.dumps(projects or []),
+                 impact, effort, priority_score, generated_by, evolution_id, h)
+            )
+            conn.commit()
+            return cur.lastrowid
+        finally:
+            conn.close()
+
+    def get_ideas(self, status: Optional[str] = None, idea_type: Optional[str] = None,
+                  limit: int = 50) -> list[dict]:
+        conn = self._conn()
+        try:
+            query = "SELECT * FROM ideas WHERE 1=1"
+            params = []
+            if status:
+                query += " AND status = ?"
+                params.append(status)
+            if idea_type:
+                query += " AND idea_type = ?"
+                params.append(idea_type)
+            query += " ORDER BY priority_score DESC LIMIT ?"
+            params.append(limit)
+            rows = conn.execute(query, params).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            conn.close()
+
+    def update_idea_status(self, idea_id: int, status: str):
+        conn = self._conn()
+        try:
+            extra = ", reviewed_at = datetime('now')" if status in ("approved", "rejected") else ""
+            conn.execute(f"UPDATE ideas SET status = ?{extra} WHERE id = ?", (status, idea_id))
+            conn.commit()
+        finally:
+            conn.close()
+
+    # --- Enhancements ---
+    def add_enhancement(self, title: str, enhancement_type: str, project_slug: str = "",
+                        file_path: str = "", line_number: int = None,
+                        current_code: str = "", proposed_code: str = "",
+                        rationale: str = "", severity: str = "suggestion",
+                        confidence: float = 0.5, generated_by: str = "code_enhancer",
+                        evolution_id: int = None) -> int:
+        """Add an enhancement proposal with dedup. Returns existing ID if duplicate."""
+        conn = self._conn()
+        try:
+            h = content_hash(f"{enhancement_type}:{project_slug}:{file_path}:{line_number or ''}")
+            existing = conn.execute("SELECT id FROM enhancements WHERE content_hash = ?", (h,)).fetchone()
+            if existing:
+                return existing["id"]
+            cur = conn.execute(
+                """INSERT INTO enhancements (title, enhancement_type, project_slug, file_path,
+                   line_number, current_code, proposed_code, rationale, severity, confidence,
+                   generated_by, evolution_id, content_hash)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (title, enhancement_type, project_slug, file_path, line_number,
+                 current_code, proposed_code, rationale, severity, confidence,
+                 generated_by, evolution_id, h)
+            )
+            conn.commit()
+            return cur.lastrowid
+        finally:
+            conn.close()
+
+    def get_enhancements(self, status: Optional[str] = None, project: Optional[str] = None,
+                         enhancement_type: Optional[str] = None, limit: int = 50,
+                         min_confidence: float = 0) -> list[dict]:
+        conn = self._conn()
+        try:
+            query = "SELECT * FROM enhancements WHERE 1=1"
+            params = []
+            if status:
+                query += " AND status = ?"
+                params.append(status)
+            if project:
+                query += " AND project_slug = ?"
+                params.append(project)
+            if enhancement_type:
+                query += " AND enhancement_type = ?"
+                params.append(enhancement_type)
+            if min_confidence > 0:
+                query += " AND confidence >= ?"
+                params.append(min_confidence)
+            query += " ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'important' THEN 1 WHEN 'recommended' THEN 2 ELSE 3 END, confidence DESC LIMIT ?"
+            params.append(limit)
+            rows = conn.execute(query, params).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            conn.close()
+
+    def update_enhancement_status(self, enhancement_id: int, status: str):
+        conn = self._conn()
+        try:
+            extra = ", applied_at = datetime('now')" if status == "applied" else ""
+            conn.execute(f"UPDATE enhancements SET status = ?{extra} WHERE id = ?", (status, enhancement_id))
+            conn.commit()
+        finally:
+            conn.close()
+
+    def cleanup_stale(self, days: int = 90):
+        """Archive old dismissed/rejected items to keep DB fast."""
+        conn = self._conn()
+        try:
+            for table, states in [
+                ("discoveries", ("dismissed",)),
+                ("ideas", ("rejected",)),
+                ("enhancements", ("rejected",)),
+            ]:
+                conn.execute(
+                    f"DELETE FROM {table} WHERE status IN ({','.join('?' for _ in states)}) "
+                    f"AND created_at < datetime('now', '-{days} days')",
+                    states
+                )
+            conn.commit()
+        finally:
+            conn.close()
+
     # --- Stats ---
     def stats(self) -> dict:
         conn = self._conn()
         s = {}
         for table in ["projects", "skills", "functions", "classes", "api_endpoints",
                        "patterns", "learnings", "opportunities", "tasks", "events",
-                       "code_solutions", "sessions"]:
+                       "code_solutions", "sessions", "evolutions", "discoveries",
+                       "ideas", "enhancements"]:
             try:
                 s[table] = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
             except Exception:

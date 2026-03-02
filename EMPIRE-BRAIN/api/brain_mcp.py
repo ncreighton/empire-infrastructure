@@ -4,21 +4,31 @@ Gives Claude Code instant access to the entire Brain intelligence system.
 Runs on port 8200 as a FastAPI-based MCP-compatible server.
 
 Tools:
-- brain_query        — Semantic search across all data
-- brain_projects     — Get projects with optional filter
-- brain_skills       — Get skills by category
-- brain_learn        — Record a new learning
-- brain_patterns     — Get detected patterns
-- brain_opportunities — Get open opportunities
-- brain_cross_reference — Find all data related to a topic
-- brain_briefing     — Get today's briefing
-- brain_health       — Get empire health status
-- brain_solution     — Search for existing code solutions
-- brain_record_solution — Save a reusable code solution
-- brain_session      — Log a Claude Code session
-- brain_amplify      — Run AMPLIFY pipeline on any data
-- brain_site_context — Load full context for a specific site
-- brain_stats        — Get brain statistics
+- brain_query             — Semantic search across all data
+- brain_projects          — Get projects with optional filter
+- brain_skills            — Get skills by category
+- brain_learn             — Record a new learning
+- brain_patterns          — Get detected patterns
+- brain_opportunities     — Get open opportunities
+- brain_cross_reference   — Find all data related to a topic
+- brain_briefing          — Get today's briefing
+- brain_health            — Get empire health status
+- brain_solution          — Search for existing code solutions
+- brain_record_solution   — Save a reusable code solution
+- brain_session           — Log a Claude Code session
+- brain_amplify           — Run AMPLIFY pipeline on any data
+- brain_site_context      — Load full context for a specific site
+- brain_stats             — Get brain statistics
+- brain_evolution_status  — Recent evolution cycles, pending counts, adoption rates
+- brain_discoveries       — List discovered APIs/tools (filterable by relevance)
+- brain_discovery_update  — Approve/dismiss discovery
+- brain_ideas             — List generated ideas (filterable)
+- brain_idea_update       — Approve/reject idea
+- brain_enhancements      — List code improvements (filterable by confidence)
+- brain_enhancement_update — Approve/reject enhancement
+- brain_evolve            — Trigger evolution cycle manually
+- brain_adoption_metrics  — Proposal acceptance rates
+- brain_invalidate_cycle  — Invalidate all results from a bad evolution cycle
 """
 import json
 from datetime import datetime
@@ -40,7 +50,7 @@ from forge.brain_codex import BrainCodex
 from amplify.pipeline import AmplifyPipeline
 from config.settings import EMPIRE_SITES
 
-app = FastAPI(title="EMPIRE-BRAIN MCP Server", version="3.0.0")
+app = FastAPI(title="EMPIRE-BRAIN MCP Server", version="3.2.0")
 db = BrainDB()
 
 
@@ -78,6 +88,17 @@ class AmplifyRequest(BaseModel):
 class CrossRefRequest(BaseModel):
     topic: str
 
+class StatusUpdateRequest(BaseModel):
+    id: int
+    status: str
+
+class EvolveRequest(BaseModel):
+    cycle: str = "quick"  # quick, discover, full
+    project: Optional[str] = None  # Optional project scope for targeted cycles
+
+class InvalidateRequest(BaseModel):
+    evolution_id: int
+
 
 # --- Health ---
 @app.get("/health")
@@ -85,7 +106,7 @@ def health():
     stats = db.stats()
     return {
         "status": "healthy",
-        "version": "3.0.0",
+        "version": "3.2.0",
         "brain_stats": stats,
         "timestamp": datetime.now().isoformat(),
     }
@@ -271,6 +292,122 @@ def brain_scan(project: Optional[str] = None):
 def get_events(limit: int = 50, event_type: Optional[str] = None):
     """Get recent events."""
     return {"events": db.recent_events(limit=limit, event_type=event_type)}
+
+
+# --- Evolution Engine Endpoints ---
+
+@app.get("/tools/brain_evolution_status")
+def brain_evolution_status():
+    """Recent evolution cycles, pending counts, and adoption metrics."""
+    recent = db.recent_evolutions(limit=5)
+    pending_enhancements = len(db.get_enhancements(status="pending"))
+    pending_ideas = len(db.get_ideas(status="proposed"))
+    new_discoveries = len(db.get_discoveries(status="discovered"))
+    stats = db.stats()
+    adoption = db.adoption_metrics()
+    return {
+        "recent_cycles": recent,
+        "pending": {
+            "enhancements": pending_enhancements,
+            "ideas": pending_ideas,
+            "discoveries": new_discoveries,
+        },
+        "totals": {
+            "evolutions": stats.get("evolutions", 0),
+            "discoveries": stats.get("discoveries", 0),
+            "ideas": stats.get("ideas", 0),
+            "enhancements": stats.get("enhancements", 0),
+        },
+        "adoption": adoption,
+    }
+
+
+@app.get("/tools/brain_discoveries")
+def brain_discoveries(status: Optional[str] = None, discovery_type: Optional[str] = None,
+                      min_relevance: float = 0, limit: int = 50):
+    """List discovered APIs/tools with optional relevance threshold."""
+    discoveries = db.get_discoveries(status=status, discovery_type=discovery_type,
+                                     limit=limit, min_relevance=min_relevance)
+    return {"discoveries": discoveries, "count": len(discoveries)}
+
+
+@app.post("/tools/brain_discovery_update")
+def brain_discovery_update(req: StatusUpdateRequest):
+    """Approve or dismiss a discovery."""
+    valid = ("discovered", "evaluated", "recommended", "integrated", "dismissed")
+    if req.status not in valid:
+        raise HTTPException(400, f"Invalid status: {req.status}. Valid: {', '.join(valid)}")
+    db.update_discovery_status(req.id, req.status)
+    return {"id": req.id, "status": req.status, "updated": True}
+
+
+@app.get("/tools/brain_ideas")
+def brain_ideas(status: Optional[str] = None, idea_type: Optional[str] = None, limit: int = 50):
+    """List generated ideas."""
+    ideas = db.get_ideas(status=status, idea_type=idea_type, limit=limit)
+    return {"ideas": ideas, "count": len(ideas)}
+
+
+@app.post("/tools/brain_idea_update")
+def brain_idea_update(req: StatusUpdateRequest):
+    """Approve or reject an idea."""
+    valid = ("proposed", "approved", "in_progress", "completed", "rejected")
+    if req.status not in valid:
+        raise HTTPException(400, f"Invalid status: {req.status}. Valid: {', '.join(valid)}")
+    db.update_idea_status(req.id, req.status)
+    return {"id": req.id, "status": req.status, "updated": True}
+
+
+@app.get("/tools/brain_enhancements")
+def brain_enhancements(status: Optional[str] = None, project: Optional[str] = None,
+                       enhancement_type: Optional[str] = None,
+                       min_confidence: float = 0, limit: int = 50):
+    """List code improvements with optional confidence threshold."""
+    enhancements = db.get_enhancements(status=status, project=project,
+                                       enhancement_type=enhancement_type,
+                                       limit=limit, min_confidence=min_confidence)
+    return {"enhancements": enhancements, "count": len(enhancements)}
+
+
+@app.post("/tools/brain_enhancement_update")
+def brain_enhancement_update(req: StatusUpdateRequest):
+    """Approve or reject an enhancement."""
+    valid = ("pending", "approved", "applied", "rejected")
+    if req.status not in valid:
+        raise HTTPException(400, f"Invalid status: {req.status}. Valid: {', '.join(valid)}")
+    db.update_enhancement_status(req.id, req.status)
+    return {"id": req.id, "status": req.status, "updated": True}
+
+
+@app.post("/tools/brain_evolve")
+def brain_evolve(req: EvolveRequest):
+    """Trigger an evolution cycle manually."""
+    from agents.evolution_agent import EvolutionEngine
+    engine = EvolutionEngine()
+
+    if req.cycle == "quick":
+        result = engine.quick_enhance()
+    elif req.cycle == "discover":
+        result = engine.deep_discover()
+    elif req.cycle == "full":
+        result = engine.full_evolution()
+    else:
+        raise HTTPException(400, f"Invalid cycle: {req.cycle}. Use: quick, discover, full")
+
+    return {"cycle": req.cycle, "result": result}
+
+
+@app.get("/tools/brain_adoption_metrics")
+def brain_adoption_metrics():
+    """Get proposal acceptance rates across all evolution tables."""
+    return db.adoption_metrics()
+
+
+@app.post("/tools/brain_invalidate_cycle")
+def brain_invalidate_cycle(req: InvalidateRequest):
+    """Invalidate all results from a bad evolution cycle."""
+    db.invalidate_evolution(req.evolution_id)
+    return {"evolution_id": req.evolution_id, "status": "invalidated"}
 
 
 if __name__ == "__main__":
