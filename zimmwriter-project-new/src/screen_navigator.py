@@ -152,14 +152,21 @@ class ScreenNavigator:
         logger.info(f"Navigating back to Menu from {current.value}")
 
         # Strategy 1: Direct children scan for Back/Menu buttons
-        # Uses children() iteration to avoid 32/64-bit child_window failures
+        # Uses pyautogui coordinate clicks (click_input silently fails on
+        # 32-bit ZimmWriter from 64-bit Python).
+        import pyautogui
         back_keywords = {"menu", "back", "exit", "close", "return"}
         try:
+            self.zw.bring_to_front()
+            time.sleep(0.5)
             for child in self.zw.main_window.children():
                 try:
                     text = child.window_text().lower()
                     if any(kw in text for kw in back_keywords):
-                        child.click_input()
+                        rect = child.rectangle()
+                        cx = (rect.left + rect.right) // 2
+                        cy = (rect.top + rect.bottom) // 2
+                        pyautogui.click(cx, cy)
                         time.sleep(2)
                         self._refresh_window()
                         if self.detect_screen() == Screen.MENU:
@@ -178,7 +185,10 @@ class ScreenNavigator:
                         if child.control_id() == back_id:
                             text = child.window_text().lower()
                             if any(kw in text for kw in back_keywords):
-                                child.click_input()
+                                rect = child.rectangle()
+                                cx = (rect.left + rect.right) // 2
+                                cy = (rect.top + rect.bottom) // 2
+                                pyautogui.click(cx, cy)
                                 time.sleep(2)
                                 self._refresh_window()
                                 if self.detect_screen() == Screen.MENU:
@@ -238,15 +248,22 @@ class ScreenNavigator:
                 return False
 
         # Step 2: Click the target screen's menu button
+        import pyautogui
         btn_info = MENU_BUTTONS[target]
         target_cid = int(btn_info["auto_id"])
         clicked = False
         try:
-            # Primary: direct children scan (avoids 32/64-bit child_window failures)
+            # Primary: pyautogui coordinate click (click_input silently fails
+            # on 32-bit ZimmWriter from 64-bit Python)
+            self.zw.bring_to_front()
+            import time as _time; _time.sleep(0.5)
             for child in self.zw.main_window.children():
                 try:
                     if child.control_id() == target_cid:
-                        child.click_input()
+                        rect = child.rectangle()
+                        cx = (rect.left + rect.right) // 2
+                        cy = (rect.top + rect.bottom) // 2
+                        pyautogui.click(cx, cy)
                         clicked = True
                         break
                 except Exception:

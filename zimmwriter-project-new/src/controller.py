@@ -415,14 +415,27 @@ class ZimmWriterController:
                 raise ConnectionError("Not connected to ZimmWriter")
 
     def bring_to_front(self):
-        """Bring ZimmWriter to foreground."""
+        """Bring ZimmWriter to foreground.
+
+        Uses win32 SetForegroundWindow as primary (reliable on 32/64-bit
+        mismatch), with pywinauto set_focus as fallback.
+        """
         self.ensure_connected()
         try:
-            self.main_window.set_focus()
-            self.main_window.restore()
+            import ctypes
+            hwnd = self.main_window.handle
+            user32 = ctypes.windll.user32
+            # SW_RESTORE=9 to un-minimize if needed
+            user32.ShowWindow(hwnd, 9)
+            user32.SetForegroundWindow(hwnd)
             time.sleep(0.3)
-        except Exception as e:
-            logger.warning(f"Could not bring to front: {e}")
+        except Exception:
+            try:
+                self.main_window.set_focus()
+                self.main_window.restore()
+                time.sleep(0.3)
+            except Exception as e:
+                logger.warning(f"Could not bring to front: {e}")
 
     def is_running(self) -> bool:
         return self._find_zimmwriter_pid() is not None
@@ -455,28 +468,49 @@ class ZimmWriterController:
         window.  A full connect() is required to get a fresh Application
         object that can find the new window.
 
-        Uses direct children iteration (control_id=14) as primary method
-        to avoid 32/64-bit child_window() failures after generation.
-        Retries connect() until the Bulk Writer title appears (ZimmWriter
-        has a brief transitional state with an empty title).
+        Uses pyautogui coordinate click on the Bulk Writer button (cid=14)
+        as the primary method — child.click_input() silently fails on the
+        32/64-bit mismatch. Falls back to pywinauto methods if needed.
         """
+        import pyautogui
         self.ensure_connected()
+        self.bring_to_front()
+        time.sleep(0.5)
         clicked = False
 
-        # Primary: direct children scan for control_id 14 (Bulk Writer menu button)
+        # Primary: pyautogui click at the button's center coordinates.
+        # child.click_input() silently fails on 32-bit ZimmWriter from 64-bit Python.
         try:
             for child in self.main_window.children():
                 try:
                     if child.control_id() == 14:
-                        child.click_input()
+                        rect = child.rectangle()
+                        cx = (rect.left + rect.right) // 2
+                        cy = (rect.top + rect.bottom) // 2
+                        pyautogui.click(cx, cy)
                         clicked = True
+                        logger.info(f"Clicked Bulk Writer button at ({cx}, {cy})")
                         break
                 except Exception:
                     pass
         except Exception:
             pass
 
-        # Fallback: title-based search
+        # Fallback: pywinauto click_input
+        if not clicked:
+            try:
+                for child in self.main_window.children():
+                    try:
+                        if child.control_id() == 14:
+                            child.click_input()
+                            clicked = True
+                            break
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+        # Last resort: title-based search
         if not clicked:
             try:
                 btn = self._find_child(control_type="Button", title="Bulk Writer")
