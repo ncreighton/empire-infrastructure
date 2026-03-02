@@ -29,6 +29,11 @@ Tools:
 - brain_evolve            — Trigger evolution cycle manually
 - brain_adoption_metrics  — Proposal acceptance rates
 - brain_invalidate_cycle  — Invalidate all results from a bad evolution cycle
+- brain_sync_evolution    — Push evolution tables to remote PostgreSQL
+- brain_auto_apply        — Auto-apply safe, high-confidence enhancements
+
+Pages:
+- /dashboard              — Evolution approval dashboard (HTML)
 """
 import json
 from datetime import datetime
@@ -36,6 +41,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 import sys
@@ -408,6 +414,45 @@ def brain_invalidate_cycle(req: InvalidateRequest):
     """Invalidate all results from a bad evolution cycle."""
     db.invalidate_evolution(req.evolution_id)
     return {"evolution_id": req.evolution_id, "status": "invalidated"}
+
+
+@app.post("/tools/brain_sync_evolution")
+def brain_sync_evolution():
+    """Push evolution tables (discoveries/ideas/enhancements) to remote PostgreSQL."""
+    try:
+        from connectors.postgres_connector import PostgresConnector
+        pg = PostgresConnector()
+        if not pg.connect():
+            raise HTTPException(503, "PostgreSQL connection failed")
+        pg.init_schema()
+        result = pg.sync_evolution_tables(db)
+        pg.close()
+        return {"status": "synced", "result": result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Sync failed: {e}")
+
+
+class AutoApplyRequest(BaseModel):
+    dry_run: bool = True
+
+
+# --- Dashboard ---
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard():
+    """Serve the Evolution Engine approval dashboard."""
+    html_path = Path(__file__).parent / "dashboard.html"
+    return HTMLResponse(html_path.read_text(encoding="utf-8"))
+
+
+# --- Auto-Apply ---
+@app.post("/tools/brain_auto_apply")
+def brain_auto_apply(req: AutoApplyRequest):
+    """Run auto-apply for safe, high-confidence enhancements."""
+    from forge.brain_auto_apply import BrainAutoApply
+    auto = BrainAutoApply(db=db, dry_run=req.dry_run)
+    return auto.run()
 
 
 if __name__ == "__main__":

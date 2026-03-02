@@ -164,6 +164,92 @@ class PostgresConnector:
             VALUES (%(source_type)s, %(source_id)s, %(target_type)s, %(target_id)s, %(relationship)s, %(strength)s)
         """, xref)
 
+    # --- Evolution Engine sync methods ---
+
+    def sync_evolution(self, evolution: dict):
+        """Sync an evolution cycle to PostgreSQL."""
+        self.execute("""
+            INSERT INTO brain_evolutions (cycle_type, started_at, completed_at, duration_seconds,
+                discoveries_count, ideas_count, enhancements_count, skills_generated,
+                status, summary, details)
+            VALUES (%(cycle_type)s, %(started_at)s, %(completed_at)s, %(duration_seconds)s,
+                %(discoveries_count)s, %(ideas_count)s, %(enhancements_count)s, %(skills_generated)s,
+                %(status)s, %(summary)s, %(details)s)
+        """, evolution)
+
+    def sync_discovery(self, discovery: dict):
+        """Sync a discovery to PostgreSQL (upsert on content_hash)."""
+        self.execute("""
+            INSERT INTO brain_discoveries (name, discovery_type, description, url, relevance_score,
+                cost_tier, features, recommended_for, urgency, implementation_steps,
+                status, discovered_by, content_hash)
+            VALUES (%(name)s, %(discovery_type)s, %(description)s, %(url)s, %(relevance_score)s,
+                %(cost_tier)s, %(features)s, %(recommended_for)s, %(urgency)s, %(implementation_steps)s,
+                %(status)s, %(discovered_by)s, %(content_hash)s)
+            ON CONFLICT (content_hash) DO UPDATE SET
+                relevance_score = EXCLUDED.relevance_score,
+                status = EXCLUDED.status,
+                updated_at = NOW()
+        """, discovery)
+
+    def sync_idea(self, idea: dict):
+        """Sync an idea to PostgreSQL (upsert on content_hash)."""
+        self.execute("""
+            INSERT INTO brain_ideas (title, idea_type, description, rationale, affected_projects,
+                estimated_impact, estimated_effort, priority_score, status, generated_by, content_hash)
+            VALUES (%(title)s, %(idea_type)s, %(description)s, %(rationale)s, %(affected_projects)s,
+                %(estimated_impact)s, %(estimated_effort)s, %(priority_score)s, %(status)s,
+                %(generated_by)s, %(content_hash)s)
+            ON CONFLICT (content_hash) DO UPDATE SET
+                priority_score = EXCLUDED.priority_score,
+                status = EXCLUDED.status,
+                updated_at = NOW()
+        """, idea)
+
+    def sync_enhancement(self, enhancement: dict):
+        """Sync an enhancement to PostgreSQL (upsert on content_hash)."""
+        self.execute("""
+            INSERT INTO brain_enhancements (title, enhancement_type, project_slug, file_path,
+                line_number, current_code, proposed_code, rationale, severity, confidence,
+                status, generated_by, content_hash)
+            VALUES (%(title)s, %(enhancement_type)s, %(project_slug)s, %(file_path)s,
+                %(line_number)s, %(current_code)s, %(proposed_code)s, %(rationale)s,
+                %(severity)s, %(confidence)s, %(status)s, %(generated_by)s, %(content_hash)s)
+            ON CONFLICT (content_hash) DO UPDATE SET
+                severity = EXCLUDED.severity,
+                confidence = EXCLUDED.confidence,
+                status = EXCLUDED.status,
+                updated_at = NOW()
+        """, enhancement)
+
+    def sync_evolution_tables(self, db):
+        """Bulk sync all evolution data from local SQLite to remote PostgreSQL."""
+        from knowledge.brain_db import BrainDB
+        synced = {"evolutions": 0, "discoveries": 0, "ideas": 0, "enhancements": 0}
+
+        for evo in db.recent_evolutions(limit=20):
+            self.sync_evolution(evo)
+            synced["evolutions"] += 1
+
+        for disc in db.get_discoveries(limit=200):
+            disc["features"] = disc.get("features", "[]")
+            disc["recommended_for"] = disc.get("recommended_for", "[]")
+            disc["implementation_steps"] = disc.get("implementation_steps", "[]")
+            self.sync_discovery(disc)
+            synced["discoveries"] += 1
+
+        for idea in db.get_ideas(limit=200):
+            idea["affected_projects"] = idea.get("affected_projects", "[]")
+            self.sync_idea(idea)
+            synced["ideas"] += 1
+
+        for enh in db.get_enhancements(limit=200):
+            self.sync_enhancement(enh)
+            synced["enhancements"] += 1
+
+        self.log_event("evolution_sync", synced)
+        return synced
+
     def get_analytics(self, days: int = 30) -> dict:
         """Get brain analytics for the last N days."""
         events = self.execute("""
@@ -317,6 +403,84 @@ CREATE TABLE IF NOT EXISTS brain_cross_references (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Evolution Cycles
+CREATE TABLE IF NOT EXISTS brain_evolutions (
+    id SERIAL PRIMARY KEY,
+    cycle_type TEXT NOT NULL,
+    started_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,
+    duration_seconds REAL,
+    discoveries_count INTEGER DEFAULT 0,
+    ideas_count INTEGER DEFAULT 0,
+    enhancements_count INTEGER DEFAULT 0,
+    skills_generated INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'running',
+    summary TEXT,
+    details JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Discoveries
+CREATE TABLE IF NOT EXISTS brain_discoveries (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    discovery_type TEXT NOT NULL,
+    description TEXT,
+    url TEXT,
+    relevance_score REAL DEFAULT 0,
+    cost_tier TEXT,
+    features JSONB,
+    recommended_for JSONB,
+    urgency TEXT DEFAULT 'low',
+    implementation_steps JSONB,
+    status TEXT DEFAULT 'discovered',
+    discovered_by TEXT DEFAULT 'api_scout',
+    content_hash TEXT UNIQUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    evaluated_at TIMESTAMPTZ
+);
+
+-- Ideas
+CREATE TABLE IF NOT EXISTS brain_ideas (
+    id SERIAL PRIMARY KEY,
+    title TEXT NOT NULL,
+    idea_type TEXT NOT NULL,
+    description TEXT,
+    rationale TEXT,
+    affected_projects JSONB,
+    estimated_impact TEXT,
+    estimated_effort TEXT,
+    priority_score REAL DEFAULT 0,
+    status TEXT DEFAULT 'proposed',
+    generated_by TEXT DEFAULT 'idea_engine',
+    content_hash TEXT UNIQUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    reviewed_at TIMESTAMPTZ
+);
+
+-- Enhancements
+CREATE TABLE IF NOT EXISTS brain_enhancements (
+    id SERIAL PRIMARY KEY,
+    title TEXT NOT NULL,
+    enhancement_type TEXT NOT NULL,
+    project_slug TEXT,
+    file_path TEXT,
+    line_number INTEGER,
+    current_code TEXT,
+    proposed_code TEXT,
+    rationale TEXT,
+    severity TEXT DEFAULT 'suggestion',
+    confidence REAL DEFAULT 0.5,
+    status TEXT DEFAULT 'pending',
+    generated_by TEXT DEFAULT 'code_enhancer',
+    content_hash TEXT UNIQUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    applied_at TIMESTAMPTZ
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_brain_events_type ON brain_events(event_type);
 CREATE INDEX IF NOT EXISTS idx_brain_events_ts ON brain_events(timestamp);
@@ -327,4 +491,12 @@ CREATE INDEX IF NOT EXISTS idx_brain_sessions_proj ON brain_sessions(project_slu
 CREATE INDEX IF NOT EXISTS idx_brain_opportunities_status ON brain_opportunities(status);
 CREATE INDEX IF NOT EXISTS idx_brain_xrefs_source ON brain_cross_references(source_type, source_id);
 CREATE INDEX IF NOT EXISTS idx_brain_xrefs_target ON brain_cross_references(target_type, target_id);
+CREATE INDEX IF NOT EXISTS idx_brain_evolutions_type ON brain_evolutions(cycle_type);
+CREATE INDEX IF NOT EXISTS idx_brain_discoveries_status ON brain_discoveries(status);
+CREATE INDEX IF NOT EXISTS idx_brain_discoveries_hash ON brain_discoveries(content_hash);
+CREATE INDEX IF NOT EXISTS idx_brain_ideas_status ON brain_ideas(status);
+CREATE INDEX IF NOT EXISTS idx_brain_ideas_hash ON brain_ideas(content_hash);
+CREATE INDEX IF NOT EXISTS idx_brain_enhancements_status ON brain_enhancements(status);
+CREATE INDEX IF NOT EXISTS idx_brain_enhancements_project ON brain_enhancements(project_slug);
+CREATE INDEX IF NOT EXISTS idx_brain_enhancements_hash ON brain_enhancements(content_hash);
 """

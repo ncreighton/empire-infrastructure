@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EMPIRE-BRAIN Evolution Dashboard</title>
+<style>
+:root {
+  --bg: #0d1117; --surface: #161b22; --border: #30363d;
+  --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff;
+  --green: #3fb950; --red: #f85149; --yellow: #d29922; --purple: #bc8cff;
+  --orange: #db6d28;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 14px; }
+a { color: var(--accent); text-decoration: none; }
+
+/* Header */
+.header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+.header h1 { font-size: 18px; font-weight: 600; }
+.header h1 span { color: var(--accent); }
+.header-right { display: flex; align-items: center; gap: 16px; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.status-dot.healthy { background: var(--green); }
+.status-dot.error { background: var(--red); }
+.version { color: var(--muted); font-size: 12px; }
+.refresh-btn { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+.refresh-btn:hover { border-color: var(--accent); }
+
+/* Stats bar */
+.stats-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; padding: 16px 24px; }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+.stat-card .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+.stat-card .value { font-size: 28px; font-weight: 700; }
+.stat-card .sub { color: var(--muted); font-size: 11px; margin-top: 4px; }
+.stat-card.pending .value { color: var(--yellow); }
+.stat-card.approved .value { color: var(--green); }
+.stat-card.rejected .value { color: var(--red); }
+
+/* Tabs */
+.tabs { display: flex; gap: 0; padding: 0 24px; border-bottom: 1px solid var(--border); }
+.tab { padding: 10px 20px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; font-size: 13px; font-weight: 500; }
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab .badge { background: var(--border); color: var(--text); font-size: 11px; padding: 1px 6px; border-radius: 10px; margin-left: 6px; }
+.tab.active .badge { background: rgba(88,166,255,0.2); color: var(--accent); }
+
+/* Content area */
+.content { padding: 16px 24px; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* Filters */
+.filters { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+.filter-btn { background: var(--surface); border: 1px solid var(--border); color: var(--muted); padding: 4px 12px; border-radius: 16px; cursor: pointer; font-size: 12px; }
+.filter-btn:hover { border-color: var(--accent); color: var(--text); }
+.filter-btn.active { background: rgba(88,166,255,0.15); border-color: var(--accent); color: var(--accent); }
+.filters .spacer { flex: 1; }
+.search-input { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 4px 12px; border-radius: 6px; font-size: 12px; width: 200px; }
+.search-input::placeholder { color: var(--muted); }
+
+/* Table */
+.data-table { width: 100%; border-collapse: collapse; }
+.data-table th { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; position: sticky; top: 52px; background: var(--bg); }
+.data-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.data-table tr:hover { background: rgba(88,166,255,0.04); }
+
+/* Badges */
+.badge-status { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; }
+.badge-status.pending { background: rgba(210,153,34,0.15); color: var(--yellow); }
+.badge-status.proposed { background: rgba(210,153,34,0.15); color: var(--yellow); }
+.badge-status.discovered { background: rgba(88,166,255,0.15); color: var(--accent); }
+.badge-status.approved { background: rgba(63,185,80,0.15); color: var(--green); }
+.badge-status.applied { background: rgba(63,185,80,0.15); color: var(--green); }
+.badge-status.integrated { background: rgba(63,185,80,0.15); color: var(--green); }
+.badge-status.recommended { background: rgba(188,140,255,0.15); color: var(--purple); }
+.badge-status.evaluated { background: rgba(188,140,255,0.15); color: var(--purple); }
+.badge-status.rejected { background: rgba(248,81,73,0.15); color: var(--red); }
+.badge-status.dismissed { background: rgba(248,81,73,0.15); color: var(--red); }
+.badge-status.completed { background: rgba(63,185,80,0.15); color: var(--green); }
+.badge-status.in_progress { background: rgba(88,166,255,0.15); color: var(--accent); }
+
+.badge-severity { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; }
+.badge-severity.critical { background: rgba(248,81,73,0.2); color: var(--red); }
+.badge-severity.important { background: rgba(219,109,40,0.2); color: var(--orange); }
+.badge-severity.recommended { background: rgba(210,153,34,0.2); color: var(--yellow); }
+.badge-severity.suggestion { background: rgba(139,148,158,0.2); color: var(--muted); }
+
+.badge-type { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; background: rgba(139,148,158,0.15); color: var(--muted); }
+
+.confidence-bar { display: inline-block; width: 50px; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; vertical-align: middle; }
+.confidence-bar .fill { height: 100%; border-radius: 3px; }
+.confidence-bar .fill.high { background: var(--green); }
+.confidence-bar .fill.med { background: var(--yellow); }
+.confidence-bar .fill.low { background: var(--red); }
+
+.priority-score { font-weight: 600; font-size: 13px; }
+
+/* Action buttons */
+.actions { display: flex; gap: 4px; }
+.act-btn { border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 500; }
+.act-btn.approve { background: rgba(63,185,80,0.15); color: var(--green); }
+.act-btn.approve:hover { background: rgba(63,185,80,0.3); }
+.act-btn.reject { background: rgba(248,81,73,0.15); color: var(--red); }
+.act-btn.reject:hover { background: rgba(248,81,73,0.3); }
+.act-btn.view { background: rgba(88,166,255,0.15); color: var(--accent); }
+.act-btn.view:hover { background: rgba(88,166,255,0.3); }
+.act-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* Detail modal */
+.modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 200; align-items: center; justify-content: center; }
+.modal-overlay.show { display: flex; }
+.modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; max-width: 700px; width: 90%; max-height: 80vh; overflow-y: auto; padding: 24px; }
+.modal h2 { font-size: 16px; margin-bottom: 16px; }
+.modal .close-btn { float: right; background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; }
+.modal pre { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 12px; font-size: 12px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; margin: 8px 0; }
+.modal .field { margin-bottom: 12px; }
+.modal .field-label { color: var(--muted); font-size: 11px; text-transform: uppercase; margin-bottom: 2px; }
+
+/* Evolution cycles */
+.cycle-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 8px; }
+.cycle-card .cycle-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.cycle-card .cycle-type { font-weight: 600; font-size: 14px; }
+.cycle-card .cycle-stats { display: flex; gap: 16px; }
+.cycle-card .cycle-stat { text-align: center; }
+.cycle-card .cycle-stat .num { font-size: 18px; font-weight: 600; color: var(--accent); }
+.cycle-card .cycle-stat .lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; }
+
+/* Toast notifications */
+.toast { position: fixed; bottom: 24px; right: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 20px; z-index: 300; display: none; animation: fadeIn 0.2s; }
+.toast.show { display: block; }
+.toast.success { border-color: var(--green); }
+.toast.error { border-color: var(--red); }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Empty state */
+.empty { text-align: center; padding: 40px; color: var(--muted); }
+
+/* Loading */
+.loading { text-align: center; padding: 40px; color: var(--muted); }
+.loading::after { content: ''; display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.6s linear infinite; margin-left: 8px; vertical-align: middle; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Bulk actions */
+.bulk-bar { display: none; background: rgba(88,166,255,0.1); border: 1px solid var(--accent); border-radius: 8px; padding: 8px 16px; margin-bottom: 12px; align-items: center; gap: 12px; font-size: 13px; }
+.bulk-bar.show { display: flex; }
+.bulk-bar .count { font-weight: 600; color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1><span>EMPIRE-BRAIN</span> Evolution Dashboard</h1>
+  <div class="header-right">
+    <span class="version" id="version">v3.2.0</span>
+    <span><span class="status-dot healthy" id="health-dot"></span> <span id="health-text">Healthy</span></span>
+    <button class="refresh-btn" onclick="refreshAll()">Refresh</button>
+  </div>
+</div>
+
+<div class="stats-bar" id="stats-bar">
+  <div class="stat-card"><div class="label">Evolutions</div><div class="value" id="stat-evolutions">-</div><div class="sub" id="stat-evo-sub"></div></div>
+  <div class="stat-card pending"><div class="label">Pending Enhancements</div><div class="value" id="stat-pending-enh">-</div><div class="sub" id="stat-enh-sub"></div></div>
+  <div class="stat-card pending"><div class="label">Proposed Ideas</div><div class="value" id="stat-pending-ideas">-</div><div class="sub" id="stat-ideas-sub"></div></div>
+  <div class="stat-card"><div class="label">New Discoveries</div><div class="value" id="stat-new-disc">-</div><div class="sub" id="stat-disc-sub"></div></div>
+  <div class="stat-card approved"><div class="label">Adoption Rate</div><div class="value" id="stat-adoption">-</div><div class="sub" id="stat-adopt-sub"></div></div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-tab="overview">Overview</div>
+  <div class="tab" data-tab="enhancements">Enhancements <span class="badge" id="badge-enh">0</span></div>
+  <div class="tab" data-tab="ideas">Ideas <span class="badge" id="badge-ideas">0</span></div>
+  <div class="tab" data-tab="discoveries">Discoveries <span class="badge" id="badge-disc">0</span></div>
+</div>
+
+<div class="content">
+  <!-- Overview Tab -->
+  <div class="tab-panel active" id="panel-overview">
+    <h3 style="margin-bottom:12px;font-size:15px">Recent Evolution Cycles</h3>
+    <div id="cycles-list"><div class="loading">Loading</div></div>
+
+    <h3 style="margin:20px 0 12px;font-size:15px">Adoption Metrics</h3>
+    <div id="adoption-metrics"><div class="loading">Loading</div></div>
+  </div>
+
+  <!-- Enhancements Tab -->
+  <div class="tab-panel" id="panel-enhancements">
+    <div class="filters">
+      <div class="filter-btn active" data-filter="enh-status" data-value="">All</div>
+      <div class="filter-btn" data-filter="enh-status" data-value="pending">Pending</div>
+      <div class="filter-btn" data-filter="enh-status" data-value="approved">Approved</div>
+      <div class="filter-btn" data-filter="enh-status" data-value="applied">Applied</div>
+      <div class="filter-btn" data-filter="enh-status" data-value="rejected">Rejected</div>
+      <div class="spacer"></div>
+      <input class="search-input" id="enh-search" placeholder="Search enhancements..." oninput="filterEnhancements()">
+    </div>
+    <div class="bulk-bar" id="enh-bulk">
+      <span class="count" id="enh-bulk-count">0</span> selected
+      <button class="act-btn approve" onclick="bulkAction('enhancement','approved')">Approve All</button>
+      <button class="act-btn reject" onclick="bulkAction('enhancement','rejected')">Reject All</button>
+    </div>
+    <table class="data-table">
+      <thead><tr>
+        <th><input type="checkbox" id="enh-check-all" onchange="toggleAllChecks('enh')"></th>
+        <th>Title</th><th>Type</th><th>Project</th><th>Severity</th><th>Confidence</th><th>Status</th><th>Actions</th>
+      </tr></thead>
+      <tbody id="enh-tbody"><tr><td colspan="8"><div class="loading">Loading</div></td></tr></tbody>
+    </table>
+  </div>
+
+  <!-- Ideas Tab -->
+  <div class="tab-panel" id="panel-ideas">
+    <div class="filters">
+      <div class="filter-btn active" data-filter="idea-status" data-value="">All</div>
+      <div class="filter-btn" data-filter="idea-status" data-value="proposed">Proposed</div>
+      <div class="filter-btn" data-filter="idea-status" data-value="approved">Approved</div>
+      <div class="filter-btn" data-filter="idea-status" data-value="completed">Completed</div>
+      <div class="filter-btn" data-filter="idea-status" data-value="rejected">Rejected</div>
+      <div class="spacer"></div>
+      <input class="search-input" id="idea-search" placeholder="Search ideas..." oninput="filterIdeas()">
+    </div>
+    <div class="bulk-bar" id="idea-bulk">
+      <span class="count" id="idea-bulk-count">0</span> selected
+      <button class="act-btn approve" onclick="bulkAction('idea','approved')">Approve All</button>
+      <button class="act-btn reject" onclick="bulkAction('idea','rejected')">Reject All</button>
+    </div>
+    <table class="data-table">
+      <thead><tr>
+        <th><input type="checkbox" id="idea-check-all" onchange="toggleAllChecks('idea')"></th>
+        <th>Title</th><th>Type</th><th>Priority</th><th>Impact</th><th>Effort</th><th>Status</th><th>Actions</th>
+      </tr></thead>
+      <tbody id="idea-tbody"><tr><td colspan="8"><div class="loading">Loading</div></td></tr></tbody>
+    </table>
+  </div>
+
+  <!-- Discoveries Tab -->
+  <div class="tab-panel" id="panel-discoveries">
+    <div class="filters">
+      <div class="filter-btn active" data-filter="disc-status" data-value="">All</div>
+      <div class="filter-btn" data-filter="disc-status" data-value="discovered">New</div>
+      <div class="filter-btn" data-filter="disc-status" data-value="recommended">Recommended</div>
+      <div class="filter-btn" data-filter="disc-status" data-value="integrated">Integrated</div>
+      <div class="filter-btn" data-filter="disc-status" data-value="dismissed">Dismissed</div>
+      <div class="spacer"></div>
+      <input class="search-input" id="disc-search" placeholder="Search discoveries..." oninput="filterDiscoveries()">
+    </div>
+    <table class="data-table">
+      <thead><tr>
+        <th>Name</th><th>Type</th><th>Relevance</th><th>Urgency</th><th>Status</th><th>Actions</th>
+      </tr></thead>
+      <tbody id="disc-tbody"><tr><td colspan="6"><div class="loading">Loading</div></td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Detail Modal -->
+<div class="modal-overlay" id="modal" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <button class="close-btn" onclick="closeModal()">&times;</button>
+    <div id="modal-content"></div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+const API = window.location.origin;
+let enhData = [], ideaData = [], discData = [];
+let enhFilter = '', ideaFilter = '', discFilter = '';
+let selectedEnh = new Set(), selectedIdeas = new Set();
+
+// --- API helpers ---
+async function api(path, opts = {}) {
+  try {
+    const r = await fetch(API + path, { ...opts, headers: { 'Content-Type': 'application/json', ...opts.headers } });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return await r.json();
+  } catch (e) {
+    console.error(`API error: ${path}`, e);
+    return null;
+  }
+}
+
+function toast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast show ${type}`;
+  setTimeout(() => t.className = 'toast', 2500);
+}
+
+// --- Tab switching ---
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+// --- Filter buttons ---
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const group = btn.dataset.filter;
+    document.querySelectorAll(`.filter-btn[data-filter="${group}"]`).forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    if (group === 'enh-status') { enhFilter = btn.dataset.value; renderEnhancements(); }
+    if (group === 'idea-status') { ideaFilter = btn.dataset.value; renderIdeas(); }
+    if (group === 'disc-status') { discFilter = btn.dataset.value; renderDiscoveries(); }
+  });
+});
+
+// --- Load data ---
+async function loadOverview() {
+  const data = await api('/tools/brain_evolution_status');
+  if (!data) return;
+
+  document.getElementById('stat-evolutions').textContent = data.totals?.evolutions || 0;
+  document.getElementById('stat-pending-enh').textContent = data.pending?.enhancements || 0;
+  document.getElementById('stat-pending-ideas').textContent = data.pending?.ideas || 0;
+  document.getElementById('stat-new-disc').textContent = data.pending?.discoveries || 0;
+  document.getElementById('stat-enh-sub').textContent = `${data.totals?.enhancements || 0} total`;
+  document.getElementById('stat-ideas-sub').textContent = `${data.totals?.ideas || 0} total`;
+  document.getElementById('stat-disc-sub').textContent = `${data.totals?.discoveries || 0} total`;
+
+  // Adoption
+  const adoption = data.adoption || {};
+  const rates = Object.values(adoption).filter(m => m.total > 0).map(m => m.adoption_rate);
+  const avgRate = rates.length ? (rates.reduce((a,b)=>a+b,0) / rates.length).toFixed(0) : 0;
+  document.getElementById('stat-adoption').textContent = avgRate + '%';
+  document.getElementById('stat-adopt-sub').textContent = `avg across ${rates.length} tables`;
+
+  // Cycles
+  const cyclesEl = document.getElementById('cycles-list');
+  if (data.recent_cycles?.length) {
+    cyclesEl.innerHTML = data.recent_cycles.map(c => `
+      <div class="cycle-card">
+        <div class="cycle-header">
+          <span class="cycle-type">${c.cycle_type || 'unknown'}</span>
+          <span class="badge-status ${c.status}">${c.status}</span>
+        </div>
+        <div class="cycle-stats">
+          <div class="cycle-stat"><div class="num">${c.discoveries_count||0}</div><div class="lbl">Discoveries</div></div>
+          <div class="cycle-stat"><div class="num">${c.ideas_count||0}</div><div class="lbl">Ideas</div></div>
+          <div class="cycle-stat"><div class="num">${c.enhancements_count||0}</div><div class="lbl">Enhancements</div></div>
+          <div class="cycle-stat"><div class="num">${c.skills_generated||0}</div><div class="lbl">Skills</div></div>
+          <div class="cycle-stat"><div class="num">${c.duration_seconds ? c.duration_seconds.toFixed(0) + 's' : '-'}</div><div class="lbl">Duration</div></div>
+        </div>
+        <div style="color:var(--muted);font-size:11px;margin-top:8px">${c.started_at || ''} ${c.summary ? '&mdash; ' + c.summary : ''}</div>
+      </div>
+    `).join('');
+  } else {
+    cyclesEl.innerHTML = '<div class="empty">No evolution cycles yet</div>';
+  }
+
+  // Adoption metrics table
+  const adoptEl = document.getElementById('adoption-metrics');
+  if (Object.keys(adoption).length) {
+    let html = '<table class="data-table"><thead><tr><th>Table</th><th>Total</th><th>Approved</th><th>Rejected</th><th>Adoption Rate</th></tr></thead><tbody>';
+    for (const [tbl, m] of Object.entries(adoption)) {
+      const color = m.adoption_rate > 50 ? 'var(--green)' : m.adoption_rate > 20 ? 'var(--yellow)' : 'var(--red)';
+      html += `<tr><td>${tbl}</td><td>${m.total}</td><td>${m.approved}</td><td>${m.rejected}</td>
+        <td><span style="color:${color};font-weight:600">${m.adoption_rate.toFixed(1)}%</span></td></tr>`;
+    }
+    html += '</tbody></table>';
+    adoptEl.innerHTML = html;
+  } else {
+    adoptEl.innerHTML = '<div class="empty">No adoption data yet</div>';
+  }
+}
+
+async function loadEnhancements() {
+  const data = await api('/tools/brain_enhancements?limit=200');
+  if (!data) return;
+  enhData = data.enhancements || [];
+  document.getElementById('badge-enh').textContent = enhData.filter(e => e.status === 'pending').length;
+  renderEnhancements();
+}
+
+function renderEnhancements() {
+  const search = document.getElementById('enh-search').value.toLowerCase();
+  let items = enhData;
+  if (enhFilter) items = items.filter(e => e.status === enhFilter);
+  if (search) items = items.filter(e => (e.title||'').toLowerCase().includes(search) || (e.project_slug||'').toLowerCase().includes(search));
+
+  const tbody = document.getElementById('enh-tbody');
+  if (!items.length) { tbody.innerHTML = '<tr><td colspan="8"><div class="empty">No enhancements found</div></td></tr>'; return; }
+
+  tbody.innerHTML = items.map(e => {
+    const conf = (e.confidence || 0);
+    const confClass = conf >= 0.8 ? 'high' : conf >= 0.5 ? 'med' : 'low';
+    const isPending = e.status === 'pending';
+    return `<tr>
+      <td><input type="checkbox" class="enh-check" data-id="${e.id}" ${selectedEnh.has(e.id)?'checked':''} onchange="updateSelection('enh',${e.id},this.checked)" ${isPending?'':'disabled'}></td>
+      <td style="max-width:280px">${esc(e.title||'')}</td>
+      <td><span class="badge-type">${esc(e.enhancement_type||'')}</span></td>
+      <td>${esc(e.project_slug||'-')}</td>
+      <td><span class="badge-severity ${e.severity||''}">${esc(e.severity||'-')}</span></td>
+      <td><div class="confidence-bar"><div class="fill ${confClass}" style="width:${conf*100}%"></div></div> ${(conf*100).toFixed(0)}%</td>
+      <td><span class="badge-status ${e.status}">${esc(e.status||'')}</span></td>
+      <td class="actions">
+        <button class="act-btn view" onclick="viewEnhancement(${e.id})">View</button>
+        ${isPending ? `<button class="act-btn approve" onclick="updateEnh(${e.id},'approved')">Approve</button>
+        <button class="act-btn reject" onclick="updateEnh(${e.id},'rejected')">Reject</button>` : ''}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function loadIdeas() {
+  const data = await api('/tools/brain_ideas?limit=200');
+  if (!data) return;
+  ideaData = data.ideas || [];
+  document.getElementById('badge-ideas').textContent = ideaData.filter(i => i.status === 'proposed').length;
+  renderIdeas();
+}
+
+function renderIdeas() {
+  const search = document.getElementById('idea-search').value.toLowerCase();
+  let items = ideaData;
+  if (ideaFilter) items = items.filter(i => i.status === ideaFilter);
+  if (search) items = items.filter(i => (i.title||'').toLowerCase().includes(search) || (i.description||'').toLowerCase().includes(search));
+
+  const tbody = document.getElementById('idea-tbody');
+  if (!items.length) { tbody.innerHTML = '<tr><td colspan="8"><div class="empty">No ideas found</div></td></tr>'; return; }
+
+  tbody.innerHTML = items.map(i => {
+    const isProposed = i.status === 'proposed';
+    return `<tr>
+      <td><input type="checkbox" class="idea-check" data-id="${i.id}" ${selectedIdeas.has(i.id)?'checked':''} onchange="updateSelection('idea',${i.id},this.checked)" ${isProposed?'':'disabled'}></td>
+      <td style="max-width:300px">${esc(i.title||'')}</td>
+      <td><span class="badge-type">${esc(i.idea_type||'')}</span></td>
+      <td><span class="priority-score" style="color:${i.priority_score>5?'var(--green)':i.priority_score>2?'var(--yellow)':'var(--muted)'}">${(i.priority_score||0).toFixed(1)}</span></td>
+      <td>${esc(i.estimated_impact||'-')}</td>
+      <td>${esc(i.estimated_effort||'-')}</td>
+      <td><span class="badge-status ${i.status}">${esc(i.status||'')}</span></td>
+      <td class="actions">
+        <button class="act-btn view" onclick="viewIdea(${i.id})">View</button>
+        ${isProposed ? `<button class="act-btn approve" onclick="updateIdea(${i.id},'approved')">Approve</button>
+        <button class="act-btn reject" onclick="updateIdea(${i.id},'rejected')">Reject</button>` : ''}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function loadDiscoveries() {
+  const data = await api('/tools/brain_discoveries?limit=200');
+  if (!data) return;
+  discData = data.discoveries || [];
+  document.getElementById('badge-disc').textContent = discData.filter(d => d.status === 'discovered').length;
+  renderDiscoveries();
+}
+
+function renderDiscoveries() {
+  const search = document.getElementById('disc-search').value.toLowerCase();
+  let items = discData;
+  if (discFilter) items = items.filter(d => d.status === discFilter);
+  if (search) items = items.filter(d => (d.name||'').toLowerCase().includes(search) || (d.description||'').toLowerCase().includes(search));
+
+  const tbody = document.getElementById('disc-tbody');
+  if (!items.length) { tbody.innerHTML = '<tr><td colspan="6"><div class="empty">No discoveries found</div></td></tr>'; return; }
+
+  tbody.innerHTML = items.map(d => {
+    const isNew = d.status === 'discovered';
+    return `<tr>
+      <td>${esc(d.name||'')}</td>
+      <td><span class="badge-type">${esc(d.discovery_type||'')}</span></td>
+      <td><div class="confidence-bar"><div class="fill ${d.relevance_score>=0.7?'high':d.relevance_score>=0.4?'med':'low'}" style="width:${(d.relevance_score||0)*100}%"></div></div> ${((d.relevance_score||0)*100).toFixed(0)}%</td>
+      <td><span class="badge-severity ${d.urgency||''}">${esc(d.urgency||'-')}</span></td>
+      <td><span class="badge-status ${d.status}">${esc(d.status||'')}</span></td>
+      <td class="actions">
+        <button class="act-btn view" onclick="viewDiscovery(${d.id})">View</button>
+        ${isNew ? `<button class="act-btn approve" onclick="updateDisc(${d.id},'recommended')">Recommend</button>
+        <button class="act-btn reject" onclick="updateDisc(${d.id},'dismissed')">Dismiss</button>` : ''}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// --- Actions ---
+async function updateEnh(id, status) {
+  await api('/tools/brain_enhancement_update', { method: 'POST', body: JSON.stringify({ id, status }) });
+  toast(`Enhancement #${id} ${status}`);
+  loadEnhancements(); loadOverview();
+}
+async function updateIdea(id, status) {
+  await api('/tools/brain_idea_update', { method: 'POST', body: JSON.stringify({ id, status }) });
+  toast(`Idea #${id} ${status}`);
+  loadIdeas(); loadOverview();
+}
+async function updateDisc(id, status) {
+  await api('/tools/brain_discovery_update', { method: 'POST', body: JSON.stringify({ id, status }) });
+  toast(`Discovery #${id} ${status}`);
+  loadDiscoveries(); loadOverview();
+}
+
+// --- Selection + Bulk ---
+function updateSelection(type, id, checked) {
+  const set = type === 'enh' ? selectedEnh : selectedIdeas;
+  checked ? set.add(id) : set.delete(id);
+  const bar = document.getElementById(type + '-bulk');
+  const count = document.getElementById(type + '-bulk-count');
+  count.textContent = set.size;
+  bar.classList.toggle('show', set.size > 0);
+}
+function toggleAllChecks(type) {
+  const all = document.getElementById(type + '-check-all').checked;
+  document.querySelectorAll(`.${type}-check:not(:disabled)`).forEach(cb => {
+    cb.checked = all;
+    updateSelection(type, parseInt(cb.dataset.id), all);
+  });
+}
+async function bulkAction(type, status) {
+  const set = type === 'enhancement' ? selectedEnh : selectedIdeas;
+  const endpoint = type === 'enhancement' ? '/tools/brain_enhancement_update' : '/tools/brain_idea_update';
+  const promises = [...set].map(id => api(endpoint, { method: 'POST', body: JSON.stringify({ id, status }) }));
+  await Promise.all(promises);
+  toast(`${set.size} items ${status}`);
+  set.clear();
+  document.getElementById(type === 'enhancement' ? 'enh-bulk' : 'idea-bulk').classList.remove('show');
+  refreshAll();
+}
+
+// --- Detail modals ---
+function viewEnhancement(id) {
+  const e = enhData.find(x => x.id === id);
+  if (!e) return;
+  let html = `<h2>${esc(e.title)}</h2>`;
+  html += field('Status', `<span class="badge-status ${e.status}">${e.status}</span>`);
+  html += field('Type', e.enhancement_type);
+  html += field('Project', e.project_slug || '-');
+  html += field('File', e.file_path || '-');
+  if (e.line_number) html += field('Line', e.line_number);
+  html += field('Severity', `<span class="badge-severity ${e.severity}">${e.severity}</span>`);
+  html += field('Confidence', ((e.confidence||0)*100).toFixed(0) + '%');
+  if (e.current_code) html += field('Current Code', `<pre>${esc(e.current_code)}</pre>`);
+  if (e.proposed_code) html += field('Proposed Code', `<pre>${esc(e.proposed_code)}</pre>`);
+  if (e.rationale) html += field('Rationale', esc(e.rationale));
+  html += field('Created', e.created_at || '-');
+  if (e.status === 'pending') {
+    html += `<div style="margin-top:16px;display:flex;gap:8px">
+      <button class="act-btn approve" style="padding:8px 20px;font-size:13px" onclick="updateEnh(${e.id},'approved');closeModal()">Approve</button>
+      <button class="act-btn reject" style="padding:8px 20px;font-size:13px" onclick="updateEnh(${e.id},'rejected');closeModal()">Reject</button>
+    </div>`;
+  }
+  showModal(html);
+}
+function viewIdea(id) {
+  const i = ideaData.find(x => x.id === id);
+  if (!i) return;
+  let html = `<h2>${esc(i.title)}</h2>`;
+  html += field('Status', `<span class="badge-status ${i.status}">${i.status}</span>`);
+  html += field('Type', i.idea_type);
+  html += field('Priority Score', `<span class="priority-score">${(i.priority_score||0).toFixed(2)}</span>`);
+  html += field('Impact', i.estimated_impact || '-');
+  html += field('Effort', i.estimated_effort || '-');
+  if (i.description) html += field('Description', esc(i.description));
+  if (i.rationale) html += field('Rationale', esc(i.rationale));
+  let projects = i.affected_projects;
+  if (typeof projects === 'string') try { projects = JSON.parse(projects); } catch {}
+  if (Array.isArray(projects) && projects.length) html += field('Affected Projects', projects.join(', '));
+  html += field('Created', i.created_at || '-');
+  if (i.status === 'proposed') {
+    html += `<div style="margin-top:16px;display:flex;gap:8px">
+      <button class="act-btn approve" style="padding:8px 20px;font-size:13px" onclick="updateIdea(${i.id},'approved');closeModal()">Approve</button>
+      <button class="act-btn reject" style="padding:8px 20px;font-size:13px" onclick="updateIdea(${i.id},'rejected');closeModal()">Reject</button>
+    </div>`;
+  }
+  showModal(html);
+}
+function viewDiscovery(id) {
+  const d = discData.find(x => x.id === id);
+  if (!d) return;
+  let html = `<h2>${esc(d.name)}</h2>`;
+  html += field('Status', `<span class="badge-status ${d.status}">${d.status}</span>`);
+  html += field('Type', d.discovery_type);
+  html += field('Relevance', ((d.relevance_score||0)*100).toFixed(0) + '%');
+  html += field('Urgency', d.urgency || '-');
+  html += field('Cost Tier', d.cost_tier || '-');
+  if (d.description) html += field('Description', esc(d.description));
+  if (d.url) html += field('URL', `<a href="${esc(d.url)}" target="_blank">${esc(d.url)}</a>`);
+  let features = d.features;
+  if (typeof features === 'string') try { features = JSON.parse(features); } catch {}
+  if (Array.isArray(features) && features.length) html += field('Features', features.join(', '));
+  let steps = d.implementation_steps;
+  if (typeof steps === 'string') try { steps = JSON.parse(steps); } catch {}
+  if (Array.isArray(steps) && steps.length) html += field('Implementation Steps', '<ol>' + steps.map(s => `<li>${esc(s)}</li>`).join('') + '</ol>');
+  let rec = d.recommended_for;
+  if (typeof rec === 'string') try { rec = JSON.parse(rec); } catch {}
+  if (Array.isArray(rec) && rec.length) html += field('Recommended For', rec.join(', '));
+  html += field('Discovered By', d.discovered_by || '-');
+  html += field('Created', d.created_at || '-');
+  if (d.status === 'discovered') {
+    html += `<div style="margin-top:16px;display:flex;gap:8px">
+      <button class="act-btn approve" style="padding:8px 20px;font-size:13px" onclick="updateDisc(${d.id},'recommended');closeModal()">Recommend</button>
+      <button class="act-btn reject" style="padding:8px 20px;font-size:13px" onclick="updateDisc(${d.id},'dismissed');closeModal()">Dismiss</button>
+    </div>`;
+  }
+  showModal(html);
+}
+
+function field(label, value) {
+  return `<div class="field"><div class="field-label">${label}</div><div>${value}</div></div>`;
+}
+function showModal(html) {
+  document.getElementById('modal-content').innerHTML = html;
+  document.getElementById('modal').classList.add('show');
+}
+function closeModal() {
+  document.getElementById('modal').classList.remove('show');
+}
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = String(s);
+  return d.innerHTML;
+}
+function filterEnhancements() { renderEnhancements(); }
+function filterIdeas() { renderIdeas(); }
+function filterDiscoveries() { renderDiscoveries(); }
+
+// --- Health check ---
+async function checkHealth() {
+  const data = await api('/health');
+  if (data) {
+    document.getElementById('health-dot').className = 'status-dot healthy';
+    document.getElementById('health-text').textContent = 'Healthy';
+    document.getElementById('version').textContent = 'v' + (data.version || '3.2.0');
+  } else {
+    document.getElementById('health-dot').className = 'status-dot error';
+    document.getElementById('health-text').textContent = 'Unreachable';
+  }
+}
+
+// --- Refresh ---
+async function refreshAll() {
+  await Promise.all([checkHealth(), loadOverview(), loadEnhancements(), loadIdeas(), loadDiscoveries()]);
+}
+
+// --- Keyboard shortcut ---
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal();
+  if (e.key === 'r' && !e.ctrlKey && !e.metaKey && document.activeElement.tagName !== 'INPUT') refreshAll();
+});
+
+// --- Init ---
+refreshAll();
+setInterval(refreshAll, 60000);
+</script>
+</body>
+</html>
