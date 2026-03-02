@@ -151,33 +151,41 @@ class ScreenNavigator:
 
         logger.info(f"Navigating back to Menu from {current.value}")
 
-        # Strategy 1: Click a Back/Menu button
-        for btn_name in self.BACK_BUTTON_NAMES:
-            try:
-                btn = self.zw._find_child(control_type="Button", title=btn_name)
-                if btn and btn.is_visible():
-                    self.zw._click(btn)
-                    time.sleep(2)
-                    self._refresh_window()
-                    if self.detect_screen() == Screen.MENU:
-                        logger.info("Returned to Menu via button")
-                        return True
-            except Exception:
-                continue
+        # Strategy 1: Direct children scan for Back/Menu buttons
+        # Uses children() iteration to avoid 32/64-bit child_window failures
+        back_keywords = {"menu", "back", "exit", "close", "return"}
+        try:
+            for child in self.zw.main_window.children():
+                try:
+                    text = child.window_text().lower()
+                    if any(kw in text for kw in back_keywords):
+                        child.click_input()
+                        time.sleep(2)
+                        self._refresh_window()
+                        if self.detect_screen() == Screen.MENU:
+                            logger.info(f"Returned to Menu via button '{text}'")
+                            return True
+                except Exception:
+                    continue
+        except Exception:
+            pass
 
         # Strategy 2: Try clicking button by common auto_ids for back buttons
-        # In ZimmWriter, the back/exit button is often one of the higher auto_ids
-        for back_id in ["2", "3", "4", "5"]:
+        for back_id in [2, 3, 4, 5]:
             try:
-                btn = self.zw._find_child(control_type="Button", auto_id=back_id)
-                text = btn.window_text().lower()
-                if any(kw in text for kw in ["menu", "back", "exit", "close"]):
-                    self.zw._click(btn)
-                    time.sleep(2)
-                    self._refresh_window()
-                    if self.detect_screen() == Screen.MENU:
-                        logger.info(f"Returned to Menu via auto_id={back_id}")
-                        return True
+                for child in self.zw.main_window.children():
+                    try:
+                        if child.control_id() == back_id:
+                            text = child.window_text().lower()
+                            if any(kw in text for kw in back_keywords):
+                                child.click_input()
+                                time.sleep(2)
+                                self._refresh_window()
+                                if self.detect_screen() == Screen.MENU:
+                                    logger.info(f"Returned to Menu via cid={back_id}")
+                                    return True
+                    except Exception:
+                        continue
             except Exception:
                 continue
 
@@ -231,12 +239,32 @@ class ScreenNavigator:
 
         # Step 2: Click the target screen's menu button
         btn_info = MENU_BUTTONS[target]
+        target_cid = int(btn_info["auto_id"])
+        clicked = False
         try:
-            btn = self.zw._find_child(
-                control_type="Button",
-                auto_id=btn_info["auto_id"],
-            )
-            self.zw._click(btn)
+            # Primary: direct children scan (avoids 32/64-bit child_window failures)
+            for child in self.zw.main_window.children():
+                try:
+                    if child.control_id() == target_cid:
+                        child.click_input()
+                        clicked = True
+                        break
+                except Exception:
+                    pass
+            # Fallback: pywinauto child_window search
+            if not clicked:
+                btn = self.zw._find_child(
+                    control_type="Button",
+                    auto_id=btn_info["auto_id"],
+                )
+                self.zw._click(btn)
+                clicked = True
+        except Exception:
+            pass
+        if not clicked:
+            logger.error(f"Could not click menu button for {target.value} (cid={target_cid})")
+            return False
+        try:
             time.sleep(3)
             self._refresh_window()
 

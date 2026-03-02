@@ -374,17 +374,27 @@ class ZimmWriterController:
             # Prefer the Bulk Writer window over sub-windows.
             # Must match "Bulk Blog Writer" or "Bulk Writer" but NOT config
             # windows like "Set Bulk SEO CSV" which also contain "Bulk".
-            bulk_handle = None
+            best_handle = None
+            fallback_handle = None
             try:
                 for w in self.app.windows():
-                    title = w.window_text()
-                    if "Bulk" in title and "Writer" in title and "Set " not in title:
-                        bulk_handle = w.handle
-                        break
+                    try:
+                        title = w.window_text()
+                        # Prefer Bulk Writer over other screens
+                        if "Bulk" in title and "Writer" in title and "Set " not in title:
+                            best_handle = w.handle
+                            break
+                        # Track any visible ZimmWriter main window as fallback
+                        if not fallback_handle and "ZimmWriter" in title and w.is_visible():
+                            fallback_handle = w.handle
+                    except Exception:
+                        continue
             except Exception:
                 pass
-            if bulk_handle:
-                self.main_window = self.app.window(handle=bulk_handle)
+            if not best_handle:
+                best_handle = fallback_handle
+            if best_handle:
+                self.main_window = self.app.window(handle=best_handle)
             else:
                 self.main_window = self.app.top_window()
             self._connected = True
@@ -444,17 +454,54 @@ class ZimmWriterController:
         ZimmWriter destroys the Menu window and creates a new Bulk Writer
         window.  A full connect() is required to get a fresh Application
         object that can find the new window.
+
+        Uses direct children iteration (control_id=14) as primary method
+        to avoid 32/64-bit child_window() failures after generation.
+        Retries connect() until the Bulk Writer title appears (ZimmWriter
+        has a brief transitional state with an empty title).
         """
         self.ensure_connected()
+        clicked = False
+
+        # Primary: direct children scan for control_id 14 (Bulk Writer menu button)
         try:
-            btn = self._find_child(control_type="Button", title="Bulk Writer")
-            self._click(btn)
-            time.sleep(4)
-            # Full reconnect — old app/window handles are now invalid
-            self.connect()
-            logger.info("Opened Bulk Writer screen")
-        except Exception as e:
-            logger.warning(f"Could not open Bulk Writer: {e}")
+            for child in self.main_window.children():
+                try:
+                    if child.control_id() == 14:
+                        child.click_input()
+                        clicked = True
+                        break
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # Fallback: title-based search
+        if not clicked:
+            try:
+                btn = self._find_child(control_type="Button", title="Bulk Writer")
+                self._click(btn)
+                clicked = True
+            except Exception as e:
+                logger.warning(f"Could not find Bulk Writer button: {e}")
+
+        if not clicked:
+            logger.error("open_bulk_writer: no clickable button found")
+            return
+
+        # Wait for Bulk Writer window to appear (ZimmWriter has a transitional
+        # state where the new window exists but has an empty title).
+        for wait_attempt in range(8):
+            time.sleep(2)
+            try:
+                self.connect()
+                title = self.get_window_title()
+                if "Bulk" in title:
+                    logger.info("Opened Bulk Writer screen")
+                    return
+            except Exception:
+                pass
+        logger.warning(f"open_bulk_writer: clicked button but title is '{self.get_window_title()}'")
 
     def open_options_menu(self):
         """Navigate from Menu screen to Options Menu screen."""
