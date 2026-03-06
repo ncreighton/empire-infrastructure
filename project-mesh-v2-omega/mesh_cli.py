@@ -208,6 +208,84 @@ COMMANDS = {
         "desc": "Show recent events",
         "inline": "events"
     },
+
+    # ── INTELLIGENCE SYSTEMS ──────────────────────────────────
+    "heal": {
+        "desc": "Self-healing infrastructure check",
+        "module": "systems.self_healing.healer",
+        "passthrough": True
+    },
+    "opportunity": {
+        "desc": "Opportunity finder (scan, queue, cross-site)",
+        "module": "systems.opportunity_finder.finder",
+        "passthrough": True
+    },
+    "intelligence": {
+        "desc": "Intelligence amplifier (analyze, playbook, decaying)",
+        "module": "systems.intelligence_amplifier.amplifier",
+        "passthrough": True
+    },
+    "pollinate": {
+        "desc": "Cross-pollination (detect overlaps, suggest links)",
+        "module": "systems.cross_pollination.pollinator",
+        "passthrough": True
+    },
+    "cascade": {
+        "desc": "Compound cascade engine (trigger content cascades)",
+        "module": "systems.cascade_engine.engine",
+        "passthrough": True
+    },
+    "economics": {
+        "desc": "Empire economics (P&L, ROI, allocation)",
+        "module": "systems.economics_engine.economics",
+        "passthrough": True
+    },
+    "predict": {
+        "desc": "Predictive intelligence (anomalies, decay, forecast)",
+        "module": "systems.predictive_layer.predictor",
+        "passthrough": True
+    },
+    "enhance": {
+        "desc": "Enhancement enhancer (quality, experiments)",
+        "module": "systems.enhancement_enhancer.enhancer",
+        "passthrough": True
+    },
+    "launch": {
+        "desc": "Autonomous project launcher",
+        "module": "systems.project_launcher.launcher",
+        "passthrough": True
+    },
+    "loop": {
+        "desc": "Infinite feedback loop (run cycles)",
+        "module": "systems.feedback_loop.loop",
+        "passthrough": True
+    },
+
+    # ── SITE EVOLUTION ─────────────────────────────────────────
+    "evolve": {
+        "desc": "Site evolution (--site X or --all, add --dry-run)",
+        "inline": "evolve"
+    },
+    "audit": {
+        "desc": "Audit site(s) (--site X or --all)",
+        "inline": "audit"
+    },
+    "deploy": {
+        "desc": "Deploy component (--site X --component Y | --css | --seo)",
+        "inline": "deploy"
+    },
+    "queue": {
+        "desc": "View enhancement queue (--site X)",
+        "inline": "queue"
+    },
+    "design": {
+        "desc": "Preview design system (--site X)",
+        "inline": "design"
+    },
+    "analytics": {
+        "desc": "Search analytics (--site X [--top-queries|--declining|--rising])",
+        "inline": "analytics"
+    },
 }
 
 
@@ -263,6 +341,30 @@ def print_help():
 |    mesh test --smoke   Quick smoke tests                 |
 |    mesh test --config  Config validation                 |
 |                                                          |
+|  INTELLIGENCE SYSTEMS (10)                               |
+|    mesh heal           Self-healing check + auto-fix     |
+|    mesh opportunity    Opportunity finder (--scan)        |
+|    mesh intelligence   Content intelligence (--analyze X) |
+|    mesh pollinate      Cross-pollination (--detect)       |
+|    mesh cascade        Cascade engine (--site X --title Y)|
+|    mesh economics      Empire P&L (--empire, --site X)   |
+|    mesh predict        Predictions (--anomalies, --decay) |
+|    mesh enhance        Quality monitor (--quality X)      |
+|    mesh launch         Site launcher (--niche "X")        |
+|    mesh loop           Feedback loop (--run, --dry-run)   |
+|                                                          |
+|  SITE EVOLUTION (11th system)                            |
+|    mesh evolve --site X     Full enhancement cycle       |
+|    mesh evolve --all        Enhance all 14 sites         |
+|    mesh audit --site X      Audit one site (8 dimensions)|
+|    mesh audit --all         Audit + rank all sites       |
+|    mesh deploy --site X --component hero  Deploy one     |
+|    mesh deploy --site X --css   Deploy CSS framework     |
+|    mesh deploy --site X --seo   Deploy SEO enhancements  |
+|    mesh queue --site X      View enhancement queue       |
+|    mesh design --site X     Preview design system        |
+|    mesh analytics --site X  Search analytics (GSC+Bing)  |
+|                                                          |
 |  MAINTENANCE                                             |
 |    mesh forge --scan   Find extractable code             |
 |    mesh graph          Rebuild dependency graph          |
@@ -296,6 +398,331 @@ def run_inline_events():
         print("  Event bus not available. Run from the mesh directory.")
 
 
+def _parse_site_args():
+    """Parse --site X, --all, --dry-run from sys.argv."""
+    import argparse
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument("--site", "-s", default=None)
+    p.add_argument("--all", "-a", action="store_true")
+    p.add_argument("--dry-run", "-n", action="store_true", default=True)
+    p.add_argument("--execute", action="store_true", help="Actually deploy (disable dry-run)")
+    p.add_argument("--component", default=None)
+    p.add_argument("--css", action="store_true")
+    p.add_argument("--seo", action="store_true")
+    p.add_argument("--top-queries", action="store_true")
+    p.add_argument("--declining", action="store_true")
+    p.add_argument("--rising", action="store_true")
+    p.add_argument("--json", action="store_true")
+    args, _ = p.parse_known_args(sys.argv[2:])
+    if args.execute:
+        args.dry_run = False
+    return args
+
+
+def run_inline_evolve():
+    """Run site evolution cycle."""
+    sys.path.insert(0, str(HUB_PATH))
+    args = _parse_site_args()
+    import json as _json
+    try:
+        from systems.site_evolution.orchestrator import SiteEvolutionEngine
+        engine = SiteEvolutionEngine()
+
+        if args.all:
+            print(f"\n  Evolving ALL sites (dry_run={args.dry_run})...\n")
+            result = engine.evolve_all(dry_run=args.dry_run)
+            for slug, r in result.get("results", {}).items():
+                score = r.get("score_before", "?")
+                imp = r.get("improvement", 0)
+                err = r.get("error", "")
+                status = f"score={score} +{imp}" if not err else f"ERROR: {err}"
+                print(f"  {slug:30s} {status}")
+            print(f"\n  Sites processed: {result.get('sites_processed', 0)}\n")
+        elif args.site:
+            print(f"\n  Evolving {args.site} (dry_run={args.dry_run})...\n")
+            result = engine.evolve_site(args.site, dry_run=args.dry_run)
+            if args.json:
+                print(_json.dumps(result, indent=2, default=str))
+            else:
+                print(f"  Score:  {result.get('score_before', '?')} -> {result.get('score_after', '?')}  (+{result.get('improvement', 0)})")
+                print(f"  Design: {result.get('design_lane', '?')}  |  CSS: {result.get('css_lines', 0)} lines")
+                print(f"  Queue:  {result.get('queue_items_added', 0)} items added")
+                print(f"  Time:   {result.get('elapsed_seconds', 0):.1f}s\n")
+        else:
+            print("  Usage: mesh evolve --site <slug> [--execute]")
+            print("         mesh evolve --all [--execute]")
+    except Exception as e:
+        print(f"  Error: {e}")
+
+
+def run_inline_audit():
+    """Run site audit."""
+    sys.path.insert(0, str(HUB_PATH))
+    args = _parse_site_args()
+    import json as _json
+    try:
+        from systems.site_evolution.auditor.site_auditor import SiteAuditor
+        auditor = SiteAuditor()
+
+        if args.all:
+            print("\n  Auditing all sites...\n")
+            results = auditor.audit_all_sites()
+            print(f"  {'Site':30s} {'Score':>6s}  {'Design':>6s} {'SEO':>4s} {'Perf':>5s} {'Content':>7s} {'Conv':>5s} {'Mobile':>6s} {'Trust':>5s} {'AI':>3s}")
+            print(f"  {'-'*30} {'-'*6}  {'-'*6} {'-'*4} {'-'*5} {'-'*7} {'-'*5} {'-'*6} {'-'*5} {'-'*3}")
+            for r in results:
+                s = r.get("scores", {})
+                print(f"  {r.get('site_slug','?'):30s} {r.get('overall_score',0):6d}  "
+                      f"{s.get('design',0):6d} {s.get('seo',0):4d} {s.get('performance',0):5d} "
+                      f"{s.get('content',0):7d} {s.get('conversion',0):5d} {s.get('mobile',0):6d} "
+                      f"{s.get('trust',0):5d} {s.get('ai_readiness',0):3d}")
+            print()
+        elif args.site:
+            print(f"\n  Auditing {args.site}...\n")
+            result = auditor.audit_site(args.site)
+            if args.json:
+                print(_json.dumps(result, indent=2, default=str))
+            else:
+                print(f"  Overall Score: {result.get('overall_score', 0)}/100\n")
+                for dim, score in result.get("scores", {}).items():
+                    bar = "#" * (score // 5) + "." * (20 - score // 5)
+                    print(f"  {dim:20s} {score:3d}/100  [{bar}]")
+                findings = result.get("findings", [])
+                if findings:
+                    print(f"\n  Top Findings:")
+                    for f in findings[:10]:
+                        print(f"    - [{f.get('severity','info'):5s}] {f.get('dimension','')}: {f.get('message','')}")
+                print()
+        else:
+            print("  Usage: mesh audit --site <slug>")
+            print("         mesh audit --all")
+    except Exception as e:
+        print(f"  Error: {e}")
+
+
+def run_inline_deploy():
+    """Deploy component/css/seo to a site."""
+    sys.path.insert(0, str(HUB_PATH))
+    args = _parse_site_args()
+    import json as _json
+    try:
+        if not args.site:
+            print("  Usage: mesh deploy --site <slug> --component <type> [--execute]")
+            print("         mesh deploy --site <slug> --css [--execute]")
+            print("         mesh deploy --site <slug> --seo [--execute]")
+            return
+
+        if args.css:
+            from systems.site_evolution.designer.design_generator import DesignGenerator
+            from systems.site_evolution.designer.css_engine import CSSEngine
+            from systems.site_evolution.deployer.wp_deployer import WPDeployer
+
+            print(f"\n  Generating CSS framework for {args.site} (dry_run={args.dry_run})...\n")
+            gen = DesignGenerator()
+            ds = gen.generate_design_system(args.site)
+            engine = CSSEngine()
+            css = engine.generate_full_stylesheet(ds)
+
+            if args.dry_run:
+                print(f"  Lane:     {ds.style_lane}")
+                print(f"  CSS:      {css.count(chr(10))} lines")
+                print(f"  Dark mode: {ds.supports_dark_mode}")
+                print(f"\n  Preview (first 500 chars):\n{css[:500]}\n")
+            else:
+                deployer = WPDeployer()
+                deployer.deploy_custom_css(args.site, css)
+                print(f"  Deployed {css.count(chr(10))} lines of CSS to {args.site}\n")
+
+        elif args.seo:
+            from systems.site_evolution.seo.schema_generator import SchemaGenerator
+            from systems.site_evolution.deployer.wp_deployer import WPDeployer
+
+            print(f"\n  Generating SEO schemas for {args.site} (dry_run={args.dry_run})...\n")
+            gen = SchemaGenerator()
+            schemas = gen.generate_site_schemas(args.site)
+
+            if args.dry_run:
+                print(f"  Schema length: {len(schemas)} chars")
+                print(f"\n  Preview (first 500 chars):\n{schemas[:500]}\n")
+            else:
+                deployer = WPDeployer()
+                deployer.deploy_snippet(args.site, f"{args.site[:4]}-schema-v1",
+                                         schemas, code_type="html", location="site_wide_header")
+                print(f"  Deployed schema markup to {args.site}\n")
+
+        elif args.component:
+            from systems.site_evolution.orchestrator import SiteEvolutionEngine
+            engine = SiteEvolutionEngine()
+
+            print(f"\n  Deploying {args.component} to {args.site} (dry_run={args.dry_run})...\n")
+            result = engine.evolve_component(args.site, args.component, dry_run=args.dry_run)
+            if args.json:
+                print(_json.dumps(result, indent=2, default=str))
+            else:
+                print(f"  Status: {result.get('status', result.get('dry_run', '?'))}")
+                preview = result.get("preview", {})
+                if preview:
+                    for k, v in preview.items():
+                        val = v if isinstance(v, str) and len(v) < 100 else f"({len(v) if isinstance(v, str) else v} chars)"
+                        print(f"  {k}: {val}")
+                print()
+        else:
+            print("  Usage: mesh deploy --site <slug> --component <type> [--execute]")
+            print("         mesh deploy --site <slug> --css [--execute]")
+            print("         mesh deploy --site <slug> --seo [--execute]")
+    except Exception as e:
+        print(f"  Error: {e}")
+
+
+def run_inline_queue():
+    """View enhancement queue for a site."""
+    sys.path.insert(0, str(HUB_PATH))
+    args = _parse_site_args()
+    import json as _json
+    try:
+        from systems.site_evolution.queue.enhancement_queue import EnhancementQueue
+        queue = EnhancementQueue()
+
+        if args.site:
+            print(f"\n  Enhancement queue for {args.site}:\n")
+            items = queue.get_queue(args.site, limit=20)
+            progress = queue.get_progress(args.site)
+
+            if not items:
+                print("  (empty — run 'mesh audit --site X' first to populate)\n")
+                return
+
+            print(f"  Progress: {progress.get('completed', 0)}/{progress.get('total', 0)} ({progress.get('progress_pct', 0)}%)\n")
+            print(f"  {'ID':>5s}  {'Priority':>8s}  {'Component':20s}  {'Action':10s}  {'Impact':>6s}  Details")
+            print(f"  {'-'*5}  {'-'*8}  {'-'*20}  {'-'*10}  {'-'*6}  {'-'*30}")
+            for item in items:
+                print(f"  {item.get('id', '?'):>5}  {item.get('priority', 0):>8d}  "
+                      f"{item.get('component_type', ''):20s}  {item.get('action', ''):10s}  "
+                      f"{item.get('estimated_impact', 0):>6d}  {(item.get('details', '') or '')[:40]}")
+            print()
+        else:
+            print("\n  Queues across all sites:\n")
+            all_queues = queue.get_all_queues()
+            if not all_queues:
+                print("  (no queued items — run 'mesh audit --all' first)\n")
+                return
+            for slug, items in all_queues.items():
+                print(f"  {slug}: {len(items)} pending items")
+            print()
+    except Exception as e:
+        print(f"  Error: {e}")
+
+
+def run_inline_design():
+    """Preview design system for a site."""
+    sys.path.insert(0, str(HUB_PATH))
+    args = _parse_site_args()
+    import json as _json
+    try:
+        if not args.site:
+            print("  Usage: mesh design --site <slug> [--json]")
+            return
+
+        from systems.site_evolution.designer.design_generator import DesignGenerator
+        gen = DesignGenerator()
+        ds = gen.generate_design_system(args.site)
+
+        if args.json:
+            print(_json.dumps({
+                "site": args.site,
+                "lane": ds.style_lane,
+                "css_variables": ds.css_variables,
+                "typography": ds.typography_stack,
+                "colors": ds.color_palette,
+                "dark_mode": ds.supports_dark_mode,
+            }, indent=2, default=str))
+        else:
+            print(f"\n  Design System: {args.site}")
+            print(f"  Lane: {ds.style_lane}")
+            print(f"  Dark mode: {ds.supports_dark_mode}\n")
+            print(f"  Colors:")
+            for k, v in ds.color_palette.items():
+                print(f"    {k:20s} {v}")
+            print(f"\n  Typography:")
+            for k, v in ds.typography_stack.items():
+                print(f"    {k:20s} {v}")
+            print(f"\n  CSS Variables ({len(ds.css_variables)}):")
+            for k, v in list(ds.css_variables.items())[:15]:
+                print(f"    {k:30s} {v}")
+            if len(ds.css_variables) > 15:
+                print(f"    ... and {len(ds.css_variables) - 15} more")
+            print()
+    except Exception as e:
+        print(f"  Error: {e}")
+
+
+def run_inline_analytics():
+    """Show search analytics for a site."""
+    sys.path.insert(0, str(HUB_PATH))
+    args = _parse_site_args()
+    import json as _json
+    try:
+        if not args.site:
+            print("  Usage: mesh analytics --site <slug> [--top-queries|--declining|--rising] [--json]")
+            return
+
+        from systems.site_evolution.seo.search_analytics import SearchAnalytics
+        sa = SearchAnalytics()
+
+        if args.top_queries:
+            print(f"\n  Top queries for {args.site} (28 days):\n")
+            queries = sa.gsc_get_top_queries(args.site, days=28, limit=30)
+            if args.json:
+                print(_json.dumps(queries, indent=2, default=str))
+            else:
+                print(f"  {'Query':50s} {'Clicks':>7s} {'Impressions':>11s} {'CTR':>6s} {'Pos':>5s}")
+                print(f"  {'-'*50} {'-'*7} {'-'*11} {'-'*6} {'-'*5}")
+                for q in queries:
+                    print(f"  {q.get('query','')[:50]:50s} {q.get('clicks',0):>7d} "
+                          f"{q.get('impressions',0):>11d} {q.get('ctr',0):>5.1f}% {q.get('position',0):>5.1f}")
+            print()
+
+        elif args.declining:
+            print(f"\n  Declining pages for {args.site}:\n")
+            pages = sa.gsc_get_declining_pages(args.site)
+            if args.json:
+                print(_json.dumps(pages, indent=2, default=str))
+            else:
+                for p in pages[:20]:
+                    print(f"  {p.get('page','')[:60]:60s}  {p.get('click_change',0):+d} clicks")
+            print()
+
+        elif args.rising:
+            print(f"\n  Rising keywords for {args.site}:\n")
+            keywords = sa.gsc_get_rising_keywords(args.site)
+            if args.json:
+                print(_json.dumps(keywords, indent=2, default=str))
+            else:
+                for k in keywords[:20]:
+                    print(f"  {k.get('query','')[:50]:50s}  {k.get('click_change',0):+d} clicks  pos: {k.get('position_change',0):+.1f}")
+            print()
+
+        else:
+            print(f"\n  Full analytics for {args.site}:\n")
+            result = sa.get_full_analytics(args.site)
+            if args.json:
+                print(_json.dumps(result, indent=2, default=str))
+            else:
+                gsc = result.get("gsc", {})
+                bing = result.get("bing", {})
+                health = result.get("seo_health_score", 0)
+                print(f"  SEO Health Score: {health}/100\n")
+                if gsc:
+                    perf = gsc.get("performance", {})
+                    print(f"  GSC (28d): {perf.get('clicks',0)} clicks, {perf.get('impressions',0)} impressions, "
+                          f"CTR {perf.get('ctr',0):.1f}%, Avg pos {perf.get('position',0):.1f}")
+                if bing:
+                    traffic = bing.get("traffic", {})
+                    print(f"  Bing: {traffic}")
+            print()
+    except Exception as e:
+        print(f"  Error: {e}")
+
+
 def main():
     if len(sys.argv) < 2:
         print_help()
@@ -315,8 +742,27 @@ def main():
     config = COMMANDS[cmd]
 
     # Handle inline commands
-    if config.get("inline") == "events":
+    inline = config.get("inline")
+    if inline == "events":
         run_inline_events()
+        return
+    elif inline == "evolve":
+        run_inline_evolve()
+        return
+    elif inline == "audit":
+        run_inline_audit()
+        return
+    elif inline == "deploy":
+        run_inline_deploy()
+        return
+    elif inline == "queue":
+        run_inline_queue()
+        return
+    elif inline == "design":
+        run_inline_design()
+        return
+    elif inline == "analytics":
+        run_inline_analytics()
         return
 
     # Handle module-based commands (v3.0)

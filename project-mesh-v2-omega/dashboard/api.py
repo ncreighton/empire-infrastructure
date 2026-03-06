@@ -461,6 +461,69 @@ async def dashboard_ui():
     return {"message": "Dashboard UI not found. Create dashboard/index.html"}
 
 
+# -- Intelligence Systems (10 system routers, lazily mounted) -----
+
+def _mount_system_routers():
+    """Mount all 10 intelligence system API routers."""
+    system_routers = [
+        ("systems.self_healing.api", "router"),
+        ("systems.opportunity_finder.api", "router"),
+        ("systems.intelligence_amplifier.api", "router"),
+        ("systems.cross_pollination.api", "router"),
+        ("systems.cascade_engine.api", "router"),
+        ("systems.economics_engine.api", "router"),
+        ("systems.predictive_layer.api", "router"),
+        ("systems.enhancement_enhancer.api", "router"),
+        ("systems.project_launcher.api", "router"),
+        ("systems.feedback_loop.api", "router"),
+        ("systems.site_evolution.api", "router"),
+    ]
+
+    for module_path, attr_name in system_routers:
+        try:
+            import importlib
+            mod = importlib.import_module(module_path)
+            router = getattr(mod, attr_name)
+            app.include_router(router)
+            log.info(f"Mounted system router: {module_path}")
+        except Exception as e:
+            log.debug(f"Could not mount {module_path}: {e}")
+
+
+_mount_system_routers()
+
+
+# -- Intelligence Systems Summary ----------------------------------
+
+@app.get("/api/systems")
+async def get_systems():
+    """List all 10 intelligence systems and their status."""
+    try:
+        from systems import SYSTEMS
+        system_status = []
+        for key, info in SYSTEMS.items():
+            entry = {
+                "id": key,
+                "name": info["name"],
+                "wave": info["wave"],
+                "description": info["description"],
+            }
+            # Try to get stats from each system
+            try:
+                mod = __import__(f"systems.{key}", fromlist=[""])
+                main_class = getattr(mod, list(mod.__all__)[0]) if hasattr(mod, '__all__') else None
+                if main_class:
+                    instance = main_class()
+                    if hasattr(instance, 'get_stats'):
+                        entry["stats"] = instance.get_stats()
+            except Exception:
+                entry["stats"] = None
+            system_status.append(entry)
+        return {"systems": system_status, "total": len(system_status)}
+    except Exception as e:
+        return {"error": str(e), "systems": []}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8100)

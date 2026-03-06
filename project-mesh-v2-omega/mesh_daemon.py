@@ -37,6 +37,11 @@ SENTINEL_INTERVAL = 300       # Run sentinel check every 5 minutes
 HARVEST_INTERVAL = 3600       # Refresh knowledge index every hour
 HEALTH_LOG_INTERVAL = 1800    # Log health status every 30 minutes
 HEARTBEAT_INTERVAL = 60       # Heartbeat every 60 seconds
+HEALING_INTERVAL = 180        # Self-healing check every 3 minutes
+OPPORTUNITY_INTERVAL = 86400  # Daily opportunity scan (86400s = 24h)
+FEEDBACK_INTERVAL = 604800    # Weekly feedback loop cycle (604800s = 7d)
+SITE_AUDIT_INTERVAL = 86400   # Daily site audit (86400s = 24h)
+ENHANCEMENT_INTERVAL = 21600  # Enhancement execution every 6h
 
 # What file extensions to watch
 CODE_EXTENSIONS = {".js", ".ts", ".py", ".php", ".jsx", ".tsx", ".css", ".html", ".json", ".md"}
@@ -516,7 +521,16 @@ class MeshDaemon:
         threading.Thread(target=self._drift_detection_loop, daemon=True, name="drift").start()
         threading.Thread(target=self._heartbeat_loop, daemon=True, name="heartbeat").start()
 
-        log.info("  Daemon is running (9 loops active). Press Ctrl+C to stop.\n")
+        # v4.0 intelligence system loops
+        threading.Thread(target=self._healing_loop, daemon=True, name="healing").start()
+        threading.Thread(target=self._opportunity_loop, daemon=True, name="opportunity").start()
+        threading.Thread(target=self._feedback_loop, daemon=True, name="feedback").start()
+
+        # v5.0 site evolution loops
+        threading.Thread(target=self._site_audit_loop, daemon=True, name="site-audit").start()
+        threading.Thread(target=self._enhancement_loop, daemon=True, name="enhancement").start()
+
+        log.info("  Daemon is running (14 loops active). Press Ctrl+C to stop.\n")
         
         # Main thread   keep alive
         try:
@@ -728,6 +742,167 @@ class MeshDaemon:
             except Exception:
                 pass
             for _ in range(HEARTBEAT_INTERVAL):
+                if not self._running:
+                    return
+                time.sleep(1)
+
+    # -- v4.0 Intelligence System Loops ---------------------------
+
+    def _healing_loop(self):
+        """Self-healing infrastructure check every 3 minutes."""
+        time.sleep(60)  # Wait 1 min before first check
+        while self._running:
+            try:
+                sys.path.insert(0, str(self.hub))
+                from systems.self_healing import SelfHealer
+                healer = SelfHealer()
+                result = healer.run_full_check()
+                services = result.get("services", {})
+                healed = services.get("healed", [])
+                if healed:
+                    log.info(f"[HEAL] Self-healer restarted {len(healed)} service(s)")
+                else:
+                    log.debug(f"[HEAL] All services healthy ({services.get('healthy', 0)}/{services.get('total', 0)})")
+                self._update_status("healing", {"healed": len(healed)})
+            except ImportError:
+                log.debug("Self-healing system not available yet")
+            except Exception as e:
+                log.error(f"Healing loop error: {e}")
+
+            for _ in range(HEALING_INTERVAL):
+                if not self._running:
+                    return
+                time.sleep(1)
+
+    def _opportunity_loop(self):
+        """Daily opportunity scan at startup + every 24h."""
+        time.sleep(600)  # Wait 10 min before first scan
+        while self._running:
+            try:
+                sys.path.insert(0, str(self.hub))
+                from systems.opportunity_finder import OpportunityFinder
+                finder = OpportunityFinder()
+                result = finder.run_daily_scan()
+                log.info(f"[OPP] Opportunity scan: {result.get('total_opportunities', 0)} found across {result.get('sites_scanned', 0)} sites")
+                self._update_status("opportunity_scan", {
+                    "found": result.get("total_opportunities", 0),
+                })
+            except ImportError:
+                log.debug("Opportunity finder not available yet")
+            except Exception as e:
+                log.error(f"Opportunity loop error: {e}")
+
+            for _ in range(OPPORTUNITY_INTERVAL):
+                if not self._running:
+                    return
+                time.sleep(1)
+
+    def _feedback_loop(self):
+        """Weekly feedback loop cycle."""
+        time.sleep(3600)  # Wait 1 hour before first cycle
+        while self._running:
+            try:
+                sys.path.insert(0, str(self.hub))
+                from systems.feedback_loop import FeedbackLoop
+                loop = FeedbackLoop()
+                result = loop.run_cycle(dry_run=False)
+                log.info(f"[LOOP] Feedback cycle completed in {result.get('duration_seconds', 0)}s")
+                self._update_status("feedback_cycle", {
+                    "cycle_id": result.get("cycle_id"),
+                    "duration": result.get("duration_seconds"),
+                })
+            except ImportError:
+                log.debug("Feedback loop not available yet")
+            except Exception as e:
+                log.error(f"Feedback loop error: {e}")
+
+            for _ in range(FEEDBACK_INTERVAL):
+                if not self._running:
+                    return
+                time.sleep(1)
+
+    # -- v5.0 Site Evolution Loops --------------------------------
+
+    def _site_audit_loop(self):
+        """Daily audit of all 14 WordPress sites — scores + queue population."""
+        time.sleep(900)  # Wait 15 min before first audit
+        while self._running:
+            try:
+                sys.path.insert(0, str(self.hub))
+                from systems.site_evolution.auditor.site_auditor import SiteAuditor
+                auditor = SiteAuditor()
+                results = auditor.audit_all_sites()
+
+                # Populate enhancement queues from audits
+                from systems.site_evolution.queue.enhancement_queue import EnhancementQueue
+                queue = EnhancementQueue()
+                total_added = 0
+                for audit in results:
+                    try:
+                        added = queue.populate_from_audit(audit)
+                        total_added += added
+                    except Exception:
+                        pass
+
+                avg_score = sum(r.get("overall_score", 0) for r in results) // max(len(results), 1)
+                log.info(f"[EVOLUTION] Site audit: {len(results)} sites, avg score {avg_score}, {total_added} queue items added")
+                self._update_status("site_audit", {
+                    "sites_audited": len(results),
+                    "avg_score": avg_score,
+                    "queue_items_added": total_added,
+                })
+
+                try:
+                    from core.event_bus import publish
+                    publish("evolution.daily_audit", {
+                        "sites": len(results),
+                        "avg_score": avg_score,
+                        "queue_added": total_added,
+                    }, "daemon")
+                except Exception:
+                    pass
+
+            except ImportError:
+                log.debug("Site evolution system not available yet")
+            except Exception as e:
+                log.error(f"Site audit loop error: {e}")
+
+            for _ in range(SITE_AUDIT_INTERVAL):
+                if not self._running:
+                    return
+                time.sleep(1)
+
+    def _enhancement_loop(self):
+        """Execute top 3 queue items per site every 6 hours (dry-run by default)."""
+        time.sleep(1800)  # Wait 30 min before first execution
+        while self._running:
+            try:
+                sys.path.insert(0, str(self.hub))
+                from systems.site_evolution.queue.enhancement_queue import EnhancementQueue
+                queue = EnhancementQueue()
+                all_queues = queue.get_all_queues()
+
+                total_executed = 0
+                for slug, items in all_queues.items():
+                    try:
+                        results = queue.execute_batch(slug, max_items=3, dry_run=True)
+                        total_executed += len(results)
+                    except Exception as e:
+                        log.error(f"Enhancement execution failed for {slug}: {e}")
+
+                log.info(f"[EVOLUTION] Enhancement check: {total_executed} items across {len(all_queues)} sites (dry-run)")
+                self._update_status("enhancement_execution", {
+                    "sites": len(all_queues),
+                    "items_checked": total_executed,
+                    "mode": "dry_run",
+                })
+
+            except ImportError:
+                log.debug("Site evolution system not available yet")
+            except Exception as e:
+                log.error(f"Enhancement loop error: {e}")
+
+            for _ in range(ENHANCEMENT_INTERVAL):
                 if not self._running:
                     return
                 time.sleep(1)
