@@ -1,2 +1,4 @@
+' Mesh Daemon v3.0 — background mode
+' Launches pythonw directly (no PowerShell = no window flash)
 Set objShell = CreateObject("WScript.Shell")
-objShell.Run "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File ""D:\Claude Code Projects\project-mesh-v2-omega\scripts\start-mesh-daemon.ps1""", 0, False
+objShell.Run "cmd /c ""cd /d D:\Claude Code Projects\project-mesh-v2-omega && set PYTHONPATH=D:\Claude Code Projects\project-mesh-v2-omega && D:\Python314\pythonw.exe mesh_daemon.py --background""", 0, False

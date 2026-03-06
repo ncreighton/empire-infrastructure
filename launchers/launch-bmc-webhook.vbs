@@ -1,2 +1,4 @@
+' BMC Webhook Handler — Port 8095
+' Launches pythonw directly (no PowerShell = no window flash)
 Set objShell = CreateObject("WScript.Shell")
-objShell.Run "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File ""D:\Claude Code Projects\start-bmc-webhook.ps1""", 0, False
+objShell.Run "cmd /c ""cd /d D:\Claude Code Projects\bmc-witchcraft\automation && set PYTHONPATH=D:\Claude Code Projects\bmc-witchcraft\automation && D:\Python314\pythonw.exe -m uvicorn bmc_webhook_handler:app --host 127.0.0.1 --port 8095""", 0, False
