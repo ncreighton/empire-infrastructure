@@ -124,6 +124,20 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_components_site ON components(site_slug);
         CREATE INDEX IF NOT EXISTS idx_uptime_site ON uptime_checks(site_slug);
         CREATE INDEX IF NOT EXISTS idx_snapshots_site ON snapshots(site_slug);
+
+        CREATE TABLE IF NOT EXISTS proposals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            site_slug TEXT NOT NULL,
+            proposed_changes TEXT NOT NULL,
+            risk_assessment TEXT,
+            status TEXT DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            reviewed_at TIMESTAMP,
+            deployed_at TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_proposals_site ON proposals(site_slug);
+        CREATE INDEX IF NOT EXISTS idx_proposals_status ON proposals(status);
     """)
     conn.close()
     log.info("Evolution codex initialized: %s", DB_PATH)
@@ -544,6 +558,91 @@ def get_snapshots(site_slug: str, limit: int = 10) -> List[Dict]:
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+# -- Proposals (safe evolution approval workflow) --
+
+def save_proposal(site_slug: str, proposed_changes: str,
+                  risk_assessment: str = "") -> int:
+    """Save a deployment proposal for human review."""
+    conn = _connect()
+    cur = conn.execute(
+        "INSERT INTO proposals (site_slug, proposed_changes, risk_assessment) "
+        "VALUES (?, ?, ?)",
+        (site_slug, proposed_changes, risk_assessment)
+    )
+    conn.commit()
+    proposal_id = cur.lastrowid
+    conn.close()
+    log.info("Saved proposal %d for %s", proposal_id, site_slug)
+    return proposal_id
+
+
+def get_proposal(proposal_id: int) -> Optional[Dict]:
+    """Get a single proposal by ID."""
+    conn = _connect()
+    row = conn.execute(
+        "SELECT * FROM proposals WHERE id = ?", (proposal_id,)
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_pending_proposals(site_slug: str = None) -> List[Dict]:
+    """Get all pending proposals, optionally filtered by site."""
+    conn = _connect()
+    if site_slug:
+        rows = conn.execute(
+            "SELECT * FROM proposals WHERE status = 'pending' AND site_slug = ? "
+            "ORDER BY created_at DESC",
+            (site_slug,)
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM proposals WHERE status = 'pending' "
+            "ORDER BY created_at DESC"
+        ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def approve_proposal(proposal_id: int) -> bool:
+    """Mark a proposal as approved."""
+    conn = _connect()
+    conn.execute(
+        "UPDATE proposals SET status = 'approved', reviewed_at = ? WHERE id = ?",
+        (datetime.now().isoformat(), proposal_id)
+    )
+    conn.commit()
+    conn.close()
+    log.info("Proposal %d approved", proposal_id)
+    return True
+
+
+def reject_proposal(proposal_id: int) -> bool:
+    """Mark a proposal as rejected."""
+    conn = _connect()
+    conn.execute(
+        "UPDATE proposals SET status = 'rejected', reviewed_at = ? WHERE id = ?",
+        (datetime.now().isoformat(), proposal_id)
+    )
+    conn.commit()
+    conn.close()
+    log.info("Proposal %d rejected", proposal_id)
+    return True
+
+
+def mark_proposal_deployed(proposal_id: int) -> bool:
+    """Mark a proposal as deployed."""
+    conn = _connect()
+    conn.execute(
+        "UPDATE proposals SET status = 'deployed', deployed_at = ? WHERE id = ?",
+        (datetime.now().isoformat(), proposal_id)
+    )
+    conn.commit()
+    conn.close()
+    log.info("Proposal %d marked as deployed", proposal_id)
+    return True
 
 
 # Auto-init on import

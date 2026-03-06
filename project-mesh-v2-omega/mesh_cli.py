@@ -262,6 +262,18 @@ COMMANDS = {
     },
 
     # ── SITE EVOLUTION ─────────────────────────────────────────
+    "evolve-safe": {
+        "desc": "Safe tiered evolution (--site X [--execute] [--proposal N])",
+        "inline": "evolve-safe"
+    },
+    "proposals": {
+        "desc": "List pending evolution proposals (--site X optional)",
+        "inline": "proposals"
+    },
+    "approve": {
+        "desc": "Approve a pending proposal (--proposal N)",
+        "inline": "approve"
+    },
     "evolve": {
         "desc": "Site evolution (--site X or --all, add --dry-run)",
         "inline": "evolve"
@@ -358,6 +370,9 @@ def print_help():
 |    mesh loop           Feedback loop (--run, --dry-run)   |
 |                                                          |
 |  SITE EVOLUTION (11th system)                            |
+|    mesh evolve-safe --site X  Safe tiered evolution      |
+|    mesh proposals [--site X]  List pending proposals     |
+|    mesh approve --proposal N  Approve a proposal         |
 |    mesh evolve --site X     Full enhancement cycle       |
 |    mesh evolve --all        Enhance all 14 sites         |
 |    mesh audit --site X      Audit one site (8 dimensions)|
@@ -417,10 +432,184 @@ def _parse_site_args():
     p.add_argument("--declining", action="store_true")
     p.add_argument("--rising", action="store_true")
     p.add_argument("--json", action="store_true")
+    p.add_argument("--proposal", type=int, default=None, help="Proposal ID for safe evolution")
     args, _ = p.parse_known_args(sys.argv[2:])
     if args.execute:
         args.dry_run = False
     return args
+
+
+def run_inline_evolve_safe():
+    """Run safe tiered evolution."""
+    sys.path.insert(0, str(HUB_PATH))
+    args = _parse_site_args()
+    import json as _json
+    try:
+        if not args.site:
+            print("  Usage: mesh evolve-safe --site <slug> [--execute] [--proposal N]")
+            return
+
+        from systems.site_evolution.orchestrator import SiteEvolutionEngine
+        from systems.site_evolution.safety.site_tiers import get_site_tier
+
+        engine = SiteEvolutionEngine()
+        tier = get_site_tier(args.site)
+
+        print(f"\n  Safe evolution for {args.site} (tier={tier.value}, dry_run={args.dry_run})")
+        if args.proposal:
+            print(f"  Using approved proposal #{args.proposal}")
+        print()
+
+        result = engine.evolve_site_safe(
+            args.site,
+            dry_run=args.dry_run,
+            proposal_id=args.proposal,
+        )
+
+        if args.json:
+            print(_json.dumps(result, indent=2, default=str))
+            return
+
+        # Proposal mode
+        if result.get("mode") == "proposal":
+            print(f"  PROPOSAL GENERATED (site is PROTECTED)")
+            print(f"  Proposal ID: {result['proposal_id']}")
+            print(f"  Risk: {result['risk_assessment']}")
+            print(f"  Components: {result['total_allowed']} allowed, {result['total_blocked']} blocked")
+            print()
+            for wave, data in result.get("proposed_changes", {}).items():
+                allowed = data.get("allowed", [])
+                blocked = data.get("blocked", [])
+                print(f"  {wave:15s}  allowed: {', '.join(allowed) or '(none)'}")
+                if blocked:
+                    print(f"  {'':15s}  BLOCKED: {', '.join(blocked)}")
+            print(f"\n  {result['action_required']}\n")
+            return
+
+        # Error
+        if result.get("error"):
+            print(f"  ERROR: {result['error']}\n")
+            return
+
+        # Deploy result
+        aborted = result.get("aborted", False)
+        status = "ABORTED" if aborted else "SUCCESS"
+        print(f"  Status:   {status}")
+        if aborted:
+            print(f"  Reason:   {result.get('abort_reason', 'unknown')}")
+        print(f"  Score:    {result.get('score_before', '?')} -> {result.get('score_after', '?')}  ({result.get('improvement', 0):+d})")
+        print(f"  Snapshot: {result.get('snapshot_id', 'N/A')}")
+        print(f"  Deployed: {result.get('total_deployed', 0)}  |  Blocked: {result.get('total_blocked', 0)}")
+        print()
+
+        waves = result.get("waves", {})
+        for wave_name, wave_data in waves.items():
+            deployed = wave_data.get("deployed", [])
+            errors = wave_data.get("errors", [])
+            blocked = wave_data.get("blocked", [])
+            parts = []
+            if deployed:
+                parts.append(f"{len(deployed)} deployed")
+            if blocked:
+                parts.append(f"{len(blocked)} blocked")
+            if errors:
+                parts.append(f"{len(errors)} errors")
+            print(f"  {wave_name:15s} {', '.join(parts) or 'skipped'}")
+            for d in deployed:
+                print(f"    + {d}")
+            for b in blocked:
+                print(f"    X {b} (risk too high)")
+            for e in errors:
+                print(f"    ! {e}")
+
+        print(f"\n  Time: {result.get('elapsed_seconds', 0):.1f}s\n")
+
+    except Exception as e:
+        print(f"  Error: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+def run_inline_proposals():
+    """List pending evolution proposals."""
+    sys.path.insert(0, str(HUB_PATH))
+    args = _parse_site_args()
+    import json as _json
+    try:
+        from systems.site_evolution import codex
+
+        proposals = codex.get_pending_proposals(site_slug=args.site)
+
+        if not proposals:
+            site_str = f" for {args.site}" if args.site else ""
+            print(f"\n  No pending proposals{site_str}.\n")
+            return
+
+        print(f"\n  Pending Proposals ({len(proposals)}):\n")
+        print(f"  {'ID':>5s}  {'Site':25s}  {'Created':19s}  Risk Assessment")
+        print(f"  {'-'*5}  {'-'*25}  {'-'*19}  {'-'*40}")
+
+        for p in proposals:
+            print(
+                f"  {p['id']:>5d}  {p['site_slug']:25s}  "
+                f"{p['created_at'][:19]:19s}  {(p.get('risk_assessment', '') or '')[:50]}"
+            )
+
+        print(f"\n  To approve: mesh approve --proposal <ID>")
+        print(f"  To deploy:  mesh evolve-safe --site <slug> --execute --proposal <ID>\n")
+
+    except Exception as e:
+        print(f"  Error: {e}")
+
+
+def run_inline_approve():
+    """Approve a pending proposal."""
+    sys.path.insert(0, str(HUB_PATH))
+    args = _parse_site_args()
+    import json as _json
+    try:
+        if not args.proposal:
+            print("  Usage: mesh approve --proposal <ID>")
+            return
+
+        from systems.site_evolution import codex
+
+        proposal = codex.get_proposal(args.proposal)
+        if not proposal:
+            print(f"  Proposal #{args.proposal} not found.\n")
+            return
+
+        if proposal["status"] != "pending":
+            print(f"  Proposal #{args.proposal} is already '{proposal['status']}'.\n")
+            return
+
+        # Show proposal details
+        print(f"\n  Proposal #{proposal['id']} for {proposal['site_slug']}")
+        print(f"  Status:  {proposal['status']}")
+        print(f"  Created: {proposal['created_at']}")
+        print(f"  Risk:    {proposal.get('risk_assessment', 'N/A')}")
+
+        try:
+            changes = _json.loads(proposal.get("proposed_changes", "{}"))
+            print(f"\n  Proposed changes:")
+            for wave, data in changes.items():
+                allowed = data.get("allowed", [])
+                blocked = data.get("blocked", [])
+                if allowed:
+                    print(f"    {wave}: {', '.join(allowed)}")
+                if blocked:
+                    print(f"    {wave} (blocked): {', '.join(blocked)}")
+        except (ValueError, TypeError):
+            print(f"  Changes: {proposal.get('proposed_changes', 'N/A')[:200]}")
+
+        # Approve
+        codex.approve_proposal(args.proposal)
+        print(f"\n  Proposal #{args.proposal} APPROVED.")
+        print(f"\n  Deploy with:")
+        print(f"    mesh evolve-safe --site {proposal['site_slug']} --execute --proposal {args.proposal}\n")
+
+    except Exception as e:
+        print(f"  Error: {e}")
 
 
 def run_inline_evolve():
@@ -794,6 +983,15 @@ def main():
     inline = config.get("inline")
     if inline == "events":
         run_inline_events()
+        return
+    elif inline == "evolve-safe":
+        run_inline_evolve_safe()
+        return
+    elif inline == "proposals":
+        run_inline_proposals()
+        return
+    elif inline == "approve":
+        run_inline_approve()
         return
     elif inline == "evolve":
         run_inline_evolve()

@@ -805,6 +805,478 @@ th{{text-align:left;padding:4px 8px;font-size:12px;color:#6b7280;border-bottom:1
 </div>
 </body></html>"""
 
+    # -- Safe tiered evolution --
+
+    def evolve_site_safe(self, site_slug: str, dry_run: bool = False,
+                         proposal_id: int = None) -> Dict:
+        """Tiered evolution with safety gates.
+
+        - PROTECTED sites: generate proposal only (unless approved proposal_id given)
+        - GUARDED sites: auto-deploy with health checks
+        - OPEN sites: auto-deploy with health checks, higher tolerance
+
+        Each wave is filtered by the site's risk tier. Post-wave health checks
+        trigger automatic rollback if the site goes unhealthy.
+        """
+        from systems.site_evolution.safety.site_tiers import (
+            get_site_tier, get_tier_policy, SafetyTier,
+        )
+        from systems.site_evolution.safety.risk_registry import filter_wave_components
+        from systems.site_evolution.safety.health_check import PostDeployHealthCheck
+        from systems.site_evolution import codex
+
+        started = datetime.now()
+        tier = get_site_tier(site_slug)
+        policy = get_tier_policy(site_slug)
+
+        log.info(
+            "Starting safe evolution for %s (tier=%s, dry_run=%s, proposal=%s)",
+            site_slug, tier.value, dry_run, proposal_id,
+        )
+
+        self._publish_event("evolution.safe_started", {
+            "site": site_slug, "tier": tier.value,
+            "dry_run": dry_run, "proposal_id": proposal_id,
+        })
+
+        # ── PROTECTED gate: require proposal workflow ────────────────────
+        if tier == SafetyTier.PROTECTED and not dry_run:
+            if proposal_id is None:
+                # Generate proposal, don't deploy
+                return self._generate_proposal(site_slug, policy)
+
+            # Verify the proposal is approved
+            proposal = codex.get_proposal(proposal_id)
+            if not proposal:
+                return {"error": f"Proposal {proposal_id} not found"}
+            if proposal["status"] != "approved":
+                return {
+                    "error": f"Proposal {proposal_id} is '{proposal['status']}', not approved",
+                    "proposal": proposal,
+                }
+            if proposal["site_slug"] != site_slug:
+                return {"error": f"Proposal {proposal_id} is for {proposal['site_slug']}, not {site_slug}"}
+
+        # ── Mandatory snapshot ───────────────────────────────────────────
+        snapshot_id = None
+        if not dry_run:
+            try:
+                snapshot_id = self.snapshot_site(site_slug)
+                log.info("Created snapshot %s for rollback", snapshot_id)
+            except Exception as e:
+                if tier == SafetyTier.PROTECTED:
+                    log.error("Snapshot failed for PROTECTED site %s — aborting: %s", site_slug, e)
+                    return {"error": f"Snapshot failed (required for PROTECTED): {e}",
+                            "tier": tier.value, "aborted": True}
+                log.warning("Snapshot failed: %s (continuing for %s tier)", e, tier.value)
+
+        # ── Pre-audit ────────────────────────────────────────────────────
+        audit_before = self.auditor.audit_site(site_slug)
+        score_before = audit_before["overall_score"]
+        log.info("Pre-audit score: %d", score_before)
+
+        # ── Pre-deploy health baseline ───────────────────────────────────
+        health_checker = PostDeployHealthCheck()
+        if not dry_run:
+            baseline_health = health_checker.check_site_health(site_slug)
+            if not baseline_health["healthy"] and tier == SafetyTier.PROTECTED:
+                log.error(
+                    "PROTECTED site %s already unhealthy before deploy — aborting. Failed: %s",
+                    site_slug, baseline_health["failed"],
+                )
+                return {
+                    "error": "Site already unhealthy before deploy",
+                    "tier": tier.value,
+                    "health": baseline_health,
+                    "aborted": True,
+                }
+
+        # ── Define wave components ───────────────────────────────────────
+        wave_components = {
+            "foundation": ["security", "redirects", "alt_text_fix"],
+            "content": ["auto_linker", "last_updated_display"],
+            "seo": ["schema", "canonical", "affiliate", "llmo"],
+            "performance": ["perf", "webp", "css_framework"],
+            "conversion": ["email_capture", "adsense"],
+            "polish": ["cookie_consent", "reading_progress_bar", "back_to_top"],
+        }
+
+        wave_results = {}
+        session_deployments = []  # snippet names for rollback
+        total_blocked = 0
+        aborted = False
+        abort_reason = ""
+
+        for wave_name, components in wave_components.items():
+            if aborted:
+                wave_results[wave_name] = {"deployed": [], "errors": [], "skipped": "aborted"}
+                continue
+
+            # Filter by risk tier
+            allowed, blocked = filter_wave_components(components, site_slug)
+            total_blocked += len(blocked)
+
+            w = {"deployed": [], "errors": [], "blocked": blocked}
+
+            if not dry_run:
+                for comp_key in allowed:
+                    try:
+                        snippet_name = self._deploy_wave_component(site_slug, wave_name, comp_key)
+                        if snippet_name:
+                            session_deployments.append(snippet_name)
+                            w["deployed"].append(comp_key)
+                    except Exception as e:
+                        w["errors"].append(f"{comp_key}: {e}")
+
+                # Post-wave health check
+                if w["deployed"]:
+                    health = health_checker.check_site_health(site_slug)
+                    if not health["healthy"]:
+                        log.error(
+                            "Site %s unhealthy after wave '%s' — rolling back",
+                            site_slug, wave_name,
+                        )
+                        self._rollback_session(site_slug, session_deployments)
+                        aborted = True
+                        abort_reason = f"Unhealthy after wave '{wave_name}': {health['failed']}"
+                        w["health_fail"] = health["failed"]
+            else:
+                w["deployed"] = [f"(dry-run) {c}" for c in allowed]
+
+            wave_results[wave_name] = w
+
+        # ── Post-audit + score check ─────────────────────────────────────
+        audit_after = self.auditor.audit_site(site_slug) if not dry_run and not aborted else audit_before
+        score_after = audit_after["overall_score"]
+        score_drop = score_before - score_after
+
+        if not dry_run and not aborted and score_drop > policy["score_drop_threshold"]:
+            log.error(
+                "Score dropped %d points (threshold=%d) for %s — rolling back",
+                score_drop, policy["score_drop_threshold"], site_slug,
+            )
+            self._rollback_session(site_slug, session_deployments)
+            aborted = True
+            abort_reason = f"Score dropped {score_drop} pts (threshold: {policy['score_drop_threshold']})"
+
+        # Mark proposal as deployed if successful
+        if proposal_id and not aborted and not dry_run:
+            codex.mark_proposal_deployed(proposal_id)
+
+        elapsed = (datetime.now() - started).total_seconds()
+        total_deployed = sum(
+            len([d for d in w.get("deployed", []) if not str(d).startswith("(dry-run)")])
+            for w in wave_results.values()
+        )
+
+        self._publish_event("evolution.safe_completed", {
+            "site": site_slug, "tier": tier.value,
+            "score_before": score_before, "score_after": score_after,
+            "total_deployed": total_deployed, "total_blocked": total_blocked,
+            "aborted": aborted, "elapsed_seconds": elapsed,
+        })
+
+        return {
+            "site_slug": site_slug,
+            "tier": tier.value,
+            "dry_run": dry_run,
+            "score_before": score_before,
+            "score_after": score_after,
+            "improvement": score_after - score_before,
+            "waves": wave_results,
+            "total_deployed": total_deployed,
+            "total_blocked": total_blocked,
+            "snapshot_id": snapshot_id,
+            "proposal_id": proposal_id,
+            "aborted": aborted,
+            "abort_reason": abort_reason,
+            "elapsed_seconds": elapsed,
+        }
+
+    def _generate_proposal(self, site_slug: str, policy: Dict) -> Dict:
+        """Generate a deployment proposal for PROTECTED sites (no deploy)."""
+        from systems.site_evolution.safety.risk_registry import filter_wave_components
+        from systems.site_evolution import codex
+
+        wave_components = {
+            "foundation": ["security", "redirects", "alt_text_fix"],
+            "content": ["auto_linker", "last_updated_display"],
+            "seo": ["schema", "canonical", "affiliate", "llmo"],
+            "performance": ["perf", "webp", "css_framework"],
+            "conversion": ["email_capture", "adsense"],
+            "polish": ["cookie_consent", "reading_progress_bar", "back_to_top"],
+        }
+
+        proposed = {}
+        total_allowed = 0
+        total_blocked = 0
+
+        for wave_name, components in wave_components.items():
+            allowed, blocked = filter_wave_components(components, site_slug)
+            proposed[wave_name] = {
+                "allowed": allowed,
+                "blocked": blocked,
+            }
+            total_allowed += len(allowed)
+            total_blocked += len(blocked)
+
+        risk_assessment = (
+            f"Tier: PROTECTED | Max risk: {policy['max_risk_level']} | "
+            f"Score drop threshold: {policy['score_drop_threshold']} pts | "
+            f"{total_allowed} components allowed, {total_blocked} blocked"
+        )
+
+        proposal_id = codex.save_proposal(
+            site_slug,
+            proposed_changes=json.dumps(proposed, indent=2),
+            risk_assessment=risk_assessment,
+        )
+
+        log.info(
+            "Generated proposal %d for %s: %d allowed, %d blocked",
+            proposal_id, site_slug, total_allowed, total_blocked,
+        )
+
+        return {
+            "mode": "proposal",
+            "proposal_id": proposal_id,
+            "site_slug": site_slug,
+            "tier": "protected",
+            "proposed_changes": proposed,
+            "risk_assessment": risk_assessment,
+            "total_allowed": total_allowed,
+            "total_blocked": total_blocked,
+            "action_required": (
+                f"Review proposal #{proposal_id} then run:\n"
+                f"  mesh approve --proposal {proposal_id}\n"
+                f"  mesh evolve-safe --site {site_slug} --execute --proposal {proposal_id}"
+            ),
+        }
+
+    def _deploy_wave_component(self, site_slug: str, wave_name: str,
+                               comp_key: str) -> Optional[str]:
+        """Deploy a single component and return the snippet name for rollback tracking.
+
+        Dispatches to the same deployment logic as evolve_site_v2.
+        """
+        snippet_name = None
+
+        if comp_key == "security":
+            from systems.site_evolution.performance.security_hardener import SecurityHardener
+            hardener = SecurityHardener()
+            snippets = hardener.generate_all_security_snippets(site_slug)
+            for name, code in snippets.items():
+                sn = f"{site_slug[:4]}-sec-{name}-v1"
+                self.deployer.deploy_snippet(
+                    site_slug, sn, code, code_type="php", location="everywhere")
+                snippet_name = sn
+
+        elif comp_key == "redirects":
+            from systems.site_evolution.auditor.broken_link_monitor import BrokenLinkMonitor
+            blm = BrokenLinkMonitor()
+            broken = blm.detect_broken_internal(site_slug)
+            if broken:
+                from systems.site_evolution.utils import get_site_domain
+                domain = get_site_domain(site_slug)
+                redirects = [{"from_url": b["url"].split(domain)[-1], "to_url": "/"} for b in broken[:20]]
+                snippet = blm.generate_redirect_snippet(redirects)
+                sn = f"{site_slug[:4]}-redirects-v1"
+                self.deployer.deploy_snippet(
+                    site_slug, sn, snippet, code_type="php", location="everywhere")
+                snippet_name = sn
+
+        elif comp_key == "alt_text_fix":
+            from systems.site_evolution.performance.image_optimizer import ImageOptimizer
+            img_opt = ImageOptimizer()
+            img_opt.fix_missing_alt_text(site_slug, dry_run=False)
+            snippet_name = f"{site_slug[:4]}-alt-fix"
+
+        elif comp_key == "auto_linker":
+            from systems.site_evolution.seo.internal_linker import InternalLinker
+            linker = InternalLinker()
+            snippet = linker.generate_link_injection_snippet(site_slug)
+            sn = f"{site_slug[:4]}-autolinks-v1"
+            self.deployer.deploy_snippet(
+                site_slug, sn, snippet, code_type="php", location="everywhere")
+            snippet_name = sn
+
+        elif comp_key == "last_updated_display":
+            from systems.site_evolution.auditor.freshness_tracker import FreshnessTracker
+            tracker = FreshnessTracker()
+            snippet = tracker.generate_update_date_snippet(site_slug)
+            sn = f"{site_slug[:4]}-lastmod-v1"
+            self.deployer.deploy_snippet(
+                site_slug, sn, snippet, code_type="php", location="everywhere")
+            snippet_name = sn
+
+        elif comp_key == "schema":
+            schemas = self.schema.generate_site_schemas(site_slug)
+            sn = f"{site_slug[:4]}-schema-v1"
+            self.deployer.deploy_snippet(
+                site_slug, sn, schemas, code_type="html", location="site_wide_header")
+            snippet_name = sn
+
+        elif comp_key == "canonical":
+            from systems.site_evolution.seo.canonical_manager import CanonicalManager
+            cm = CanonicalManager()
+            snippet = cm.generate_canonical_snippet(site_slug)
+            sn = f"{site_slug[:4]}-canonical-v1"
+            self.deployer.deploy_snippet(
+                site_slug, sn, snippet, code_type="php", location="everywhere")
+            snippet_name = sn
+
+        elif comp_key == "affiliate":
+            from systems.site_evolution.seo.affiliate_manager import AffiliateLinkManager
+            am = AffiliateLinkManager()
+            aff_snippets = am.generate_all_affiliate_snippets(site_slug)
+            for name, code in aff_snippets.items():
+                sn = f"{site_slug[:4]}-aff-{name}-v1"
+                self.deployer.deploy_snippet(
+                    site_slug, sn, code, code_type="php", location="everywhere")
+                snippet_name = sn
+
+        elif comp_key == "llmo":
+            llmo_snippets = self.llmo.generate_llmo_snippets(site_slug)
+            if isinstance(llmo_snippets, dict):
+                for name, code in llmo_snippets.items():
+                    sn = f"{site_slug[:4]}-llmo-{name}-v1"
+                    self.deployer.deploy_snippet(
+                        site_slug, sn, code, code_type="php", location="site_wide_header")
+                    snippet_name = sn
+
+        elif comp_key == "perf":
+            perf = self.vitals.generate_all_performance_snippets(site_slug)
+            for name, code in perf.items():
+                code_type = "css" if name == "critical_css" else "php"
+                sn = f"{site_slug[:4]}-perf-{name}-v1"
+                self.deployer.deploy_snippet(
+                    site_slug, sn, code, code_type=code_type, location="site_wide_header")
+                snippet_name = sn
+
+        elif comp_key == "webp":
+            from systems.site_evolution.performance.image_optimizer import ImageOptimizer
+            img = ImageOptimizer()
+            webp = img.generate_webp_snippet()
+            sn = f"{site_slug[:4]}-webp-v1"
+            self.deployer.deploy_snippet(
+                site_slug, sn, webp, code_type="php", location="everywhere")
+            snippet_name = sn
+
+        elif comp_key == "css_framework":
+            ds = self.designer.generate_design_system(site_slug)
+            css = self.css_engine.generate_full_stylesheet(ds)
+            self.deployer.deploy_custom_css(site_slug, css)
+            snippet_name = f"{site_slug[:4]}-css-framework"
+
+        elif comp_key == "email_capture":
+            from systems.site_evolution.components.email_capture import EmailCaptureSystem
+            from systems.site_evolution.components.snippet_builder import SnippetBuilder
+            ecs = EmailCaptureSystem()
+            builder = SnippetBuilder()
+            comp = ecs.generate_capture_snippet(site_slug, "scroll")
+            for snippet in builder.component_to_snippets(site_slug, "email_capture", comp):
+                self.deployer.deploy_snippet(
+                    site_slug, snippet["title"], snippet["code"],
+                    code_type=snippet["code_type"],
+                    location=snippet.get("location", "site_wide_footer"))
+                snippet_name = snippet["title"]
+
+        elif comp_key == "adsense":
+            from systems.site_evolution.monetization.adsense_optimizer import AdSenseOptimizer
+            adsense = AdSenseOptimizer()
+            ad_snippet = adsense.generate_optimal_ad_snippet(site_slug)
+            sn = f"{site_slug[:4]}-ads-v1"
+            self.deployer.deploy_snippet(
+                site_slug, sn, ad_snippet, code_type="php", location="everywhere")
+            snippet_name = sn
+
+        elif comp_key in ("cookie_consent", "reading_progress_bar", "back_to_top"):
+            from systems.site_evolution.components.snippet_builder import SnippetBuilder
+            builder = SnippetBuilder()
+            comp = self.factory.generate_component(site_slug, comp_key)
+            for snippet in builder.component_to_snippets(site_slug, comp_key, comp):
+                self.deployer.deploy_snippet(
+                    site_slug, snippet["title"], snippet["code"],
+                    code_type=snippet["code_type"],
+                    location=snippet.get("location", "site_wide_footer"))
+                snippet_name = snippet["title"]
+
+        else:
+            log.warning("Unknown component key: %s", comp_key)
+
+        if snippet_name:
+            log.info("Deployed %s to %s (snippet: %s)", comp_key, site_slug, snippet_name)
+        return snippet_name
+
+    def _rollback_session(self, site_slug: str, snippet_names: List[str]):
+        """Deactivate all snippets deployed in the current session."""
+        if not snippet_names:
+            return
+
+        log.warning(
+            "Rolling back %d snippets for %s: %s",
+            len(snippet_names), site_slug, snippet_names,
+        )
+
+        rolled_back = 0
+        errors = []
+
+        for name in snippet_names:
+            try:
+                # Try WPCode API first (status field)
+                existing = self.deployer.get_existing_snippets(site_slug)
+                for snippet in existing:
+                    title = snippet.get("title", snippet.get("name", ""))
+                    if title == name:
+                        snippet_id = snippet.get("id")
+                        if snippet_id:
+                            from systems.site_evolution.utils import load_site_config
+                            config = load_site_config(site_slug)
+                            domain = config.get("domain", "")
+                            wp_user = config.get("wp_user", "")
+                            wp_pass = config.get("wp_app_password", "")
+
+                            if domain and wp_user and wp_pass:
+                                import requests
+                                # Try WPCode deactivation
+                                url = f"https://{domain}/wp-json/wpcode/v2/snippets/{snippet_id}"
+                                resp = requests.put(
+                                    url,
+                                    json={"status": "inactive"},
+                                    auth=(wp_user, wp_pass),
+                                    timeout=15,
+                                )
+                                if resp.status_code in (200, 201):
+                                    rolled_back += 1
+                                    break
+
+                                # Fallback: Code Snippets plugin API
+                                url = f"https://{domain}/wp-json/code-snippets/v1/snippets/{snippet_id}"
+                                resp = requests.put(
+                                    url,
+                                    json={"active": False},
+                                    auth=(wp_user, wp_pass),
+                                    timeout=15,
+                                )
+                                if resp.status_code in (200, 201):
+                                    rolled_back += 1
+                                    break
+            except Exception as e:
+                errors.append(f"{name}: {e}")
+                log.error("Failed to rollback snippet %s: %s", name, e)
+
+        log.info(
+            "Rollback complete for %s: %d/%d deactivated, %d errors",
+            site_slug, rolled_back, len(snippet_names), len(errors),
+        )
+
+        self._publish_event("evolution.session_rollback", {
+            "site": site_slug,
+            "snippets_attempted": len(snippet_names),
+            "snippets_rolled_back": rolled_back,
+            "errors": errors,
+        })
+
     def _publish_event(self, event_type: str, data: Dict):
         try:
             from core.event_bus import publish

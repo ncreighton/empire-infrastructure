@@ -875,27 +875,41 @@ class MeshDaemon:
                 time.sleep(1)
 
     def _enhancement_loop(self):
-        """Execute top 3 queue items per site every 6 hours (dry-run by default)."""
+        """Execute top 3 queue items per site every 6 hours (dry-run by default).
+
+        PROTECTED sites are skipped to prevent unreviewed auto-deployments.
+        """
         time.sleep(1800)  # Wait 30 min before first execution
         while self._running:
             try:
                 sys.path.insert(0, str(self.hub))
                 from systems.site_evolution.queue.enhancement_queue import EnhancementQueue
+                from systems.site_evolution.safety.site_tiers import is_protected
                 queue = EnhancementQueue()
                 all_queues = queue.get_all_queues()
 
                 total_executed = 0
+                skipped_protected = 0
                 for slug, items in all_queues.items():
+                    if is_protected(slug):
+                        skipped_protected += 1
+                        log.debug(f"[EVOLUTION] Skipping PROTECTED site {slug}")
+                        continue
                     try:
                         results = queue.execute_batch(slug, max_items=3, dry_run=True)
                         total_executed += len(results)
                     except Exception as e:
                         log.error(f"Enhancement execution failed for {slug}: {e}")
 
-                log.info(f"[EVOLUTION] Enhancement check: {total_executed} items across {len(all_queues)} sites (dry-run)")
+                log.info(
+                    f"[EVOLUTION] Enhancement check: {total_executed} items across "
+                    f"{len(all_queues) - skipped_protected} sites (dry-run), "
+                    f"{skipped_protected} PROTECTED sites skipped"
+                )
                 self._update_status("enhancement_execution", {
-                    "sites": len(all_queues),
+                    "sites": len(all_queues) - skipped_protected,
                     "items_checked": total_executed,
+                    "protected_skipped": skipped_protected,
                     "mode": "dry_run",
                 })
 
@@ -910,7 +924,12 @@ class MeshDaemon:
                 time.sleep(1)
 
     def _evolve_v2_loop(self):
-        """Run full v2 evolution on all configured sites weekly (dry-run, logs results)."""
+        """Run safe tiered evolution on all configured sites weekly (dry-run, logs results).
+
+        Uses evolve_site_safe() which respects tier policies:
+        - PROTECTED sites: generates proposals only (never auto-deploys)
+        - GUARDED/OPEN sites: dry-run with risk filtering and health checks
+        """
         time.sleep(7200)  # Wait 2 hours after daemon start before first run
         while self._running:
             try:
@@ -938,32 +957,36 @@ class MeshDaemon:
 
                 total_deployed = 0
                 total_errors = 0
+                total_blocked = 0
                 results_summary = {}
 
                 for slug in site_slugs:
                     try:
-                        result = orch.evolve_site_v2(slug, dry_run=True)
+                        result = orch.evolve_site_safe(slug, dry_run=True)
                         deployed = result.get("total_deployed", 0)
-                        errors = result.get("total_errors", 0)
+                        blocked = result.get("total_blocked", 0)
                         total_deployed += deployed
-                        total_errors += errors
+                        total_blocked += blocked
                         results_summary[slug] = {
+                            "tier": result.get("tier", "unknown"),
                             "score": result.get("score_before", 0),
-                            "waves": len(result.get("wave_results", {})),
                             "deployed": deployed,
-                            "errors": errors,
+                            "blocked": blocked,
                         }
                     except Exception as e:
-                        log.error(f"[EVOLVE-V2] {slug} failed: {e}")
+                        log.error(f"[EVOLVE-SAFE] {slug} failed: {e}")
+                        total_errors += 1
                         results_summary[slug] = {"error": str(e)}
 
                 log.info(
-                    f"[EVOLVE-V2] Weekly cycle complete: {len(site_slugs)} sites, "
-                    f"{total_deployed} items (dry-run), {total_errors} errors"
+                    f"[EVOLVE-SAFE] Weekly cycle complete: {len(site_slugs)} sites, "
+                    f"{total_deployed} items (dry-run), {total_blocked} blocked by tier, "
+                    f"{total_errors} errors"
                 )
                 self._update_status("evolve_v2", {
                     "sites_processed": len(site_slugs),
                     "total_deployed": total_deployed,
+                    "total_blocked": total_blocked,
                     "total_errors": total_errors,
                     "mode": "dry_run",
                     "summary": results_summary,
