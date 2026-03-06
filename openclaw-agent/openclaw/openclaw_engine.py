@@ -183,7 +183,7 @@ class OpenClawEngine:
                 return await executor.execute_plan(plan, credentials)
 
             plan = await self.retry_engine.execute_with_retry(
-                _execute, platform_id, max_retries=2
+                _execute, platform_id,
             )
 
             result.steps_completed = plan.completed_steps
@@ -302,9 +302,15 @@ class OpenClawEngine:
         async def _attempt():
             return await self.signup_async(platform_id, credentials)
 
-        return await self.retry_engine.execute_with_retry(
-            _attempt, platform_id, max_retries=max_retries
-        )
+        # Temporarily override max_retries on the retry policy
+        original_max = self.retry_engine.policy.max_retries
+        self.retry_engine.policy.max_retries = max_retries
+        try:
+            return await self.retry_engine.execute_with_retry(
+                _attempt, platform_id,
+            )
+        finally:
+            self.retry_engine.policy.max_retries = original_max
 
     async def signup_batch(
         self,
