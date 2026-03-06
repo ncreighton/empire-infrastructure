@@ -247,11 +247,6 @@ class ProfileSmith:
             name = getattr(brand, "name", "user")
             base = name.lower().replace(" ", "")
 
-        # Get a template username from knowledge base
-        template_username = get_username(platform.category.value)
-        if template_username:
-            base = template_username
-
         max_len = platform.username_max_length
 
         # Try bare base first, then with suffixes
@@ -284,14 +279,16 @@ class ProfileSmith:
         Returns:
             A bio string within platform limits.
         """
+        brand_name = getattr(brand, "name", "Our Team")
+        category_phrase = _CATEGORY_PHRASES.get(category, "digital products")
+
         # Try getting a pre-written bio from templates
         template_bio = get_bio(category)
         if template_bio:
+            # Substitute any placeholders in the template
+            template_bio = template_bio.replace("{brand_name}", brand_name)
+            template_bio = template_bio.replace("{category_phrase}", category_phrase)
             return template_bio[:platform.bio_max_length]
-
-        # Generate from opener templates
-        brand_name = getattr(brand, "name", "Our Team")
-        category_phrase = _CATEGORY_PHRASES.get(category, "digital products")
 
         opener = self.variation_engine.pick(_BIO_OPENERS, category="bio_openers")
         if opener is None:
@@ -332,13 +329,14 @@ class ProfileSmith:
         Returns:
             A tagline string within platform limits.
         """
+        brand_name = getattr(brand, "name", "")
+
         # Try getting a pre-written tagline from templates
         template_tagline = get_tagline(category)
         if template_tagline:
+            template_tagline = template_tagline.replace("{brand_name}", brand_name)
             if len(template_tagline) <= platform.tagline_max_length:
                 return template_tagline
-
-        brand_name = getattr(brand, "name", "")
         category_phrase = _CATEGORY_PHRASES.get(category, "digital products")
 
         # Pick a tagline template
