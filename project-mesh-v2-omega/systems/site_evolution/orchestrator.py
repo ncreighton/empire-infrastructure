@@ -482,17 +482,18 @@ class SiteEvolutionEngine:
             except Exception as e:
                 w3["errors"].append(f"affiliate: {e}")
 
-            # Meta optimization
+            # LLMO optimization (AI discoverability)
             try:
-                meta_snippets = self.meta.generate_meta_snippets(site_slug)
-                for name, code in meta_snippets.items():
-                    self.deployer.deploy_snippet(
-                        site_slug, f"{site_slug[:4]}-meta-{name}-v1",
-                        code, code_type="php", location="site_wide_header"
-                    )
-                    w3["deployed"].append(f"meta-{name}")
+                llmo_snippets = self.llmo.generate_llmo_snippets(site_slug)
+                if isinstance(llmo_snippets, dict):
+                    for name, code in llmo_snippets.items():
+                        self.deployer.deploy_snippet(
+                            site_slug, f"{site_slug[:4]}-llmo-{name}-v1",
+                            code, code_type="php", location="site_wide_header"
+                        )
+                        w3["deployed"].append(f"llmo-{name}")
             except Exception as e:
-                w3["errors"].append(f"meta: {e}")
+                log.debug("LLMO optimization skipped: %s", e)
         wave_results["seo"] = w3
 
         # Wave 4: Performance
@@ -542,13 +543,16 @@ class SiteEvolutionEngine:
             # Email capture
             try:
                 from systems.site_evolution.components.email_capture import EmailCaptureSystem
+                from systems.site_evolution.components.snippet_builder import SnippetBuilder
                 ecs = EmailCaptureSystem()
-                snippet = ecs.generate_capture_snippet(site_slug, "scroll_trigger")
-                self.deployer.deploy_snippet(
-                    site_slug, f"{site_slug[:4]}-emailcap-v1",
-                    snippet["code"], code_type=snippet.get("code_type", "html"),
-                    location="site_wide_footer"
-                )
+                builder = SnippetBuilder()
+                comp = ecs.generate_capture_snippet(site_slug, "scroll")
+                for snippet in builder.component_to_snippets(site_slug, "email_capture", comp):
+                    self.deployer.deploy_snippet(
+                        site_slug, snippet["title"],
+                        snippet["code"], code_type=snippet["code_type"],
+                        location=snippet.get("location", "site_wide_footer")
+                    )
                 w5["deployed"].append("email_capture")
             except Exception as e:
                 w5["errors"].append(f"email_capture: {e}")

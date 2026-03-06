@@ -266,6 +266,10 @@ COMMANDS = {
         "desc": "Site evolution (--site X or --all, add --dry-run)",
         "inline": "evolve"
     },
+    "evolve-v2": {
+        "desc": "6-wave multi-pass evolution (--site X [--execute])",
+        "inline": "evolve-v2"
+    },
     "audit": {
         "desc": "Audit site(s) (--site X or --all)",
         "inline": "audit"
@@ -453,6 +457,51 @@ def run_inline_evolve():
             print("         mesh evolve --all [--execute]")
     except Exception as e:
         print(f"  Error: {e}")
+
+
+def run_inline_evolve_v2():
+    """Run 6-wave multi-pass evolution (v2)."""
+    sys.path.insert(0, str(HUB_PATH))
+    args = _parse_site_args()
+    import json as _json
+    try:
+        from systems.site_evolution.orchestrator import SiteEvolutionEngine
+        engine = SiteEvolutionEngine()
+
+        if not args.site:
+            print("  Usage: mesh evolve-v2 --site <slug> [--execute]")
+            return
+
+        print(f"\n  Running v2 multi-pass evolution on {args.site} (dry_run={args.dry_run})...\n")
+        result = engine.evolve_site_v2(args.site, dry_run=args.dry_run)
+
+        if args.json:
+            print(_json.dumps(result, indent=2, default=str))
+        else:
+            print(f"  Score:  {result.get('score_before', '?')} -> {result.get('score_after', '?')}  (+{result.get('improvement', 0)})")
+            print(f"  Snapshot: {result.get('snapshot_id', 'N/A')}")
+            print()
+
+            waves = result.get("waves", {})
+            for wave_name, wave_data in waves.items():
+                deployed = wave_data.get("deployed", [])
+                errors = wave_data.get("errors", [])
+                status = f"{len(deployed)} deployed"
+                if errors:
+                    status += f", {len(errors)} errors"
+                print(f"  {wave_name:15s} {status}")
+                for d in deployed:
+                    print(f"    + {d}")
+                for e in errors:
+                    print(f"    ! {e}")
+
+            print(f"\n  Total deployed: {result.get('total_deployed', 0)}")
+            print(f"  Total errors:   {result.get('total_errors', 0)}")
+            print(f"  Time:           {result.get('elapsed_seconds', 0):.1f}s\n")
+    except Exception as e:
+        print(f"  Error: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 def run_inline_audit():
@@ -748,6 +797,9 @@ def main():
         return
     elif inline == "evolve":
         run_inline_evolve()
+        return
+    elif inline == "evolve-v2":
+        run_inline_evolve_v2()
         return
     elif inline == "audit":
         run_inline_audit()
