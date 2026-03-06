@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime
-from typing import Any, Callable
+from typing import Callable
 
 from openclaw.agents.monitor_agent import MonitorAgent
 from openclaw.browser.browser_manager import BrowserManager
@@ -229,7 +229,7 @@ class ExecutorAgent:
         self, step: SignupStep, plan: SignupPlan, sensitive_data: dict | None = None
     ) -> bool:
         """Dismiss cookie banners and popups."""
-        result = await self.browser.run_agent(
+        await self.browser.run_agent(
             task=(
                 "If there is a cookie consent banner, popup, or modal visible, "
                 "click the accept/dismiss/close button. If nothing is visible, do nothing."
@@ -294,7 +294,7 @@ class ExecutorAgent:
         self, step: SignupStep, plan: SignupPlan, sensitive_data: dict
     ) -> bool:
         """Accept terms of service checkbox."""
-        result = await self.browser.run_agent(
+        await self.browser.run_agent(
             task=(
                 "Find and check any 'I agree to the Terms of Service' or "
                 "'I accept the Terms' checkbox. If already checked or not present, continue."

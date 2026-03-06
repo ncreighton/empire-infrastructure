@@ -204,7 +204,7 @@ class MarketOracle:
                 entry["remaining_ids"].append(platform_id)
 
         # Calculate averages
-        for cat, entry in summary.items():
+        for _cat, entry in summary.items():
             if entry["total"] > 0:
                 entry["avg_monetization"] = round(
                     entry["avg_monetization"] / entry["total"], 1

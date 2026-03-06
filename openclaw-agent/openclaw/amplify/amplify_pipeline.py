@@ -7,7 +7,6 @@ Pattern: videoforge-engine/videoforge/amplify/amplify_pipeline.py
 from __future__ import annotations
 
 import logging
-import re
 from datetime import datetime
 
 from openclaw.knowledge.brand_config import get_brand
@@ -18,17 +17,11 @@ from openclaw.knowledge.profile_templates import (
     get_seo_keywords,
     get_tagline,
     get_username,
-    BIOS,
-    DESCRIPTIONS,
-    SEO_KEYWORDS,
-    TAGLINES,
-    USERNAME_PATTERNS,
 )
 from openclaw.models import (
     AmplifyResult,
     CaptchaType,
     PlatformConfig,
-    ProfileContent,
     SignupComplexity,
     SignupPlan,
 )

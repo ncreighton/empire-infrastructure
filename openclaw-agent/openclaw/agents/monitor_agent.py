@@ -6,7 +6,7 @@ import logging
 import re
 from typing import Any
 
-from openclaw.models import CaptchaType, SignupStep, StepStatus, StepType
+from openclaw.models import CaptchaType, SignupStep, StepType
 
 logger = logging.getLogger(__name__)
 

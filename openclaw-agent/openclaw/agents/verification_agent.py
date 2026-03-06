@@ -10,8 +10,6 @@ from openclaw.forge.profile_sentinel import ProfileSentinel
 from openclaw.knowledge.platforms import get_platform
 from openclaw.models import (
     AccountStatus,
-    ProfileContent,
-    SentinelScore,
     SignupPlan,
 )
 

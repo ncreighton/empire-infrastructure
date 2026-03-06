@@ -6,7 +6,7 @@ once and cached for the lifetime of the process.
 """
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass

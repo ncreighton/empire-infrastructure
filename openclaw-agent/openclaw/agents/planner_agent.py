@@ -11,7 +11,6 @@ from datetime import datetime
 from openclaw.models import (
     CaptchaType,
     FieldConfig,
-    PlatformConfig,
     ProfileContent,
     SignupPlan,
     SignupStep,
