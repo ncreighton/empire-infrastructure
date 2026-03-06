@@ -345,12 +345,12 @@ class ActionExecutor:
         with self._exec_lock:
             for sys_name in system_names:
                 log.info(f" Auto-syncing system: {sys_name}")
-                self._run_mesh_command(["python", 
+                self._run_mesh_command([sys.executable, 
                     str(self.hub / "sync" / "sync_engine_v2.py"),
                     "--impact", sys_name, "--hub", str(self.hub)])
                 
                 # Now sync all consumers
-                self._run_mesh_command(["python",
+                self._run_mesh_command([sys.executable,
                     str(self.hub / "sync" / "sync_engine_v2.py"),
                     "--sync", "--hub", str(self.hub)])
                 
@@ -369,7 +369,7 @@ class ActionExecutor:
                     continue
                 
                 log.info(f"[BRAIN] Auto-compiling CLAUDE.md: {proj}")
-                self._run_mesh_command(["python", str(compile_script),
+                self._run_mesh_command([sys.executable, str(compile_script),
                     "--project", proj, "--hub", str(self.hub)])
                 
                 self._log_action("compile", {"project": proj})
@@ -380,7 +380,7 @@ class ActionExecutor:
             sentinel = self.hub / "scripts" / "sentinel.py"
             if sentinel.exists():
                 log.info("[GUARD] Running sentinel check...")
-                result = self._run_mesh_command(["python", str(sentinel),
+                result = self._run_mesh_command([sys.executable, str(sentinel),
                     "--monitor", "--hub", str(self.hub)])
                 
                 # Check for critical alerts
@@ -395,7 +395,7 @@ class ActionExecutor:
             harvester = self.hub / "scripts" / "knowledge_harvester.py"
             if harvester.exists():
                 log.info(" Refreshing knowledge index (fast harvest)...")
-                self._run_mesh_command(["python", str(harvester),
+                self._run_mesh_command([sys.executable, str(harvester),
                     "--harvest", "--fast", "--hub", str(self.hub)])
                 self._log_action("harvest", {"mode": "fast"})
     
@@ -405,7 +405,7 @@ class ActionExecutor:
             harvester = self.hub / "scripts" / "knowledge_harvester.py"
             if harvester.exists():
                 log.info(" Refreshing knowledge index (fast harvest)...")
-                self._run_mesh_command(["python", str(harvester),
+                self._run_mesh_command([sys.executable, str(harvester),
                     "--harvest", "--fast", "--hub", str(self.hub)])
     
     def _run_mesh_command(self, cmd: list) -> str:

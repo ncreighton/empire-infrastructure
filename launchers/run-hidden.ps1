@@ -7,7 +7,7 @@ param(
     [string]$Script,
     [string]$ScriptArgs = "",
     [string]$WorkDir = "",
-    [string]$LogDir = "D:\Claude Code Projects\EMPIRE-BRAIN\logs"
+    [string]$LogDir = "D:\EmpireLogs"
 )
 
 $ErrorActionPreference = "SilentlyContinue"
