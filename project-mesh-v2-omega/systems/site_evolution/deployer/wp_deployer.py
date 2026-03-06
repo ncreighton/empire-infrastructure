@@ -221,6 +221,20 @@ class WPDeployer:
 
         content_hash = hashlib.sha256(code.encode()).hexdigest()[:16]
 
+        # Skip if content unchanged
+        if existing_id and content_hash == previous_hash:
+            log.info("Snippet '%s' on %s unchanged, skipping deploy", name, site_slug)
+            codex.record_deployment(
+                site_slug=site_slug,
+                component_type=name.split("-")[0] if "-" in name else "snippet",
+                deployment_type="snippet",
+                snippet_name=name,
+                content_hash=content_hash,
+                previous_hash=previous_hash,
+                details=json.dumps({"code_type": code_type, "skipped": True})
+            )
+            return {"id": existing_id, "status": "unchanged"}
+
         try:
             if api == "wpcode":
                 result = self._deploy_wpcode(site_slug, name, code, code_type,
@@ -294,9 +308,24 @@ class WPDeployer:
         }
 
         if existing_id:
-            result = _wp_request(site_slug, "PUT",
-                                  f"code-snippets/v1/snippets/{existing_id}", payload)
-            log.info("Updated Code Snippet '%s' on %s (id=%s)", name, site_slug, existing_id)
+            try:
+                result = _wp_request(site_slug, "PUT",
+                                      f"code-snippets/v1/snippets/{existing_id}", payload)
+                log.info("Updated Code Snippet '%s' on %s (id=%s)", name, site_slug, existing_id)
+            except Exception as put_err:
+                if "403" in str(put_err):
+                    # Code Snippets may block PUT on active PHP — delete and recreate
+                    log.info("PUT 403 on snippet %s, deleting and recreating...", existing_id)
+                    try:
+                        _wp_request(site_slug, "DELETE",
+                                    f"code-snippets/v1/snippets/{existing_id}")
+                    except Exception:
+                        pass  # May already be deactivated/deleted
+                    result = _wp_request(site_slug, "POST",
+                                         "code-snippets/v1/snippets", payload)
+                    log.info("Recreated Code Snippet '%s' on %s", name, site_slug)
+                else:
+                    raise
         else:
             result = _wp_request(site_slug, "POST", "code-snippets/v1/snippets", payload)
             log.info("Created Code Snippet '%s' on %s", name, site_slug)

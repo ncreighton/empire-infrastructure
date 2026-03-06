@@ -42,6 +42,7 @@ OPPORTUNITY_INTERVAL = 86400  # Daily opportunity scan (86400s = 24h)
 FEEDBACK_INTERVAL = 604800    # Weekly feedback loop cycle (604800s = 7d)
 SITE_AUDIT_INTERVAL = 86400   # Daily site audit (86400s = 24h)
 ENHANCEMENT_INTERVAL = 21600  # Enhancement execution every 6h
+EVOLVE_V2_INTERVAL = 604800   # Full v2 evolution cycle weekly (604800s = 7d)
 
 # What file extensions to watch
 CODE_EXTENSIONS = {".js", ".ts", ".py", ".php", ".jsx", ".tsx", ".css", ".html", ".json", ".md"}
@@ -529,8 +530,9 @@ class MeshDaemon:
         # v5.0 site evolution loops
         threading.Thread(target=self._site_audit_loop, daemon=True, name="site-audit").start()
         threading.Thread(target=self._enhancement_loop, daemon=True, name="enhancement").start()
+        threading.Thread(target=self._evolve_v2_loop, daemon=True, name="evolve-v2").start()
 
-        log.info("  Daemon is running (14 loops active). Press Ctrl+C to stop.\n")
+        log.info("  Daemon is running (15 loops active). Press Ctrl+C to stop.\n")
         
         # Main thread   keep alive
         try:
@@ -903,6 +905,87 @@ class MeshDaemon:
                 log.error(f"Enhancement loop error: {e}")
 
             for _ in range(ENHANCEMENT_INTERVAL):
+                if not self._running:
+                    return
+                time.sleep(1)
+
+    def _evolve_v2_loop(self):
+        """Run full v2 evolution on all configured sites weekly (dry-run, logs results)."""
+        time.sleep(7200)  # Wait 2 hours after daemon start before first run
+        while self._running:
+            try:
+                sys.path.insert(0, str(self.hub))
+                from systems.site_evolution.orchestrator import SiteEvolutionEngine
+                from systems.site_evolution.utils import load_site_config
+
+                orch = SiteEvolutionEngine()
+
+                # Get all sites with WP credentials
+                sites_dir = self.hub / "config"
+                sites_json = sites_dir / "sites.json"
+                if not sites_json.exists():
+                    sites_json = Path(r"D:\Claude Code Projects\config\sites.json")
+
+                site_slugs = []
+                if sites_json.exists():
+                    import json as _json
+                    data = _json.loads(sites_json.read_text("utf-8"))
+                    sites = data.get("sites", data)
+                    for slug in sites:
+                        cfg = sites[slug]
+                        if cfg.get("wp_app_password") or cfg.get("wp_password"):
+                            site_slugs.append(slug)
+
+                total_deployed = 0
+                total_errors = 0
+                results_summary = {}
+
+                for slug in site_slugs:
+                    try:
+                        result = orch.evolve_site_v2(slug, dry_run=True)
+                        deployed = result.get("total_deployed", 0)
+                        errors = result.get("total_errors", 0)
+                        total_deployed += deployed
+                        total_errors += errors
+                        results_summary[slug] = {
+                            "score": result.get("score_before", 0),
+                            "waves": len(result.get("wave_results", {})),
+                            "deployed": deployed,
+                            "errors": errors,
+                        }
+                    except Exception as e:
+                        log.error(f"[EVOLVE-V2] {slug} failed: {e}")
+                        results_summary[slug] = {"error": str(e)}
+
+                log.info(
+                    f"[EVOLVE-V2] Weekly cycle complete: {len(site_slugs)} sites, "
+                    f"{total_deployed} items (dry-run), {total_errors} errors"
+                )
+                self._update_status("evolve_v2", {
+                    "sites_processed": len(site_slugs),
+                    "total_deployed": total_deployed,
+                    "total_errors": total_errors,
+                    "mode": "dry_run",
+                    "summary": results_summary,
+                })
+
+                # Emit event
+                try:
+                    from core.event_bus import EventBus
+                    EventBus.instance().emit("evolution.v2_cycle", {
+                        "sites": len(site_slugs),
+                        "deployed": total_deployed,
+                        "errors": total_errors,
+                    }, "daemon")
+                except Exception:
+                    pass
+
+            except ImportError:
+                log.debug("Site evolution system not available yet")
+            except Exception as e:
+                log.error(f"Evolve-v2 loop error: {e}")
+
+            for _ in range(EVOLVE_V2_INTERVAL):
                 if not self._running:
                     return
                 time.sleep(1)

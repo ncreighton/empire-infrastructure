@@ -23,7 +23,10 @@ log = logging.getLogger(__name__)
 CREDENTIALS_DIR = Path(r"D:\Claude Code Projects\credentials")
 GSC_CREDENTIALS = CREDENTIALS_DIR / "gsc_credentials.json"
 GSC_TOKEN = CREDENTIALS_DIR / "gsc_token.json"
+GSC_OAUTH = CREDENTIALS_DIR / "google" / "oauth_credentials.json"
+GSC_SERVICE_ACCOUNT = CREDENTIALS_DIR / "google" / "gsc-service-account.json"
 BING_KEY_FILE = CREDENTIALS_DIR / "bing_webmaster_key.txt"
+BING_KEY_JSON = CREDENTIALS_DIR / "bing" / "api_key.json"
 
 
 class SearchAnalytics:
@@ -33,18 +36,54 @@ class SearchAnalytics:
         self._gsc_service = None
         self._bing_key = None
 
+    _gsc_site_urls = {}  # Cache: domain -> verified site URL format
+
     # -- Google Search Console --
 
+    def _resolve_gsc_site_url(self, domain: str) -> str:
+        """Resolve the correct GSC site URL format for a domain.
+
+        GSC properties can be 'sc-domain:example.com' or 'https://example.com/'.
+        Tries both and caches the working one.
+        """
+        if domain in self._gsc_site_urls:
+            return self._gsc_site_urls[domain]
+
+        service = self._get_gsc_service()
+        if not service:
+            return f"https://{domain}/"
+
+        # Check which format this domain is registered as
+        try:
+            sites = service.sites().list().execute()
+            for entry in sites.get("siteEntry", []):
+                url = entry.get("siteUrl", "")
+                if domain in url:
+                    self._gsc_site_urls[domain] = url
+                    return url
+        except Exception:
+            pass
+
+        # Default to URL-prefix format (more common with service accounts)
+        fallback = f"https://{domain}/"
+        self._gsc_site_urls[domain] = fallback
+        return fallback
+
     def _get_gsc_service(self):
-        """Lazy-load authenticated GSC API service."""
+        """Lazy-load authenticated GSC API service.
+
+        Tries in order:
+        1. Existing token file (gsc_token.json)
+        2. OAuth credentials with refresh_token (google/oauth_credentials.json)
+        3. Service account (google/gsc-service-account.json)
+        4. OAuth flow with client secrets (gsc_credentials.json)
+        """
         if self._gsc_service:
             return self._gsc_service
 
         try:
-            from google.oauth2.credentials import Credentials
-            from google_auth_oauthlib.flow import InstalledAppFlow
-            from google.auth.transport.requests import Request
             from googleapiclient.discovery import build
+            from google.auth.transport.requests import Request
 
             SCOPES = [
                 "https://www.googleapis.com/auth/webmasters.readonly",
@@ -52,23 +91,59 @@ class SearchAnalytics:
             ]
 
             creds = None
+
+            # 1. Try existing token
             if GSC_TOKEN.exists():
+                from google.oauth2.credentials import Credentials
                 creds = Credentials.from_authorized_user_file(str(GSC_TOKEN), SCOPES)
 
-            if not creds or not creds.valid:
-                if creds and creds.expired and creds.refresh_token:
-                    creds.refresh(Request())
-                elif GSC_CREDENTIALS.exists():
-                    flow = InstalledAppFlow.from_client_secrets_file(
-                        str(GSC_CREDENTIALS), SCOPES
+            # 2. Try OAuth credentials with refresh_token
+            if (not creds or not creds.valid) and GSC_OAUTH.exists():
+                import json as _json
+                oauth_data = _json.loads(GSC_OAUTH.read_text("utf-8"))
+                if oauth_data.get("refresh_token"):
+                    from google.oauth2.credentials import Credentials
+                    creds = Credentials(
+                        token=oauth_data.get("access_token"),
+                        refresh_token=oauth_data["refresh_token"],
+                        token_uri=oauth_data.get("token_uri", "https://oauth2.googleapis.com/token"),
+                        client_id=oauth_data.get("client_id"),
+                        client_secret=oauth_data.get("client_secret"),
+                        scopes=oauth_data.get("scopes", SCOPES),
                     )
-                    creds = flow.run_local_server(port=0)
-                else:
-                    log.warning("GSC credentials not found at %s", GSC_CREDENTIALS)
-                    return None
 
+            # Refresh if expired
+            if creds and not creds.valid and creds.expired and creds.refresh_token:
+                try:
+                    creds.refresh(Request())
+                    GSC_TOKEN.parent.mkdir(parents=True, exist_ok=True)
+                    GSC_TOKEN.write_text(creds.to_json(), "utf-8")
+                except Exception as refresh_err:
+                    log.info("OAuth token refresh failed (%s), trying service account...",
+                             refresh_err)
+                    creds = None
+
+            # 3. Try service account (most reliable — never expires)
+            if (not creds or not creds.valid) and GSC_SERVICE_ACCOUNT.exists():
+                from google.oauth2 import service_account
+                creds = service_account.Credentials.from_service_account_file(
+                    str(GSC_SERVICE_ACCOUNT), scopes=SCOPES
+                )
+
+            # 4. Try OAuth flow with client secrets
+            if not creds and GSC_CREDENTIALS.exists():
+                from google.oauth2.credentials import Credentials
+                from google_auth_oauthlib.flow import InstalledAppFlow
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    str(GSC_CREDENTIALS), SCOPES
+                )
+                creds = flow.run_local_server(port=0)
                 GSC_TOKEN.parent.mkdir(parents=True, exist_ok=True)
                 GSC_TOKEN.write_text(creds.to_json(), "utf-8")
+
+            if not creds:
+                log.warning("GSC credentials not found at %s", GSC_CREDENTIALS)
+                return None
 
             self._gsc_service = build("searchconsole", "v1", credentials=creds)
             return self._gsc_service
@@ -96,7 +171,7 @@ class SearchAnalytics:
         if not domain:
             return {"error": f"No domain for {site_slug}", "rows": []}
 
-        site_url = f"sc-domain:{domain}"
+        site_url = self._resolve_gsc_site_url(domain)
         end_date = datetime.now().date()
         start_date = end_date - timedelta(days=days)
 
@@ -208,7 +283,7 @@ class SearchAnalytics:
 
         config = load_site_config(site_slug)
         domain = config.get("domain", "")
-        site_url = f"sc-domain:{domain}"
+        site_url = self._resolve_gsc_site_url(domain)
 
         try:
             result = service.urlInspection().index().inspect(
@@ -243,7 +318,7 @@ class SearchAnalytics:
 
         config = load_site_config(site_slug)
         domain = config.get("domain", "")
-        site_url = f"sc-domain:{domain}"
+        site_url = self._resolve_gsc_site_url(domain)
         sitemap_url = f"https://{domain}{sitemap_path}"
 
         try:
@@ -262,7 +337,7 @@ class SearchAnalytics:
 
         config = load_site_config(site_slug)
         domain = config.get("domain", "")
-        site_url = f"sc-domain:{domain}"
+        site_url = self._resolve_gsc_site_url(domain)
 
         try:
             result = service.sitemaps().list(siteUrl=site_url).execute()
@@ -289,7 +364,13 @@ class SearchAnalytics:
         if BING_KEY_FILE.exists():
             self._bing_key = BING_KEY_FILE.read_text("utf-8").strip()
             return self._bing_key
-        log.warning("Bing API key not found at %s", BING_KEY_FILE)
+        if BING_KEY_JSON.exists():
+            import json as _json
+            data = _json.loads(BING_KEY_JSON.read_text("utf-8"))
+            self._bing_key = data.get("api_key", "").strip()
+            if self._bing_key:
+                return self._bing_key
+        log.warning("Bing API key not found at %s or %s", BING_KEY_FILE, BING_KEY_JSON)
         return None
 
     def _bing_request(self, endpoint: str, params: Dict = None) -> Dict:
