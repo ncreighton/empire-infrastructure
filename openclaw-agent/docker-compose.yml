@@ -1,0 +1,45 @@
+services:
+  openclaw-agent:
+    build: .
+    container_name: openclaw-agent
+    ports:
+      - "8100:8100"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      - OPENCLAW_BRAND_NAME=${OPENCLAW_BRAND_NAME:-OpenClaw}
+      - OPENCLAW_EMAIL=${OPENCLAW_EMAIL:-}
+      - OPENCLAW_USERNAME=${OPENCLAW_USERNAME:-openclaw}
+      - OPENCLAW_WEBSITE=${OPENCLAW_WEBSITE:-}
+      - OPENCLAW_TAGLINE=${OPENCLAW_TAGLINE:-AI agents & automation tools}
+      - OPENCLAW_AVATAR_PATH=${OPENCLAW_AVATAR_PATH:-}
+      - OPENCLAW_BANNER_PATH=${OPENCLAW_BANNER_PATH:-}
+      - OPENCLAW_GITHUB=${OPENCLAW_GITHUB:-}
+      - OPENCLAW_TWITTER=${OPENCLAW_TWITTER:-}
+      - OPENCLAW_LINKEDIN=${OPENCLAW_LINKEDIN:-}
+      - OPENCLAW_YOUTUBE=${OPENCLAW_YOUTUBE:-}
+      - OPENCLAW_SUBSTACK=${OPENCLAW_SUBSTACK:-}
+      - OPENCLAW_SEO_KEYWORDS=${OPENCLAW_SEO_KEYWORDS:-AI,automation,agents,tools,workflows}
+      - OPENCLAW_BRAND_VOICE=${OPENCLAW_BRAND_VOICE:-professional}
+      - OPENCLAW_ENCRYPTION_KEY=${OPENCLAW_ENCRYPTION_KEY:-}
+      - OPENCLAW_IMAP_HOST=${OPENCLAW_IMAP_HOST:-imap.gmail.com}
+      - OPENCLAW_IMAP_PORT=${OPENCLAW_IMAP_PORT:-993}
+      - OPENCLAW_EMAIL_PASSWORD=${OPENCLAW_EMAIL_PASSWORD:-}
+      - OPENCLAW_PROXIES=${OPENCLAW_PROXIES:-}
+      - OPENCLAW_WEBHOOK_URL=${OPENCLAW_WEBHOOK_URL:-}
+      - OPENCLAW_DASHBOARD_URL=${OPENCLAW_DASHBOARD_URL:-}
+      - TWOCAPTCHA_API_KEY=${TWOCAPTCHA_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    networks:
+      - empire_empire
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8100/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  empire_empire:
+    external: true
