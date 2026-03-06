@@ -17,8 +17,6 @@ All planning and diff logic is algorithmic -- zero LLM cost.
 
 from __future__ import annotations
 
-import copy
-import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -27,7 +25,7 @@ from typing import Any
 from openclaw.forge.platform_codex import PlatformCodex
 from openclaw.forge.profile_sentinel import ProfileSentinel
 from openclaw.knowledge.platforms import get_platform
-from openclaw.models import AccountStatus, ProfileContent, SentinelScore
+from openclaw.models import AccountStatus, ProfileContent
 
 logger = logging.getLogger(__name__)
 
@@ -276,23 +274,35 @@ class ProfileSync:
                 try:
                     await browser.launch(platform_id=pid)
 
-                    # Navigate to login / profile edit (platform-specific)
-                    profile_url_template = platform.profile_url_template if platform else ""
-                    account = self.codex.get_account(pid)
-                    username = account.get("username", "") if account else ""
+                    # Build a task description for the browser-use agent
+                    fields_desc = ", ".join(
+                        f"{k}={v!r}" for k, v in changes_for_platform.items()
+                    )
+                    task = (
+                        f"Log in to {platform.name if platform else pid} and "
+                        f"update the profile with these fields: {fields_desc}"
+                    )
 
                     if platform and platform.login_url:
-                        # Restore session or log in
-                        page = await browser.get_page()
+                        # Navigate to login page first
+                        page = browser._page
                         if page:
                             await page.goto(platform.login_url)
 
-                    # Apply each field change
-                    for field_name, new_value in changes_for_platform.items():
-                        logger.info(f"[{pid}] Updating {field_name}...")
-                        # The actual field update would be handled by the
-                        # ExecutorAgent's visual navigation.  Here we record
-                        # the intent for browser-use to act on.
+                    # Use browser-use agent to apply changes via visual navigation
+                    agent = await browser.create_agent(
+                        task=task,
+                        platform_id=pid,
+                        max_steps=20,
+                    )
+                    if agent:
+                        await browser.run_agent(
+                            task=task,
+                            platform_id=pid,
+                            max_steps=20,
+                        )
+
+                    for field_name in changes_for_platform:
                         result.changes_applied.append(field_name)
 
                     result.success = True

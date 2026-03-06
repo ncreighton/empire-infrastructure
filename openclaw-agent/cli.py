@@ -33,12 +33,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import csv
-import io
 import json
 import os
 import sys
-import time
 from datetime import datetime
 from typing import Any
 
@@ -56,10 +53,6 @@ from openclaw.models import (
     AccountStatus,
     PlatformCategory,
     OpenClawResult,
-    SentinelScore,
-    ScoutResult,
-    OracleRecommendation,
-    ProfileContent,
 )
 
 

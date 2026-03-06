@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openclaw-agent"
-version = "2.2.0"
+version = "2.3.0"
 description = "Autonomous web agent for creating and managing profiles across 46 platforms using FORGE + AMPLIFY intelligence."
 readme = "CLAUDE.md"
 requires-python = ">=3.10"

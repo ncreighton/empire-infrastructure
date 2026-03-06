@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
 from datetime import datetime
 from typing import Any, Callable
 
@@ -16,7 +15,6 @@ from openclaw.browser.browser_manager import BrowserManager
 from openclaw.browser.captcha_handler import CaptchaHandler
 from openclaw.browser.stealth import randomize_delay, add_human_delays
 from openclaw.models import (
-    AccountStatus,
     SignupPlan,
     SignupStep,
     StepStatus,
@@ -228,7 +226,7 @@ class ExecutorAgent:
         return result.get("success", False)
 
     async def _step_dismiss_modal(
-        self, step: SignupStep, plan: SignupPlan, sensitive_data: dict = {}
+        self, step: SignupStep, plan: SignupPlan, sensitive_data: dict | None = None
     ) -> bool:
         """Dismiss cookie banners and popups."""
         result = await self.browser.run_agent(

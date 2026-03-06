@@ -38,6 +38,10 @@ class CredentialStore:
         key = Fernet.generate_key()
         self._key_path.parent.mkdir(parents=True, exist_ok=True)
         self._key_path.write_bytes(key)
+        try:
+            self._key_path.chmod(0o600)
+        except OSError:
+            pass  # Windows may not support Unix permissions
         return key
 
     @property

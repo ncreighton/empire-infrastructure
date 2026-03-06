@@ -29,9 +29,7 @@ from openclaw.models import (
     SentinelScore,
     SignupStep,
     StepStatus,
-    StepType,
     CaptchaType,
-    QualityGrade,
 )
 from openclaw.security.credential_store import CredentialStore
 

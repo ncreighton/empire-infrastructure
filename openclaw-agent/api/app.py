@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 from dataclasses import fields
 from datetime import datetime
 from enum import Enum
@@ -18,10 +19,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from openclaw.openclaw_engine import OpenClawEngine
-from openclaw.knowledge.platforms import get_all_platform_ids, get_platform, get_platforms_by_category, PLATFORMS
+from openclaw.knowledge.platforms import get_all_platform_ids, get_platform, get_platforms_by_category
 from openclaw.models import PlatformCategory
 from openclaw.automation.analytics import Analytics
-from openclaw.automation.scheduler import Scheduler, ScheduleStatus
+from openclaw.automation.scheduler import Scheduler
 
 # ─── Setup ────────────────────────────────────────────────────────────────────
 
@@ -31,12 +32,15 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="OpenClaw Agent API",
     description="Autonomous web agent for platform profile creation and management",
-    version="2.2.0",
+    version="2.3.0",
 )
+
+CORS_ORIGINS = os.environ.get("OPENCLAW_CORS_ORIGINS", "").split(",")
+CORS_ORIGINS = [o.strip() for o in CORS_ORIGINS if o.strip()] or ["*"]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -155,7 +159,7 @@ async def signup(req: SignupRequest):
             "platform_id": req.platform_id,
             "error": str(e),
         })
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.post("/signup/batch")
@@ -188,7 +192,7 @@ async def signup_batch(req: BatchSignupRequest):
         })
         return [_to_dict(r) for r in results]
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.post("/signup/retry")
@@ -209,7 +213,7 @@ async def signup_with_retry(req: SignupRetryRequest):
         )
         return _to_dict(result)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 # ─── Platform Endpoints ──────────────────────────────────────────────────────
@@ -255,7 +259,7 @@ async def generate_profile(req: ProfileGenerateRequest):
         content = engine.generate_profile(req.platform_id)
         return _to_dict(content)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/profile/score/{platform_id}")
@@ -297,7 +301,7 @@ async def analyze_platform(platform_id: str):
         result = engine.analyze_platform(platform_id)
         return _to_dict(result)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/prioritize")
@@ -307,7 +311,7 @@ async def prioritize_platforms():
         recs = engine.prioritize()
         return [_to_dict(r) for r in recs]
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 # ─── Dashboard ────────────────────────────────────────────────────────────────
@@ -320,7 +324,7 @@ async def get_dashboard():
         stats = engine.get_dashboard()
         return _to_dict(stats)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 # ─── WebSocket ────────────────────────────────────────────────────────────────
@@ -486,7 +490,7 @@ async def sync_profiles(req: SyncRequest):
         await broadcast_ws({"type": "sync_completed", "data": result})
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.post("/sync/preview")
@@ -498,7 +502,7 @@ async def sync_preview(req: SyncPreviewRequest):
             platform_ids=req.platform_ids,
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/sync/status")
@@ -507,7 +511,7 @@ async def sync_status():
     try:
         return engine.get_sync_status()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 # ─── Analytics Endpoints ─────────────────────────────────────────────────────
@@ -520,7 +524,7 @@ async def get_analytics_report():
         report = analytics.generate_report()
         return _to_dict(report)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/analytics/coverage")
@@ -547,7 +551,7 @@ async def export_data(req: ExportRequest):
             json_data = analytics.export_json()
             return json.loads(json_data)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 # ─── Platform Discovery Endpoints ────────────────────────────────────────────
@@ -558,11 +562,11 @@ async def platforms_by_category(category: str):
     """Get platforms filtered by category."""
     try:
         cat = PlatformCategory(category)
-    except ValueError:
+    except ValueError as e:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid category. Valid: {[c.value for c in PlatformCategory]}",
-        )
+        ) from e
     platforms = get_platforms_by_category(cat)
     return [
         {
@@ -658,7 +662,7 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "openclaw-agent",
-        "version": "2.2.0",
+        "version": "2.3.0",
         "timestamp": datetime.now().isoformat(),
         "platforms_registered": len(get_all_platform_ids()),
         "active_jobs": active_jobs,

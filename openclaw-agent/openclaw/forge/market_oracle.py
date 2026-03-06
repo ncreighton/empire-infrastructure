@@ -21,7 +21,9 @@ from openclaw.models import (
     PlatformCategory,
     SignupComplexity,
 )
-from openclaw.knowledge.platforms import PLATFORMS, get_platform
+from typing import Any
+
+from openclaw.knowledge.platforms import PLATFORMS
 
 
 # ---------------------------------------------------------------------------
@@ -174,8 +176,6 @@ class MarketOracle:
             lists of platform IDs.
         """
         completed = completed or set()
-        from typing import Any
-
         summary: dict[str, dict[str, Any]] = {}
 
         for platform_id, platform in PLATFORMS.items():

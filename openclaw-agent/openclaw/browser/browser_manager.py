@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import inspect
 import logging
 import os
@@ -10,10 +9,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
-from openclaw.browser.stealth import get_browser_config, add_human_delays, randomize_delay
+from openclaw.browser.stealth import get_browser_config, add_human_delays
 from openclaw.browser.session_manager import SessionManager
 from openclaw.browser.proxy_manager import ProxyManager
-from openclaw.models import SignupStep, StepStatus
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +72,8 @@ class BrowserManager:
 
         browser_config = BrowserConfig(**browser_kwargs)
         self._browser = Browser(config=browser_config)
-        self._context = await self._browser.new_context()
+        context = await self._browser.new_context()
+        self._context = context
 
         # Restore session cookies if available
         if platform_id:
@@ -109,7 +108,6 @@ class BrowserManager:
 
         llm = ChatAnthropic(
             model_name="claude-sonnet-4-20250514",
-            timeout=60,
             temperature=0,
         )
 
