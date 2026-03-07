@@ -720,7 +720,7 @@ class MeshDaemon:
                 forge_script = self.hub / "scripts" / "forge.py"
                 if forge_script.exists():
                     log.info("Running drift detection scan...")
-                    self._run_mesh_command([
+                    self.executor._run_mesh_command([
                         sys.executable, str(forge_script),
                         "--drift-report", "--hub", str(self.hub)
                     ])
