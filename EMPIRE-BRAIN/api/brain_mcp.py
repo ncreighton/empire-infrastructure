@@ -455,6 +455,75 @@ def brain_auto_apply(req: AutoApplyRequest):
     return auto.run()
 
 
+# ── Brain-Grimoire Connector Endpoints ────────────────────────────────
+
+@app.get("/tools/brain_grimoire_health")
+def brain_grimoire_health():
+    """Check Grimoire system health from Brain perspective."""
+    from connectors.brain_grimoire import BrainGrimoireConnector
+    return BrainGrimoireConnector().get_grimoire_health()
+
+
+@app.post("/tools/brain_grimoire_recommend")
+def brain_grimoire_recommend(query: str):
+    """Get brain-enhanced grimoire recommendations for a practice query."""
+    from connectors.brain_grimoire import BrainGrimoireConnector
+    return BrainGrimoireConnector().get_enhanced_recommendations(query)
+
+
+@app.get("/tools/brain_grimoire_ideas")
+def brain_grimoire_ideas(count: int = 5):
+    """Get content ideas combining brain insights + grimoire knowledge."""
+    from connectors.brain_grimoire import BrainGrimoireConnector
+    return BrainGrimoireConnector().get_content_ideas(count)
+
+
+@app.get("/tools/brain_grimoire_insights")
+def brain_grimoire_insights():
+    """Get cross-system insights relevant to witchcraft practice."""
+    from connectors.brain_grimoire import BrainGrimoireConnector
+    return BrainGrimoireConnector().get_cross_system_insights()
+
+
+@app.post("/tools/brain_grimoire_sync")
+def brain_grimoire_sync():
+    """Sync grimoire practice stats back to brain as learnings."""
+    from connectors.brain_grimoire import BrainGrimoireConnector
+    return BrainGrimoireConnector().sync_practice_stats()
+
+
+# ── Witchcraft Video Pipeline Endpoints ───────────────────────────────
+
+@app.get("/tools/brain_witchcraft_topics")
+def brain_witchcraft_topics(count: int = 5):
+    """Generate witchcraft video topic ideas based on current moon/sabbat energy."""
+    from connectors.witchcraft_video_pipeline import WitchcraftVideoPipeline
+    return WitchcraftVideoPipeline().generate_topics(count)
+
+
+@app.post("/tools/brain_witchcraft_video")
+def brain_witchcraft_video(topic: str, render: bool = False, publish: bool = False):
+    """Create a witchcraft YouTube Short (dry_run if render=False)."""
+    from connectors.witchcraft_video_pipeline import WitchcraftVideoPipeline
+    return WitchcraftVideoPipeline().create_video(
+        topic, dry_run=not render, render=render, publish=publish,
+    )
+
+
+@app.get("/tools/brain_witchcraft_calendar")
+def brain_witchcraft_calendar(days: int = 14):
+    """Content calendar combining grimoire sabbats + moon phases + VideoForge."""
+    from connectors.witchcraft_video_pipeline import WitchcraftVideoPipeline
+    return WitchcraftVideoPipeline().get_content_calendar(days)
+
+
+@app.get("/tools/brain_witchcraft_costs")
+def brain_witchcraft_costs(count: int = 1):
+    """Estimate costs for producing witchcraft videos."""
+    from connectors.witchcraft_video_pipeline import WitchcraftVideoPipeline
+    return WitchcraftVideoPipeline().estimate_costs(count)
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8200)
