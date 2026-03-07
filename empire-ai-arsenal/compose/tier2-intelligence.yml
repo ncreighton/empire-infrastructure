@@ -29,12 +29,15 @@ services:
     environment:
       OLLAMA_BASE_URL: http://ollama:11434
       OPENAI_API_BASE_URL: http://litellm:4000/v1
-      OPENAI_API_KEY: ${LITELLM_MASTER_KEY}
+      OPENAI_API_KEY: sk-arsenal-fec2dfe2b1256586b84b962c9d25e4e9
       WEBUI_AUTH: 'true'
       ENABLE_RAG_WEB_SEARCH: 'true'
       RAG_WEB_SEARCH_ENGINE: searxng
       SEARXNG_QUERY_URL: http://searxng:8080/search?q=<query>&format=json
       ENABLE_COMMUNITY_SHARING: 'false'
+      WEBUI_NAME: Empire AI Arsenal
+      ENABLE_SIGNUP: 'true'
+      DEFAULT_MODELS: claude-sonnet
     volumes:
     - openwebui_data:/app/backend/data
     ports:
@@ -81,6 +84,8 @@ services:
       N8N_METRICS: 'true'
       EXECUTIONS_DATA_PRUNE: 'true'
       EXECUTIONS_DATA_MAX_AGE: '168'
+      N8N_SECURE_COOKIE: 'false'
+      N8N_PROTOCOL: http
     volumes:
     - n8n_data:/home/node/.n8n
     ports:
@@ -106,16 +111,16 @@ services:
     restart: unless-stopped
     environment:
       MODE: api
-      SECRET_KEY: ${DIFY_SECRET_KEY:-sk-dify-arsenal-secret}
-      DB_USERNAME: ${POSTGRES_USER:-arsenal}
-      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      SECRET_KEY: sk-arsenal-dify-secret-key-2024-very-long-random
+      DB_USERNAME: arsenal
+      DB_PASSWORD: lzRAQWZe4171HmV5ma5B7STL4O0wwCvV
       DB_HOST: postgres
-      DB_PORT: 5432
+      DB_PORT: '5432'
       DB_DATABASE: dify
       REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
-      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD}@redis:6379/1
+      REDIS_PORT: '6379'
+      REDIS_PASSWORD: 1oVTEfVyyNi6dqVKxI5V8QRUt2pByR3z
+      CELERY_BROKER_URL: redis://:1oVTEfVyyNi6dqVKxI5V8QRUt2pByR3z@redis:6379/1
       VECTOR_STORE: qdrant
       QDRANT_URL: http://qdrant:6333
       QDRANT_API_KEY: ${QDRANT_API_KEY}
@@ -123,6 +128,12 @@ services:
       STORAGE_LOCAL_PATH: /app/api/storage
       LOG_LEVEL: INFO
       MIGRATION_ENABLED: 'true'
+      CONSOLE_WEB_URL: http://89.116.29.33:3001
+      CONSOLE_API_URL: http://89.116.29.33:5001
+      SERVICE_API_URL: http://89.116.29.33:5001
+      APP_WEB_URL: http://89.116.29.33:3001
+      REDIS_DB: '1'
+      INIT_PASSWORD: ArsenalAdmin2024!
     volumes:
     - dify_storage:/app/api/storage
     ports:
@@ -140,16 +151,16 @@ services:
     restart: unless-stopped
     environment:
       MODE: worker
-      SECRET_KEY: ${DIFY_SECRET_KEY:-sk-dify-arsenal-secret}
-      DB_USERNAME: ${POSTGRES_USER:-arsenal}
-      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      SECRET_KEY: sk-arsenal-dify-secret-key-2024-very-long-random
+      DB_USERNAME: arsenal
+      DB_PASSWORD: lzRAQWZe4171HmV5ma5B7STL4O0wwCvV
       DB_HOST: postgres
-      DB_PORT: 5432
+      DB_PORT: '5432'
       DB_DATABASE: dify
       REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
-      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD}@redis:6379/1
+      REDIS_PORT: '6379'
+      REDIS_PASSWORD: 1oVTEfVyyNi6dqVKxI5V8QRUt2pByR3z
+      CELERY_BROKER_URL: redis://:1oVTEfVyyNi6dqVKxI5V8QRUt2pByR3z@redis:6379/1
       VECTOR_STORE: qdrant
       QDRANT_URL: http://qdrant:6333
       QDRANT_API_KEY: ${QDRANT_API_KEY}
@@ -157,6 +168,12 @@ services:
       STORAGE_LOCAL_PATH: /app/api/storage
       LOG_LEVEL: INFO
       MIGRATION_ENABLED: 'true'
+      CONSOLE_WEB_URL: http://89.116.29.33:3001
+      CONSOLE_API_URL: http://89.116.29.33:5001
+      SERVICE_API_URL: http://89.116.29.33:5001
+      APP_WEB_URL: http://89.116.29.33:3001
+      REDIS_DB: '1'
+      INIT_PASSWORD: ArsenalAdmin2024!
     volumes:
     - dify_storage:/app/api/storage
     deploy:
@@ -171,8 +188,8 @@ services:
     container_name: arsenal-dify-web
     restart: unless-stopped
     environment:
-      CONSOLE_API_URL: http://dify-api:5001
-      APP_API_URL: http://dify-api:5001
+      CONSOLE_API_URL: http://89.116.29.33:5001
+      APP_API_URL: http://89.116.29.33:5001
     ports:
     - 0.0.0.0:3001:3000
     deploy:

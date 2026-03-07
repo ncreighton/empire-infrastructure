@@ -111,7 +111,23 @@ servers:
     description: "Workflow automation with 400+ integrations"
     endpoint: "http://${VPS_IP}:5678"
     type: http
+    api_key: "${N8N_API_KEY}"
+    api_header: "X-N8N-API-KEY"
     capabilities: [webhook, workflow, schedule, trigger]
+    starter_workflows:
+      arsenal_health_monitor:
+        id: "shQkO6RHdwZHjDh1"
+        active: true
+        trigger: "schedule (every hour)"
+        checks: [litellm, qdrant, ollama, crawl4ai]
+      litellm_content_generator:
+        id: "s6dXPfRYypdgt8Mx"
+        active: false
+        trigger: "webhook: POST /webhook/content-gen"
+      web_scraping_pipeline:
+        id: "Roi7ukTcpQoR64v7"
+        active: false
+        trigger: "webhook: POST /webhook/scrape" 
 
   # ── OBSERVABILITY ──
   langfuse:

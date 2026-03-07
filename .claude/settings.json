@@ -1,0 +1,32 @@
+{
+  "project_name": "ai-design-brain",
+  "description": "AI Design Brain v2.0 — Autonomous visual asset production for 16-site empire + Etsy POD",
+  "model": "claude-opus-4-6",
+  "permissions": {
+    "allow_bash": true,
+    "allow_file_write": true,
+    "allow_file_read": true,
+    "allow_network": true,
+    "allow_mcp": true
+  },
+  "mcpServers": {
+    "figma": {
+      "type": "url",
+      "url": "https://mcp.figma.com/mcp"
+    },
+    "canva": {
+      "type": "url",
+      "url": "https://mcp.canva.com/mcp"
+    }
+  },
+  "env": {
+    "PYTHONPATH": ".",
+    "PROJECT_ROOT": "."
+  },
+  "context": [
+    "CLAUDE.md",
+    "SKILL.md",
+    "systems/FORGE.md",
+    "systems/AMPLIFY.md"
+  ]
+}

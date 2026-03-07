@@ -1,47 +1,103 @@
 {
-  "_comment": "Empire AI Arsenal - MCP Config for Claude Code. Copy relevant entries to your project's .mcp.json",
+  "_comment": "Empire AI Arsenal - MCP Config for Claude Code. Place this in your project root as .mcp.json",
+  "_generated": "2026-03-07",
+  "_n8n_workflows": {
+    "Arsenal Health Monitor": {
+      "id": "shQkO6RHdwZHjDh1",
+      "active": true,
+      "trigger": "schedule (hourly)"
+    },
+    "LiteLLM Content Generator": {
+      "id": "s6dXPfRYypdgt8Mx",
+      "active": false,
+      "trigger": "webhook: /webhook/content-gen"
+    },
+    "Web Scraping Pipeline": {
+      "id": "Roi7ukTcpQoR64v7",
+      "active": false,
+      "trigger": "webhook: /webhook/scrape"
+    }
+  },
+  "_n8n_api": {
+    "base_url": "http://89.116.29.33:5678/api/v1",
+    "api_key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2Y2E1Y2NjNS1lYjEwLTQzYjEtYmYzNy1kM2ZmYzBhNzQ3MDUiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiODI1MTMzZDAtOGRhMi00YmY5LWEzZTUtN2U4YTQ5OTgwYjdhIiwiaWF0IjoxNzcyOTIxOTY5LCJleHAiOjE4MDQ0NTc5Njk1Njd9.F7Wpdj4ZaWS2KGtoUfjahwFLo97UCEEUu1BU-2aej9s",
+    "header": "X-N8N-API-KEY"
+  },
   "mcpServers": {
     "searxng": {
       "command": "npx",
-      "args": ["-y", "mcp-searxng"],
+      "args": [
+        "-y",
+        "mcp-searxng"
+      ],
       "env": {
         "SEARXNG_URL": "http://89.116.29.33:8080"
       }
     },
     "exa": {
       "command": "npx",
-      "args": ["-y", "@anthropic/mcp-exa"],
+      "args": [
+        "-y",
+        "@anthropic/mcp-exa"
+      ],
       "env": {
         "EXA_API_KEY": "${EXA_API_KEY}"
       }
     },
     "context7": {
       "command": "npx",
-      "args": ["-y", "@upstash/context7-mcp"]
+      "args": [
+        "-y",
+        "@upstash/context7-mcp"
+      ]
     },
     "brave-search": {
       "command": "npx",
-      "args": ["-y", "@anthropic/mcp-brave-search"],
+      "args": [
+        "-y",
+        "@anthropic/mcp-brave-search"
+      ],
       "env": {
         "BRAVE_API_KEY": "${BRAVE_SEARCH_API_KEY}"
       }
     },
     "postgres": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-postgres"],
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres"
+      ],
       "env": {
         "POSTGRES_CONNECTION_STRING": "postgresql://arsenal:${POSTGRES_PASSWORD}@89.116.29.33:5432/arsenal"
       }
     },
     "filesystem": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "D:\Claude Code Projects"]
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "D:\\Claude Code Projects"
+      ]
     },
     "memory": {
       "command": "npx",
-      "args": ["-y", "mem0-mcp"],
+      "args": [
+        "-y",
+        "mem0-mcp"
+      ],
       "env": {
         "QDRANT_URL": "http://89.116.29.33:6333"
+      }
+    },
+    "n8n": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@anthropic/mcp-n8n"
+      ],
+      "env": {
+        "N8N_BASE_URL": "http://89.116.29.33:5678",
+        "N8N_API_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2Y2E1Y2NjNS1lYjEwLTQzYjEtYmYzNy1kM2ZmYzBhNzQ3MDUiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiODI1MTMzZDAtOGRhMi00YmY5LWEzZTUtN2U4YTQ5OTgwYjdhIiwiaWF0IjoxNzcyOTIxOTY5LCJleHAiOjE4MDQ0NTc5Njk1Njd9.F7Wpdj4ZaWS2KGtoUfjahwFLo97UCEEUu1BU-2aej9s"
       }
     }
   }
