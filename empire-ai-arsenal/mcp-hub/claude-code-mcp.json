@@ -1,0 +1,48 @@
+{
+  "_comment": "Empire AI Arsenal - MCP Config for Claude Code. Copy relevant entries to your project's .mcp.json",
+  "mcpServers": {
+    "searxng": {
+      "command": "npx",
+      "args": ["-y", "mcp-searxng"],
+      "env": {
+        "SEARXNG_URL": "http://89.116.29.33:8080"
+      }
+    },
+    "exa": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-exa"],
+      "env": {
+        "EXA_API_KEY": "${EXA_API_KEY}"
+      }
+    },
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"]
+    },
+    "brave-search": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-brave-search"],
+      "env": {
+        "BRAVE_API_KEY": "${BRAVE_SEARCH_API_KEY}"
+      }
+    },
+    "postgres": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres"],
+      "env": {
+        "POSTGRES_CONNECTION_STRING": "postgresql://arsenal:${POSTGRES_PASSWORD}@89.116.29.33:5432/arsenal"
+      }
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "D:\Claude Code Projects"]
+    },
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "mem0-mcp"],
+      "env": {
+        "QDRANT_URL": "http://89.116.29.33:6333"
+      }
+    }
+  }
+}

@@ -1,0 +1,71 @@
+services:
+  crawl4ai:
+    image: unclecode/crawl4ai:latest
+    container_name: arsenal-crawl4ai
+    restart: unless-stopped
+    environment:
+      CRAWL4AI_API_TOKEN: ${CRAWL4AI_API_TOKEN}
+      MAX_CONCURRENT_TASKS: 10
+    ports:
+    - 0.0.0.0:11235:11235
+    healthcheck:
+      test:
+      - CMD
+      - curl
+      - -f
+      - http://localhost:11235/health
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+    networks:
+    - arsenal-net
+  searxng:
+    image: searxng/searxng:latest
+    container_name: arsenal-searxng
+    restart: unless-stopped
+    environment:
+      SEARXNG_BASE_URL: https://search.${DOMAIN:-localhost}
+      SEARXNG_SECRET: ${SEARXNG_SECRET:-arsenal-searx-secret-change-me}
+    volumes:
+    - /opt/arsenal/config/searxng/settings.yml:/etc/searxng/settings.yml:ro
+    - searxng_data:/etc/searxng
+    ports:
+    - 0.0.0.0:8080:8080
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+    networks:
+    - arsenal-net
+  browserless:
+    image: ghcr.io/browserless/chromium:latest
+    container_name: arsenal-browserless
+    restart: unless-stopped
+    environment:
+      TOKEN: ${BROWSERLESS_TOKEN:-arsenal-browser-token}
+      CONCURRENT: 10
+      QUEUED: 50
+      TIMEOUT: 60000
+      HEALTH: 'true'
+    ports:
+    - 0.0.0.0:3002:3000
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+    networks:
+    - arsenal-net
+volumes:
+  searxng_data:
+    driver: local
+networks:
+  arsenal-net:
+    external: true

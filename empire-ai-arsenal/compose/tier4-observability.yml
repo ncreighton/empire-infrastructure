@@ -1,0 +1,144 @@
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: arsenal-clickhouse
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: langfuse
+      CLICKHOUSE_USER: langfuse
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clickhouse_secret_2024}
+    volumes:
+    - clickhouse_data:/var/lib/clickhouse
+    - clickhouse_logs:/var/log/clickhouse-server
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test:
+      - CMD
+      - clickhouse-client
+      - --query
+      - SELECT 1
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+    networks:
+    - arsenal-net
+  langfuse:
+    image: langfuse/langfuse:latest
+    container_name: arsenal-langfuse
+    restart: unless-stopped
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-arsenal}:${POSTGRES_PASSWORD}@postgres:5432/langfuse
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
+      CLICKHOUSE_USER: langfuse
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clickhouse_secret_2024}
+      CLICKHOUSE_CLUSTER_ENABLED: 'false'
+      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY}
+      NEXTAUTH_URL: http://${VPS_IP:-localhost}:3004
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXT_AUTH_SECRET:?Set LANGFUSE_NEXT_AUTH_SECRET
+        in .env}
+      SALT: ${LANGFUSE_SALT:?Set LANGFUSE_SALT in .env}
+      LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: 'true'
+      TELEMETRY_ENABLED: 'false'
+      LANGFUSE_INIT_USER_EMAIL: admin@arsenal.local
+      LANGFUSE_INIT_USER_NAME: Nick
+      LANGFUSE_INIT_USER_PASSWORD: ArsenalAdmin2024!
+      LANGFUSE_INIT_ORG_ID: arsenal-org
+      LANGFUSE_INIT_ORG_NAME: Empire Arsenal
+      LANGFUSE_INIT_PROJECT_ID: arsenal-project
+      LANGFUSE_INIT_PROJECT_NAME: Arsenal LLM Tracing
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: pk-lf-arsenal-2024
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: sk-lf-arsenal-2024
+      REDIS_CONNECTION_STRING: redis://:1oVTEfVyyNi6dqVKxI5V8QRUt2pByR3z@redis:6379
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse-events
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: us-east-1
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: arsenal
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: lzRAQWZe4171HmV5ma5B7STL4O0wwCvV
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://arsenal-minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: 'true'
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse-media
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: us-east-1
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: arsenal
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: lzRAQWZe4171HmV5ma5B7STL4O0wwCvV
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://arsenal-minio:9000
+      LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: 'true'
+    ports:
+    - 0.0.0.0:3004:3000
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - wget -q --spider http://$(hostname):3000/api/public/health || exit 1
+      interval: 30s
+      timeout: 15s
+      retries: 10
+      start_period: 120s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+    networks:
+    - arsenal-net
+  uptime-kuma:
+    image: louislam/uptime-kuma:latest
+    container_name: arsenal-uptimekuma
+    restart: unless-stopped
+    volumes:
+    - uptimekuma_data:/app/data
+    ports:
+    - 0.0.0.0:3005:3001
+    healthcheck:
+      test:
+      - CMD
+      - curl
+      - -f
+      - http://localhost:3001/
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+    networks:
+    - arsenal-net
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: arsenal-dozzle
+    restart: unless-stopped
+    environment:
+      DOZZLE_NO_ANALYTICS: 'true'
+    volumes:
+    - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+    - 0.0.0.0:9999:8080
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+    networks:
+    - arsenal-net
+volumes:
+  clickhouse_data:
+    driver: local
+  clickhouse_logs:
+    driver: local
+  uptimekuma_data:
+    driver: local
+networks:
+  arsenal-net:
+    external: true

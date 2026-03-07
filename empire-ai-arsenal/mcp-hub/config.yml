@@ -1,0 +1,174 @@
+# ═══════════════════════════════════════════════════════════════
+# EMPIRE AI ARSENAL — MCP Hub Configuration
+# ═══════════════════════════════════════════════════════════════
+# This defines all MCP servers available to Claude Code projects.
+# Point any project here for instant access to the full arsenal.
+# ═══════════════════════════════════════════════════════════════
+
+hub:
+  name: "Empire Arsenal MCP Hub"
+  version: "1.0.0"
+  vps_ip: "${VPS_IP:-89.116.29.33}"
+
+# ── MCP Server Definitions ──
+servers:
+
+  # ── SEARCH & RESEARCH ──
+  searxng:
+    description: "Free unlimited metasearch engine"
+    endpoint: "http://${VPS_IP}:8080"
+    type: http
+    capabilities: [web_search, news_search, image_search, academic_search]
+    no_api_key: true
+
+  exa:
+    description: "Neural search with content extraction"
+    type: npm
+    package: "@anthropic/mcp-exa"
+    env:
+      EXA_API_KEY: "${EXA_API_KEY}"
+
+  context7:
+    description: "Up-to-date library/framework documentation"
+    type: npm
+    package: "@context7/mcp-server"
+
+  brave-search:
+    description: "Brave web search API"
+    type: npm
+    package: "@anthropic/mcp-brave-search"
+    env:
+      BRAVE_API_KEY: "${BRAVE_SEARCH_API_KEY}"
+
+  # ── MEMORY & KNOWLEDGE ──
+  qdrant:
+    description: "Vector database for semantic search and memory"
+    endpoint: "http://${VPS_IP}:6333"
+    type: http
+    capabilities: [vector_search, collection_management, point_operations]
+
+  memory:
+    description: "Persistent AI memory across sessions"
+    type: npm
+    package: "mem0-mcp"
+    env:
+      QDRANT_URL: "http://${VPS_IP}:6333"
+
+  postgres:
+    description: "SQL database for structured data"
+    type: npm
+    package: "@modelcontextprotocol/server-postgres"
+    env:
+      POSTGRES_CONNECTION_STRING: "postgresql://arsenal:${POSTGRES_PASSWORD}@${VPS_IP}:5432/arsenal"
+
+  # ── WEB CRAWLING & SCRAPING ──
+  crawl4ai:
+    description: "AI-optimized web crawler"
+    endpoint: "http://${VPS_IP}:11235"
+    type: http
+    capabilities: [crawl, extract, screenshot]
+
+  firecrawl:
+    description: "Advanced web scraping with JS rendering"
+    endpoint: "http://${VPS_IP}:3003"
+    type: http
+    capabilities: [scrape, crawl, search, extract]
+
+  browserless:
+    description: "Headless Chrome as a service"
+    endpoint: "http://${VPS_IP}:3002"
+    type: http
+    capabilities: [screenshot, pdf, navigate, evaluate]
+
+  # ── LLM & AI ──
+  litellm:
+    description: "Universal LLM gateway (100+ models)"
+    endpoint: "http://${VPS_IP}:4000/v1"
+    type: openai_compatible
+    api_key: "${LITELLM_MASTER_KEY}"
+    models:
+      - claude-sonnet
+      - claude-haiku
+      - claude-opus
+      - gpt-4o
+      - gpt-4o-mini
+      - deepseek-chat
+      - deepseek-reasoner
+      - gemini-2.0-flash
+      - groq-llama
+      - local-llama
+      - local-deepseek
+      - local-qwen
+
+  ollama:
+    description: "Local LLM runner (zero cost inference)"
+    endpoint: "http://${VPS_IP}:11434"
+    type: http
+    capabilities: [generate, chat, embeddings, pull, list]
+
+  # ── AUTOMATION ──
+  n8n:
+    description: "Workflow automation with 400+ integrations"
+    endpoint: "http://${VPS_IP}:5678"
+    type: http
+    capabilities: [webhook, workflow, schedule, trigger]
+
+  # ── OBSERVABILITY ──
+  langfuse:
+    description: "LLM tracing, cost tracking, prompt management"
+    endpoint: "http://${VPS_IP}:3004"
+    type: http
+
+  # ── DOCUMENT PROCESSING ──
+  docling:
+    description: "Convert PDF/DOCX/PPTX to markdown"
+    endpoint: "http://${VPS_IP}:5002"
+    type: http
+    capabilities: [convert, extract_text, extract_tables]
+
+  # ── VOICE ──
+  speaches:
+    description: "Speech-to-text (Whisper) + text-to-speech (Kokoro)"
+    endpoint: "http://${VPS_IP}:8100"
+    type: openai_compatible
+    capabilities: [transcribe, tts, translate]
+
+  # ── LOCAL TOOLS ──
+  screenpipe:
+    description: "Screen recording + AI-powered search"
+    type: npm
+    package: "screenpipe-mcp"
+    local_only: true
+
+  filesystem:
+    description: "Local file system access"
+    type: npm
+    package: "@modelcontextprotocol/server-filesystem"
+    local_only: true
+
+# ── Usage Patterns ──
+patterns:
+  research:
+    description: "Deep research on any topic"
+    servers: [searxng, exa, brave-search, crawl4ai, firecrawl]
+    flow: "search → crawl → extract → summarize via litellm"
+
+  content_generation:
+    description: "Create content for any site"
+    servers: [litellm, searxng, qdrant, n8n]
+    flow: "research → generate → optimize → publish via n8n webhook"
+
+  rag_pipeline:
+    description: "Build RAG over any document set"
+    servers: [docling, qdrant, litellm, ollama]
+    flow: "convert docs → embed → store in qdrant → query"
+
+  agent_memory:
+    description: "Persistent agent memory across sessions"
+    servers: [memory, qdrant, postgres]
+    flow: "store facts → retrieve context → update knowledge"
+
+  voice_pipeline:
+    description: "Speech-to-text and text-to-speech"
+    servers: [speaches, litellm]
+    flow: "transcribe audio → process with LLM → generate speech"
