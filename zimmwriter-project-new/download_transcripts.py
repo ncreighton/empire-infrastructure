@@ -20,11 +20,12 @@ Usage:
   python download_transcripts.py [--proxy URL] [--delay SECONDS]
 """
 import os
+from pathlib import Path
 import sys
 import time
 import argparse
 
-SUBS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'docs', 'subs')
+SUBS_DIR = Path(os.path.dirname(os.path.abspath(__file__))) / 'docs' / 'subs'
 
 MISSING_VIDEOS = [
     ('ewYaFzWjVn8', 'ZimmWriter Lesson 11 - How to Connect ZimmWriter to Wordpress'),
@@ -93,7 +94,7 @@ def main():
         print(f'[{i+1}/{len(to_download)}] {vid_id} - {title}', flush=True)
         try:
             text = download_with_api(vid_id, title, proxy_url)
-            filepath = os.path.join(SUBS_DIR, f'{vid_id}.txt')
+            filepath = Path(SUBS_DIR) / f'{vid_id}.txt'
             with open(filepath, 'w', encoding='utf-8') as f:
                 f.write(f'# {title}\n\n{text}')
             size = os.path.getsize(filepath)

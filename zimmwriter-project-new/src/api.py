@@ -7,6 +7,7 @@ Docs:  http://localhost:8765/docs
 """
 
 import os
+from pathlib import Path
 import time
 import json
 from typing import Optional, List, Dict, Any
@@ -701,7 +702,7 @@ def link_pack_build(req: LinkPackBuildReq):
 
     builder = LinkPackBuilder()
     pack_text = builder.build_pack(req.domain, site_url, max_posts=req.max_posts)
-    output_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "link_packs")
+    output_dir = Path(os.path.dirname(os.path.dirname(__file__))) / "data" / "link_packs"
     os.makedirs(output_dir, exist_ok=True)
     link_count = len(pack_text.strip().split("\n")) if pack_text else 0
     path = builder.save_pack(req.domain, pack_text, output_dir)
@@ -712,7 +713,7 @@ def link_pack_build_all():
     """Build link packs for all sites that have WordPress settings."""
     builder = LinkPackBuilder()
     results = []
-    output_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "link_packs")
+    output_dir = Path(os.path.dirname(os.path.dirname(__file__))) / "data" / "link_packs"
     os.makedirs(output_dir, exist_ok=True)
     for domain, config in SITE_PRESETS.items():
         wp = config.get("wordpress_settings", {})
@@ -732,13 +733,13 @@ def link_pack_build_all():
 @app.get("/link-packs/list", tags=["Link Packs"])
 def link_pack_list():
     """List all saved link pack files."""
-    pack_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "link_packs")
+    pack_dir = Path(os.path.dirname(os.path.dirname(__file__))) / "data" / "link_packs"
     if not os.path.isdir(pack_dir):
         return {"packs": []}
     packs = []
     for f in os.listdir(pack_dir):
         if f.endswith(".txt"):
-            path = os.path.join(pack_dir, f)
+            path = Path(pack_dir) / f
             with open(path, encoding="utf-8") as fh:
                 line_count = sum(1 for _ in fh)
             packs.append({"name": f, "path": path, "links": line_count})

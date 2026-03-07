@@ -277,7 +277,7 @@ class CampaignEngine:
         safe_domain = plan.domain.replace(".", "-")
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         filename = f"campaign-{safe_domain}-{timestamp}.csv"
-        output_path = os.path.join(output_dir, filename)
+        output_path = Path(output_dir) / filename
 
         csv_path = generate_bulk_csv(
             articles=articles,

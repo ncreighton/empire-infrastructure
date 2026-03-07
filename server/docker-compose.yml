@@ -49,10 +49,56 @@ services:
       - article-audit-data:/app/data
     networks:
       - empire
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+
+  toolbox:
+    build:
+      context: ./toolbox
+      dockerfile: Dockerfile
+    container_name: empire-toolbox
+    restart: unless-stopped
+    ports:
+      - "8300:8300"
+    env_file:
+      - ./.env
+    volumes:
+      - ./config:/app/config:ro
+    networks:
+      - empire
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+
+  openclaw:
+    build:
+      context: ./openclaw
+      dockerfile: Dockerfile
+    container_name: empire-openclaw
+    restart: unless-stopped
+    ports:
+      - "8100:8100"
+    env_file:
+      - ./.env
+    volumes:
+      - openclaw-data:/app/data
+    networks:
+      - empire
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
 
 volumes:
   n8n-data:
   article-audit-data:
+  openclaw-data:
 
 networks:
   empire:

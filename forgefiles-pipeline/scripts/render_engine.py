@@ -1041,7 +1041,7 @@ def frames_to_video(frame_pattern, output_path, fps=None):
     frames = sorted(glob.glob(frame_pattern + "*.png"))
     if not frames:
         # Try with frame numbers already in pattern
-        frames = sorted(glob.glob(os.path.join(frame_dir, "*.png")))
+        frames = sorted(glob.glob(Path(frame_dir) / "*.png"))
     if not frames:
         print(f"[Render] No frames found at {frame_pattern}")
         return None
@@ -1055,7 +1055,7 @@ def frames_to_video(frame_pattern, output_path, fps=None):
     if match:
         digits = len(match.group(1))
         prefix = first[:match.start(1)]
-        ffmpeg_pattern = os.path.join(frame_dir, f"{prefix}%0{digits}d.png")
+        ffmpeg_pattern = Path(frame_dir) / f"{prefix}%0{digits}d.png"
     else:
         print(f"[Render] Cannot determine frame pattern from {first}")
         return None
@@ -1237,7 +1237,7 @@ def render_turntable(obj, output_dir, model_name, platform="wide",
     if quality.get("use_dof"):
         setup_depth_of_field(camera, obj, f_stop=4.0)
 
-    output_path = os.path.join(output_dir, f"{model_name}_turntable_{camera_style}_{platform}")
+    output_path = Path(output_dir) / f"{model_name}_turntable_{camera_style}_{platform}"
     scene.render.filepath = output_path
     bpy.ops.render.render(animation=True)
 
@@ -1283,7 +1283,7 @@ def render_beauty_shots(obj, output_dir, model_name, platform="wide",
         position_camera_spherical(camera, angle["azimuth"], angle["elevation"],
                                   distance, look_at=(0, 0, look_at_z))
 
-        output_path = os.path.join(output_dir, f"{model_name}_beauty_{angle['name']}_{platform}.png")
+        output_path = Path(output_dir) / f"{model_name}_beauty_{angle['name']}_{platform}.png"
         bpy.context.scene.render.filepath = output_path
         bpy.ops.render.render(write_still=True)
         shots.append(output_path)
@@ -1413,7 +1413,7 @@ def render_wireframe_reveal(obj, output_dir, model_name, platform="wide",
     wire_emission.inputs['Strength'].default_value = 0.0
     wire_emission.inputs['Strength'].keyframe_insert(data_path="default_value", frame=cross_end)
 
-    output_path = os.path.join(output_dir, f"{model_name}_wireframe_reveal_{platform}")
+    output_path = Path(output_dir) / f"{model_name}_wireframe_reveal_{platform}"
     scene.render.filepath = output_path
     bpy.ops.render.render(animation=True)
 
@@ -1456,7 +1456,7 @@ def render_material_variants(obj, output_dir, model_name, platform="wide",
             continue
 
         apply_material(obj, mat_name)
-        output_path = os.path.join(output_dir, f"{model_name}_material_{mat_name}_{platform}.png")
+        output_path = Path(output_dir) / f"{model_name}_material_{mat_name}_{platform}.png"
         bpy.context.scene.render.filepath = output_path
         bpy.ops.render.render(write_still=True)
         renders.append(output_path)
@@ -1504,7 +1504,7 @@ def render_dramatic_reveal(obj, output_dir, model_name, platform="wide",
     if quality.get("use_dof"):
         setup_depth_of_field(camera, obj, f_stop=2.0)
 
-    output_path = os.path.join(output_dir, f"{model_name}_dramatic_{platform}")
+    output_path = Path(output_dir) / f"{model_name}_dramatic_{platform}"
     scene.render.filepath = output_path
     bpy.ops.render.render(animation=True)
 
@@ -1578,7 +1578,7 @@ def render_close_up(obj, output_dir, model_name, platform="wide",
     camera.keyframe_insert(data_path="rotation_euler", frame=total_frames)
     apply_easing(camera, "ease_in_out")
 
-    output_path = os.path.join(output_dir, f"{model_name}_close_up_{platform}")
+    output_path = Path(output_dir) / f"{model_name}_close_up_{platform}"
     scene.render.filepath = output_path
     bpy.ops.render.render(animation=True)
 
@@ -1705,7 +1705,7 @@ def render_material_carousel(obj, output_dir, model_name, platform="wide",
     empty.keyframe_insert(data_path="rotation_euler", frame=total_frames)
     apply_easing(empty, "ease_in_out")
 
-    output_path = os.path.join(output_dir, f"{model_name}_material_carousel_{platform}")
+    output_path = Path(output_dir) / f"{model_name}_material_carousel_{platform}"
     scene.render.filepath = output_path
     bpy.ops.render.render(animation=True)
 
@@ -1761,7 +1761,7 @@ def render_beauty_hero(obj, output_dir, model_name, platform="wide",
     camera.keyframe_insert(data_path="rotation_euler", frame=total_frames)
     apply_easing(camera, "ease_in_out")
 
-    output_path = os.path.join(output_dir, f"{model_name}_beauty_hero_{platform}")
+    output_path = Path(output_dir) / f"{model_name}_beauty_hero_{platform}"
     scene.render.filepath = output_path
     bpy.ops.render.render(animation=True)
 
@@ -1816,7 +1816,7 @@ def render_shot_sequence(stl_path, output_dir, sequence_name, model_name=None,
         obj = center_and_normalize(obj)
 
         filename = shot_to_filename(i, shot)
-        shot_dir = os.path.join(output_dir, "shots")
+        shot_dir = Path(output_dir) / "shots"
         os.makedirs(shot_dir, exist_ok=True)
 
         output_path = None
@@ -1947,7 +1947,7 @@ def render_technical_views(obj, output_dir, model_name, platform="square",
                 cam_obj.location.z = half_z
             cam_obj.rotation_euler = Euler(view["rotation"])
 
-        output_path = os.path.join(output_dir, f"{model_name}_technical_{view['name']}_{platform}.png")
+        output_path = Path(output_dir) / f"{model_name}_technical_{view['name']}_{platform}.png"
         bpy.context.scene.render.filepath = output_path
         bpy.ops.render.render(write_still=True)
         renders.append(output_path)
@@ -1974,7 +1974,7 @@ def process_single_model(stl_path, output_dir, mode="turntable", platforms=None,
     # Resolve to absolute path — Blender resolves relative paths from its own
     # CWD (often C:\), not from the Python script's working directory
     output_dir = os.path.abspath(output_dir)
-    model_output = os.path.join(output_dir, model_name)
+    model_output = Path(output_dir) / model_name
     os.makedirs(model_output, exist_ok=True)
 
     clean_scene()
@@ -2028,7 +2028,7 @@ def process_single_model(stl_path, output_dir, mode="turntable", platforms=None,
     results = {"model": model_name, "dimensions": dims, "renders": {}, "mesh_issues": issues}
 
     for platform in platforms:
-        platform_dir = os.path.join(model_output, platform)
+        platform_dir = Path(model_output) / platform
         os.makedirs(platform_dir, exist_ok=True)
 
         if mode in ("turntable", "all"):
@@ -2110,7 +2110,7 @@ def process_single_model(stl_path, output_dir, mode="turntable", platforms=None,
             )
 
     # Save render manifest
-    manifest_path = os.path.join(model_output, "render_manifest.json")
+    manifest_path = Path(model_output) / "render_manifest.json"
     with open(manifest_path, 'w') as f:
         json.dump(results, f, indent=2, default=str)
 
@@ -2136,7 +2136,7 @@ def batch_process(input_dir, output_dir, mode="turntable", platforms=None,
         if result:
             all_results.append(result)
 
-    manifest = os.path.join(output_dir, "batch_manifest.json")
+    manifest = Path(output_dir) / "batch_manifest.json"
     with open(manifest, 'w') as f:
         json.dump(all_results, f, indent=2, default=str)
 

@@ -7,6 +7,7 @@ Produces: output/zimmwriter_control_map.json, output/zimmwriter_cheatsheet.txt
 import json
 import sys
 import os
+from pathlib import Path
 from datetime import datetime
 from io import StringIO
 
@@ -19,7 +20,7 @@ except ImportError:
     print("ERROR: pip install pywinauto")
     sys.exit(1)
 
-OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
+OUTPUT_DIR = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) / "output"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
@@ -157,19 +158,19 @@ def discover():
             print(f'  ✏️  "{tf["name"]}" | auto_id: {tf["auto_id"]}')
 
     # Save files
-    map_file = os.path.join(OUTPUT_DIR, "zimmwriter_control_map.json")
+    map_file = Path(OUTPUT_DIR) / "zimmwriter_control_map.json"
     with open(map_file, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2, ensure_ascii=False, default=str)
     print(f"\n✅ Control map: {map_file}")
 
-    tree_file = os.path.join(OUTPUT_DIR, "zimmwriter_control_tree.txt")
+    tree_file = Path(OUTPUT_DIR) / "zimmwriter_control_tree.txt"
     buf = StringIO()
     window.print_control_identifiers(depth=10, filename=buf)
     with open(tree_file, "w", encoding="utf-8") as f:
         f.write(buf.getvalue())
     print(f"✅ Control tree: {tree_file}")
 
-    cheat_file = os.path.join(OUTPUT_DIR, "zimmwriter_cheatsheet.txt")
+    cheat_file = Path(OUTPUT_DIR) / "zimmwriter_cheatsheet.txt"
     with open(cheat_file, "w", encoding="utf-8") as f:
         f.write("ZIMMWRITER CONTROL CHEATSHEET\n" + "=" * 50 + "\n\n")
         f.write("BUTTONS:\n")

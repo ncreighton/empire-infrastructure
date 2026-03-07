@@ -7,6 +7,7 @@ ZimmWriter validates the full connection before saving.
 import json
 import sys
 import os
+from pathlib import Path
 import subprocess
 import time
 import ctypes
@@ -32,7 +33,7 @@ except ImportError:
     pyautogui = None
 
 SITES_JSON = r"D:\Claude Code Projects\config\sites.json"
-OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
+OUTPUT_DIR = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) / "output"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Auto IDs
@@ -211,7 +212,7 @@ def take_screenshot(window, name):
         window.set_focus()
         time.sleep(0.3)
         img = window.capture_as_image()
-        path = os.path.join(OUTPUT_DIR, f"{name}.png")
+        path = Path(OUTPUT_DIR) / f"{name}.png"
         img.save(path)
         print(f"  Screenshot: {path}")
         return path
@@ -220,7 +221,7 @@ def take_screenshot(window, name):
             try:
                 rect = window.rectangle()
                 ss = pyautogui.screenshot(region=(rect.left, rect.top, rect.width(), rect.height()))
-                path = os.path.join(OUTPUT_DIR, f"{name}.png")
+                path = Path(OUTPUT_DIR) / f"{name}.png"
                 ss.save(path)
                 return path
             except Exception:

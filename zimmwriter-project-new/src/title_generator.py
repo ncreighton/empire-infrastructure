@@ -445,7 +445,7 @@ class TitleGenerator:
             time.sleep(2)
 
         # Save results
-        output_path = os.path.join(output_dir, "generated_titles.json")
+        output_path = Path(output_dir) / "generated_titles.json"
         serializable = {}
         for domain, result in results.items():
             serializable[domain] = {

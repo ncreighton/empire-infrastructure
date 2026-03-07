@@ -5,6 +5,7 @@ Framework-aware prompting with deep voice cards, TTS optimization, and post-proc
 """
 
 import os
+from pathlib import Path
 import json
 import logging
 import re
@@ -195,13 +196,13 @@ def _get_api_key() -> str:
     if key:
         return key
     key = _load_key_from_file(
-        os.path.join(os.path.dirname(__file__), "..", "..", "configs", "api_keys.env"),
+        Path(os.path.dirname(__file__)) / ".." / ".." / "configs" / "api_keys.env",
         "OPENROUTER_API_KEY",
     )
     if key:
         return key
     key = _load_key_from_file(
-        os.path.join(os.path.dirname(__file__), "..", "..", "..", "config", ".env"),
+        Path(os.path.dirname(__file__)) / ".." / ".." / ".." / "config" / ".env",
         "OPENROUTER_API_KEY",
     )
     return key
@@ -213,13 +214,13 @@ def _get_anthropic_key() -> str:
     if key:
         return key
     key = _load_key_from_file(
-        os.path.join(os.path.dirname(__file__), "..", "..", "configs", "api_keys.env"),
+        Path(os.path.dirname(__file__)) / ".." / ".." / "configs" / "api_keys.env",
         "ANTHROPIC_API_KEY",
     )
     if key:
         return key
     key = _load_key_from_file(
-        os.path.join(os.path.dirname(__file__), "..", "..", "..", "config", ".env"),
+        Path(os.path.dirname(__file__)) / ".." / ".." / ".." / "config" / ".env",
         "ANTHROPIC_API_KEY",
     )
     return key

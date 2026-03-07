@@ -179,7 +179,7 @@ def generate_thumbnail_variants(image_path, output_dir, title, subtitle=None,
     results = []
     for i, style in enumerate(styles):
         stem = Path(image_path).stem
-        output_path = os.path.join(output_dir, f"{stem}_thumb_{platform}_v{i + 1}.jpg")
+        output_path = Path(output_dir) / f"{stem}_thumb_{platform}_v{i + 1}.jpg"
         result = generate_thumbnail(
             image_path, output_path, title, subtitle, platform, style, font_path
         )
@@ -201,7 +201,7 @@ def generate_instagram_carousel(image_paths, output_dir, model_name, max_images=
     results = []
 
     for i, img_path in enumerate(image_paths[:max_images]):
-        output_path = os.path.join(output_dir, f"{model_name}_carousel_{i + 1:02d}.jpg")
+        output_path = Path(output_dir) / f"{model_name}_carousel_{i + 1:02d}.jpg"
         cmd = [
             "ffmpeg", "-y",
             "-i", str(img_path),

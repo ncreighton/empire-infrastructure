@@ -47,7 +47,7 @@ class BrowserManager:
     async def launch(self, platform_id: str | None = None) -> None:
         """Launch browser with stealth config, proxy rotation, and session restore."""
         try:
-            from browser_use import Browser, BrowserConfig
+            from browser_use import Browser
         except ImportError:
             raise ImportError(
                 "browser-use is required: pip install browser-use"
@@ -56,7 +56,7 @@ class BrowserManager:
         config_dict = get_browser_config(self.headless)
         browser_kwargs: dict[str, Any] = {
             "headless": config_dict["headless"],
-            "extra_chromium_args": config_dict["args"],
+            "args": config_dict["args"],
         }
 
         # Apply proxy if available
@@ -70,17 +70,21 @@ class BrowserManager:
                     f"(reliability={proxy.reliability_score:.2f})"
                 )
 
-        browser_config = BrowserConfig(**browser_kwargs)
-        self._browser = Browser(config=browser_config)
-        context = await self._browser.new_context()
-        self._context = context
+        self._browser = Browser(**browser_kwargs)
+        await self._browser.start()
 
         # Restore session cookies if available
         if platform_id:
             state = self.session_manager.load_session(platform_id)
-            if state and self._context:
-                await self._context.add_cookies(state.get("cookies", []))
-                logger.info(f"Restored session for {platform_id}")
+            if state:
+                try:
+                    page = self._browser.get_current_page()
+                    if page:
+                        context = page.context
+                        await context.add_cookies(state.get("cookies", []))
+                        logger.info(f"Restored session for {platform_id}")
+                except Exception as e:
+                    logger.debug(f"Could not restore session for {platform_id}: {e}")
 
     async def create_agent(
         self,
@@ -197,18 +201,24 @@ class BrowserManager:
 
     async def save_session(self, platform_id: str) -> None:
         """Save current browser session (cookies + storage) for a platform."""
-        if self._context:
-            cookies = await self._context.cookies()
-            self.session_manager.save_session(platform_id, {
-                "cookies": cookies,
-                "saved_at": datetime.now().isoformat(),
-            })
-            logger.info(f"Session saved for {platform_id}")
+        if self._browser:
+            try:
+                cookies = await self._browser.cookies()
+                self.session_manager.save_session(platform_id, {
+                    "cookies": cookies,
+                    "saved_at": datetime.now().isoformat(),
+                })
+                logger.info(f"Session saved for {platform_id}")
+            except Exception as e:
+                logger.debug(f"Could not save session for {platform_id}: {e}")
 
     async def close(self) -> None:
         """Close browser and clean up."""
         if self._browser:
-            await self._browser.close()
+            try:
+                await self._browser.stop()
+            except Exception:
+                pass
             self._browser = None
             self._context = None
             self._page = None

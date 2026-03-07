@@ -10,6 +10,7 @@ Usage:
 
 import sys
 import os
+from pathlib import Path
 import json
 import time
 
@@ -40,9 +41,9 @@ def main():
     controls = zw.dump_controls()
 
     # Save to file
-    output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
+    output_dir = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) / "output"
     os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, "link_toolbox_control_map.json")
+    output_path = Path(output_dir) / "link_toolbox_control_map.json"
 
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(controls, f, indent=2, default=str)

@@ -7,6 +7,7 @@ Provider priority by niche category:
 """
 
 import os
+from pathlib import Path
 import uuid
 import logging
 import requests
@@ -140,12 +141,12 @@ def _get_pexels_key() -> str:
     key = os.environ.get("PEXELS_API_KEY", "")
     if not key:
         key = _load_key_from_file(
-            os.path.join(os.path.dirname(__file__), "..", "..", "configs", "api_keys.env"),
+            Path(os.path.dirname(__file__)) / ".." / ".." / "configs" / "api_keys.env",
             "PEXELS_API_KEY",
         )
     if not key:
         key = _load_key_from_file(
-            os.path.join(os.path.dirname(__file__), "..", "..", "..", "config", ".env"),
+            Path(os.path.dirname(__file__)) / ".." / ".." / ".." / "config" / ".env",
             "PEXELS_API_KEY",
         )
     return key
@@ -155,12 +156,12 @@ def _get_fal_key() -> str:
     key = os.environ.get("FAL_KEY", "")
     if not key:
         key = _load_key_from_file(
-            os.path.join(os.path.dirname(__file__), "..", "..", "configs", "api_keys.env"),
+            Path(os.path.dirname(__file__)) / ".." / ".." / "configs" / "api_keys.env",
             "FAL_KEY",
         )
     if not key:
         key = _load_key_from_file(
-            os.path.join(os.path.dirname(__file__), "..", "..", "..", "config", ".env"),
+            Path(os.path.dirname(__file__)) / ".." / ".." / ".." / "config" / ".env",
             "FAL_KEY",
         )
     return key
@@ -171,12 +172,12 @@ def _get_runware_key() -> str:
     key = os.environ.get("RUNWARE_API_KEY", "")
     if not key:
         key = _load_key_from_file(
-            os.path.join(os.path.dirname(__file__), "..", "..", "configs", "api_keys.env"),
+            Path(os.path.dirname(__file__)) / ".." / ".." / "configs" / "api_keys.env",
             "RUNWARE_API_KEY",
         )
     if not key:
         key = _load_key_from_file(
-            os.path.join(os.path.dirname(__file__), "..", "..", "..", "config", ".env"),
+            Path(os.path.dirname(__file__)) / ".." / ".." / ".." / "config" / ".env",
             "RUNWARE_API_KEY",
         )
     return key
@@ -187,12 +188,12 @@ def _get_openai_key() -> str:
     key = os.environ.get("OPENAI_API_KEY", "")
     if not key:
         key = _load_key_from_file(
-            os.path.join(os.path.dirname(__file__), "..", "..", "configs", "api_keys.env"),
+            Path(os.path.dirname(__file__)) / ".." / ".." / "configs" / "api_keys.env",
             "OPENAI_API_KEY",
         )
     if not key:
         key = _load_key_from_file(
-            os.path.join(os.path.dirname(__file__), "..", "..", "..", "config", ".env"),
+            Path(os.path.dirname(__file__)) / ".." / ".." / ".." / "config" / ".env",
             "OPENAI_API_KEY",
         )
     return key
@@ -313,7 +314,7 @@ class VisualEngine:
             import tempfile as _tf
             import os as _os
             ext = ".jpg" if b"JFIF" in image_data[:20] else ".png"
-            tmp_path = _os.path.join(_tf.gettempdir(), f"vf_rehost{ext}")
+            tmp_path = Path(_tf.gettempdir()) / f"vf_rehost{ext}"
             with open(tmp_path, "wb") as f:
                 f.write(image_data)
             with open(tmp_path, "rb") as f:

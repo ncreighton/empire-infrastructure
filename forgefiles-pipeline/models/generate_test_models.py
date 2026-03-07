@@ -12,6 +12,7 @@ Uses only stdlib (struct, math). Writes proper binary STL format.
 import struct
 import math
 import os
+from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # STL helpers
@@ -952,7 +953,7 @@ def main():
     print("=" * 60)
 
     for filename, gen_func, label in models:
-        filepath = os.path.join(script_dir, filename)
+        filepath = Path(script_dir) / filename
         print(f"\nGenerating {label}...")
         triangles = gen_func()
         write_stl(filepath, triangles)

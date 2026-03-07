@@ -9,6 +9,7 @@ Usage:
 """
 import sys
 import os
+from pathlib import Path
 import json
 import time
 import ctypes
@@ -18,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.controller import ZimmWriterController
 
-OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "output")
+OUTPUT_DIR = Path(os.path.dirname(os.path.dirname(__file__))) / "output"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Win32 message constants
@@ -341,7 +342,7 @@ def main():
         time.sleep(1)
 
     # Save results
-    output_path = os.path.join(OUTPUT_DIR, "feature_window_controls.json")
+    output_path = Path(OUTPUT_DIR) / "feature_window_controls.json"
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
     print(f"\n\nResults saved to: {output_path}")

@@ -2,6 +2,7 @@
 import subprocess
 import time
 import os
+from pathlib import Path
 from pywinauto import Application
 
 OUTPUT_DIR = r"D:\Claude Code Projects\zimmwriter-project-new\output"
@@ -40,7 +41,7 @@ if wp_upload:
     # Screenshot
     try:
         img = wp_upload.wrapper_object().capture_as_image()
-        img.save(os.path.join(OUTPUT_DIR, "wp_uploads_window.png"))
+        img.save(Path(OUTPUT_DIR) / "wp_uploads_window.png")
         print("Screenshot saved", flush=True)
     except Exception as e:
         print(f"Screenshot error: {e}", flush=True)

@@ -17,6 +17,7 @@ REQUIREMENTS:
 
 import sys
 import os
+from pathlib import Path
 import json
 import time
 import ctypes
@@ -278,7 +279,7 @@ def main():
         time.sleep(0.5)
 
     # Save results
-    output_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "output")
+    output_dir = Path(os.path.dirname(os.path.dirname(__file__))) / "output"
     os.makedirs(output_dir, exist_ok=True)
 
     if args.screen or args.menu_only:
@@ -286,7 +287,7 @@ def main():
     else:
         output_name = "all_screens_control_map.json"
 
-    output_path = os.path.join(output_dir, output_name)
+    output_path = Path(output_dir) / output_name
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(all_results, f, indent=2, default=str)
 

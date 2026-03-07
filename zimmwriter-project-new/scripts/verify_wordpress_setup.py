@@ -5,6 +5,7 @@ and taking a screenshot of the current state.
 
 import sys
 import os
+from pathlib import Path
 import subprocess
 import time
 import ctypes
@@ -18,7 +19,7 @@ except ImportError:
     print("ERROR: pip install pywinauto")
     sys.exit(1)
 
-OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
+OUTPUT_DIR = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) / "output"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
@@ -95,7 +96,7 @@ def main():
     # Take screenshot
     try:
         img = window.capture_as_image()
-        ss_path = os.path.join(OUTPUT_DIR, "wordpress_settings_screenshot.png")
+        ss_path = Path(OUTPUT_DIR) / "wordpress_settings_screenshot.png"
         img.save(ss_path)
         print(f"\nScreenshot saved: {ss_path}")
     except Exception as e:

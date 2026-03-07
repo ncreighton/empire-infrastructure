@@ -549,7 +549,7 @@ def compose_full_video(input_path, output_dir, model_name, platform,
 
     def temp_path(suffix):
         step[0] += 1
-        return os.path.join(output_dir, f"_temp_{model_name}_{step[0]}_{suffix}.mp4")
+        return Path(output_dir) / f"_temp_{model_name}_{step[0]}_{suffix}.mp4"
 
     # Step 1: Resize for platform
     current = resize_for_platform(current, temp_path("resize"), platform)
@@ -577,7 +577,7 @@ def compose_full_video(input_path, output_dir, model_name, platform,
         current = add_audio(current, temp_path("audio"), music_path)
 
     # Step 7: Final encode with platform-optimized profile
-    final_path = os.path.join(output_dir, f"{model_name}_{platform}_final.mp4")
+    final_path = Path(output_dir) / f"{model_name}_{platform}_final.mp4"
     cmd = [
         "ffmpeg", "-y",
         "-i", current,
@@ -598,7 +598,7 @@ def compose_full_video(input_path, output_dir, model_name, platform,
     # Step 8: GIF export (for Reddit and general use)
     gif_path = None
     if platform in ("reddit",):
-        gif_output = os.path.join(output_dir, f"{model_name}_{platform}.gif")
+        gif_output = Path(output_dir) / f"{model_name}_{platform}.gif"
         gif_path = export_gif(str(input_path), gif_output)
 
     # Cleanup temp files
@@ -637,7 +637,7 @@ def compose_all_platforms(input_path, output_dir, model_name,
         "generated": datetime.now().isoformat(),
         "outputs": results
     }
-    manifest_path = os.path.join(output_dir, f"{model_name}_distribution_manifest.json")
+    manifest_path = Path(output_dir) / f"{model_name}_distribution_manifest.json"
     with open(manifest_path, 'w') as f:
         json.dump(manifest, f, indent=2)
 

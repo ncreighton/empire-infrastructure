@@ -7,6 +7,7 @@ Scene-aware animation intensity and niche-specific animation preferences.
 """
 
 import os
+from pathlib import Path
 import sys
 import json
 import time
@@ -486,9 +487,7 @@ TRANSITION_MAP = {
 def _get_api_key() -> str:
     key = os.environ.get("CREATOMATE_API_KEY", "")
     if not key:
-        env_path = os.path.join(
-            os.path.dirname(__file__), "..", "..", "configs", "api_keys.env"
-        )
+        env_path = Path(os.path.dirname(__file__)) / ".." / ".." / "configs" / "api_keys.env"
         if os.path.exists(env_path):
             with open(env_path) as f:
                 for line in f:
@@ -1230,9 +1229,7 @@ class RenderEngine:
         """
         import tempfile
 
-        cache_path = os.path.join(
-            os.path.dirname(__file__), "..", "..", "data", "music_cache.json"
-        )
+        cache_path = Path(os.path.dirname(__file__)) / ".." / ".." / "data" / "music_cache.json"
 
         # Check cache
         cache = {}
@@ -1257,7 +1254,7 @@ class RenderEngine:
             response.raise_for_status()
 
             # Save to temp file
-            tmp_path = os.path.join(tempfile.gettempdir(), f"videoforge_music_{mood_key}.mp3")
+            tmp_path = Path(tempfile.gettempdir()) / f"videoforge_music_{mood_key}.mp3"
             with open(tmp_path, "wb") as f:
                 f.write(response.content)
 

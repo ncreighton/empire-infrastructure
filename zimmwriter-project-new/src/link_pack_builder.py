@@ -16,6 +16,7 @@ import argparse
 import logging
 import math
 import os
+from pathlib import Path
 import re
 from typing import Dict, List, Optional
 
@@ -243,7 +244,7 @@ class LinkPackBuilder:
         # Filename: domain_internal.txt (replace dots/hyphens for cleanliness)
         safe_name = domain.replace(".", "_").replace("-", "_")
         filename = f"{safe_name}_internal.txt"
-        filepath = os.path.join(output_dir, filename)
+        filepath = Path(output_dir) / filename
 
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(pack_text)

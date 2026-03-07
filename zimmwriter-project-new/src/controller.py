@@ -347,8 +347,8 @@ class ZimmWriterController:
 
         # Launch via AutoIt3.exe
         zimm_dir = self.exe_path or self.ZIMMWRITER_DIR
-        autoit_exe = os.path.join(zimm_dir, "bin", "util", "AutoIt3.exe")
-        script_file = os.path.join(zimm_dir, "zimmwriter.a3x")
+        autoit_exe = Path(zimm_dir) / "bin" / "util" / "AutoIt3.exe"
+        script_file = Path(zimm_dir) / "zimmwriter.a3x"
 
         if not os.path.exists(autoit_exe):
             raise FileNotFoundError(f"AutoIt3.exe not found at: {autoit_exe}")

@@ -18,6 +18,7 @@ REQUIREMENTS:
 
 import sys
 import os
+from pathlib import Path
 import json
 import time
 import ctypes
@@ -250,9 +251,9 @@ def main():
         time.sleep(1)
 
     # Save results
-    output_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "output")
+    output_dir = Path(os.path.dirname(os.path.dirname(__file__))) / "output"
     os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, "feature_window_controls.json")
+    output_path = Path(output_dir) / "feature_window_controls.json"
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(all_results, f, indent=2, default=str)
 

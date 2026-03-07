@@ -24,6 +24,7 @@ Usage:
 
 import sys
 import os
+from pathlib import Path
 import json
 import time
 import argparse
@@ -37,7 +38,7 @@ except ImportError:
     print("ERROR: pip install requests")
     sys.exit(1)
 
-OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
+OUTPUT_DIR = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) / "output"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
@@ -305,7 +306,7 @@ def run_all_tests(base_url: str):
     print("=" * 70)
 
     # Save results
-    results_path = os.path.join(OUTPUT_DIR, "api_test_results.json")
+    results_path = Path(OUTPUT_DIR) / "api_test_results.json"
     with open(results_path, "w") as f:
         json.dump({
             "timestamp": datetime.now().isoformat(),

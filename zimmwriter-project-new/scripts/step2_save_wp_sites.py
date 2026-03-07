@@ -4,6 +4,7 @@ import subprocess
 import time
 import sys
 import os
+from pathlib import Path
 import ctypes
 from ctypes import wintypes
 
@@ -12,7 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from pywinauto import Application, Desktop
 
 SITES_JSON = r"D:\Claude Code Projects\config\sites.json"
-OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
+OUTPUT_DIR = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) / "output"
 
 
 def load_credentials():
@@ -208,7 +209,7 @@ def main():
     # Screenshot
     try:
         img = window.capture_as_image()
-        img.save(os.path.join(OUTPUT_DIR, "wp_final_result.png"))
+        img.save(Path(OUTPUT_DIR) / "wp_final_result.png")
         print(f"Screenshot: {OUTPUT_DIR}/wp_final_result.png")
     except Exception:
         pass

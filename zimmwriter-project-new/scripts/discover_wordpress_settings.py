@@ -6,6 +6,7 @@ Then map the WordPress settings sub-screen.
 import json
 import sys
 import os
+from pathlib import Path
 import subprocess
 import time
 from datetime import datetime
@@ -18,7 +19,7 @@ except ImportError:
     print("ERROR: pip install pywinauto")
     sys.exit(1)
 
-OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
+OUTPUT_DIR = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) / "output"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
@@ -166,13 +167,13 @@ def discover_wordpress_screen(window):
         print(f"  {cat:15s}: {len(visible)} visible / {len(report[cat])} total")
 
     # Save
-    map_file = os.path.join(OUTPUT_DIR, "zimmwriter_wordpress_settings.json")
+    map_file = Path(OUTPUT_DIR) / "zimmwriter_wordpress_settings.json"
     with open(map_file, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2, ensure_ascii=False, default=str)
     print(f"\nSaved: {map_file}")
 
     # Save control tree to file
-    tree_file = os.path.join(OUTPUT_DIR, "zimmwriter_wordpress_tree.txt")
+    tree_file = Path(OUTPUT_DIR) / "zimmwriter_wordpress_tree.txt"
     try:
         window.print_control_identifiers(depth=10, filename=tree_file)
         print(f"Saved: {tree_file}")

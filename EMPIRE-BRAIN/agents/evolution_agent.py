@@ -260,6 +260,14 @@ class EvolutionEngine:
                     lambda: api_scout.full_discovery_pass(evolution_id=evo_id), "APIScout"
                 )
 
+            # ToolboxScout — discover tools, MCP servers, integrations
+            BrainToolboxScout = _safe_import("forge.brain_toolbox_scout", "BrainToolboxScout")
+            if BrainToolboxScout:
+                toolbox_scout = BrainToolboxScout(self.db)
+                results["toolbox"], timings["toolbox_scout"] = _timed(
+                    lambda: toolbox_scout.discover_all(evolution_id=evo_id), "ToolboxScout"
+                )
+
             # IdeaEngine — cross-pollination + new project ideas (deeper analysis)
             BrainIdeaEngine = _safe_import("forge.brain_idea_engine", "BrainIdeaEngine")
             if BrainIdeaEngine:
@@ -365,6 +373,14 @@ class EvolutionEngine:
                 api_scout = BrainAPIScout(self.db)
                 results["discoveries"], timings["api_scout"] = _timed(
                     lambda: api_scout.full_discovery_pass(evolution_id=evo_id), "APIScout"
+                )
+
+            # 5b. ToolboxScout — discover tools + MCP servers
+            BrainToolboxScout = _safe_import("forge.brain_toolbox_scout", "BrainToolboxScout")
+            if BrainToolboxScout:
+                toolbox_scout = BrainToolboxScout(self.db)
+                results["toolbox"], timings["toolbox_scout"] = _timed(
+                    lambda: toolbox_scout.discover_all(evolution_id=evo_id), "ToolboxScout"
                 )
 
             # 6. IdeaEngine — full ideation

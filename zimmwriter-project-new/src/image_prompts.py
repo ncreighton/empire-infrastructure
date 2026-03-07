@@ -160,7 +160,7 @@ _DOMAIN_STYLE_MAP = {
     "family-flourish.com": "family",
     "mythicalarchives.com": "mythology",
     "wearablegearreviews.com": "wearable_reviews",
-    "pulsegearreviews.com": "tactical_reviews",
+    "pulsegearreviews.com": "wearable_reviews",
     "bulletjournals.net": "bullet_journal",
 }
 

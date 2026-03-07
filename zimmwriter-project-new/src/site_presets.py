@@ -944,7 +944,7 @@ SITE_PRESETS: Dict[str, Dict[str, Any]] = {
 
     "pulsegearreviews.com": {
         "domain": "pulsegearreviews.com",
-        "niche": "EDC & Tactical Gear Reviews",
+        "niche": "Wearable Technology Reviews",
         "h2_count": "Automatic",
         "h2_auto_limit": 10,
         "h2_lower_limit": 5,
@@ -953,7 +953,7 @@ SITE_PRESETS: Dict[str, Dict[str, Any]] = {
         "voice": "Second Person (You, Your, Yours)",
         "intro": "Standard Intro",
         "faq": "FAQ + Long Answers",
-        "audience_personality": "Outlaw",
+        "audience_personality": "Explorer",
         "ai_model": "Claude-4.5 Haiku (ANT)",
         "featured_image": "gpt-image-1 low $.016/img (OA)",
         "subheading_image_quantity": "Every H2 (Max 5)",
@@ -987,7 +987,7 @@ SITE_PRESETS: Dict[str, Dict[str, Any]] = {
         "custom_prompt_settings": _build_prompt_config("pulsegearreviews.com"),
         "youtube_videos": True,
         "youtube_settings": {"max_videos": "2"},
-        "wordpress_category": "EDC Reviews",
+        "wordpress_category": "Wearable Reviews",
         "wordpress_settings": {
             "site_url": "https://pulsegearreviews.com",
             "user_name": "PulseGearEditor",

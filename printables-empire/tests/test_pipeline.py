@@ -14,19 +14,19 @@ from images.comparison_generator import create_comparison_image
 
 class TestHeroGenerator:
     def test_create_hero(self):
-        output = os.path.join(mkdtemp(), "hero.png")
+        output = Path(mkdtemp()) / "hero.png"
         result = create_hero("Test Article Title", output)
         assert os.path.exists(result)
         # Check file size is reasonable (> 10KB)
         assert os.path.getsize(result) > 10_000
 
     def test_create_hero_with_subtitle(self):
-        output = os.path.join(mkdtemp(), "hero_sub.png")
+        output = Path(mkdtemp()) / "hero_sub.png"
         result = create_hero("Main Title", output, subtitle="A great subtitle")
         assert os.path.exists(result)
 
     def test_create_hero_long_title(self):
-        output = os.path.join(mkdtemp(), "hero_long.png")
+        output = Path(mkdtemp()) / "hero_long.png"
         long_title = "This Is a Very Long Title That Should Wrap Across Multiple Lines in the Image"
         result = create_hero(long_title, output)
         assert os.path.exists(result)
@@ -52,7 +52,7 @@ class TestHeroGenerator:
 
 class TestStepGenerator:
     def test_create_step_image(self):
-        output = os.path.join(mkdtemp(), "step.png")
+        output = Path(mkdtemp()) / "step.png"
         result = create_step_image(
             step_number=1,
             step_title="Set Your Layer Height",
@@ -77,7 +77,7 @@ class TestStepGenerator:
 
 class TestComparisonGenerator:
     def test_create_comparison_image(self):
-        output = os.path.join(mkdtemp(), "comparison.png")
+        output = Path(mkdtemp()) / "comparison.png"
         result = create_comparison_image(
             product_name="Bambu Lab A1 Mini",
             specs={
@@ -95,7 +95,7 @@ class TestComparisonGenerator:
         assert os.path.getsize(result) > 10_000
 
     def test_comparison_low_rating(self):
-        output = os.path.join(mkdtemp(), "comparison_low.png")
+        output = Path(mkdtemp()) / "comparison_low.png"
         result = create_comparison_image(
             product_name="Budget Printer X",
             specs={"Price": "$99"},

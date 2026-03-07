@@ -1,6 +1,7 @@
 """Publisher — Multi-platform video export (YouTube, TikTok, WordPress)."""
 
 import os
+from pathlib import Path
 import json
 import logging
 import requests
@@ -170,9 +171,7 @@ class Publisher:
 
         # Load site config
         try:
-            config_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", "config", "sites.json"
-            )
+            config_path = Path(os.path.dirname(__file__)) / ".." / ".." / ".." / "config" / "sites.json"
             with open(config_path) as f:
                 sites_data = json.load(f)
                 sites = sites_data.get("sites", sites_data)

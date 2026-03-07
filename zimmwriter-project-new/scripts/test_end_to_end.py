@@ -18,6 +18,7 @@ Usage:
 
 import sys
 import os
+from pathlib import Path
 import time
 import glob
 import re
@@ -44,7 +45,7 @@ def find_latest_output(output_dir: str, title_hint: str, after_time: float) -> s
 
     candidates = []
     for pattern in ["*.html", "*.txt"]:
-        for filepath in glob.glob(os.path.join(output_dir, pattern)):
+        for filepath in glob.glob(Path(output_dir) / pattern):
             mtime = os.path.getmtime(filepath)
             if mtime >= after_time:
                 candidates.append((filepath, mtime))

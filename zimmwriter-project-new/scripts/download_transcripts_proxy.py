@@ -4,6 +4,7 @@ Uses youtube-transcript-api with GenericProxyConfig for proxy rotation.
 """
 
 import os
+from pathlib import Path
 import time
 import sys
 
@@ -73,7 +74,7 @@ def download_all():
     proxy_index = 0
 
     for lesson_num, video_id, title in VIDEOS:
-        output_path = os.path.join(OUTPUT_DIR, f"{video_id}.txt")
+        output_path = Path(OUTPUT_DIR) / f"{video_id}.txt"
 
         if os.path.exists(output_path) and os.path.getsize(output_path) > 100:
             print(f"[SKIP] Lesson {lesson_num} - {title} (already exists)")

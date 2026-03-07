@@ -13,6 +13,7 @@ iterate sub-screens, then reopen Bulk Writer when done.
 import json
 import sys
 import os
+from pathlib import Path
 import subprocess
 import time
 import ctypes
@@ -28,7 +29,7 @@ except ImportError:
     print("ERROR: pip install pywinauto")
     sys.exit(1)
 
-OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
+OUTPUT_DIR = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) / "output"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 WM_CLOSE = 0x0010
@@ -179,7 +180,7 @@ def discover_screen(window, screen_name):
         print(f"    Edit id={tf['auto_id']:>5s} '{tf['name']}' = '{tf.get('value', '')[:60]}'", flush=True)
 
     # Save individual file
-    filepath = os.path.join(OUTPUT_DIR, f"zimmwriter_{screen_name}_controls.json")
+    filepath = Path(OUTPUT_DIR) / f"zimmwriter_{screen_name}_controls.json"
     with open(filepath, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2, ensure_ascii=False, default=str)
     print(f"  Saved: {filepath}", flush=True)
@@ -323,7 +324,7 @@ def main():
                     sub_window.set_focus()
                     time.sleep(0.5)
                     screenshot = pyautogui.screenshot()
-                    screenshot.save(os.path.join(OUTPUT_DIR, f"options_{screen_name}.png"))
+                    screenshot.save(Path(OUTPUT_DIR) / f"options_{screen_name}.png")
                     print(f"  Screenshot saved", flush=True)
                 except Exception as e:
                     print(f"  Screenshot error: {e}", flush=True)
@@ -363,7 +364,7 @@ def main():
                 pass
 
     # Save combined report
-    combined_path = os.path.join(OUTPUT_DIR, "zimmwriter_all_subscreens.json")
+    combined_path = Path(OUTPUT_DIR) / "zimmwriter_all_subscreens.json"
     with open(combined_path, "w", encoding="utf-8") as f:
         json.dump(all_reports, f, indent=2, ensure_ascii=False, default=str)
     print(f"\nCombined report: {combined_path}")

@@ -229,7 +229,7 @@ def run_compositor(render_dir, output_dir, model_name, platforms, title=None,
         for platform in platforms:
             expected_format = PLATFORM_RENDER_FORMATS.get(platform, "wide")
             if expected_format in video_name or "turntable" in video_name:
-                platform_dir = os.path.join(output_dir, platform)
+                platform_dir = Path(output_dir) / platform
                 os.makedirs(platform_dir, exist_ok=True)
 
                 cmd = [

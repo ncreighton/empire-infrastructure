@@ -33,6 +33,7 @@ Link Toolbox control IDs (discovered v10.872):
 
 import sys
 import os
+from pathlib import Path
 import time
 import ctypes
 from ctypes import wintypes
@@ -45,10 +46,7 @@ from src.screen_navigator import ScreenNavigator, Screen
 from src.site_presets import SITE_PRESETS
 
 # Link pack data directory
-DATA_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "data", "link_packs"
-)
+DATA_DIR = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) / "data" / "link_packs"
 
 # Map domain -> link pack file name (without .txt)
 DOMAIN_TO_FILE = {}
@@ -81,7 +79,7 @@ CTRL = {
 def load_pack_content(domain):
     """Load link pack text content for a domain."""
     file_key = DOMAIN_TO_FILE[domain]
-    filepath = os.path.join(DATA_DIR, f"{file_key}.txt")
+    filepath = Path(DATA_DIR) / f"{file_key}.txt"
     if not os.path.exists(filepath):
         return None, filepath
     with open(filepath, "r", encoding="utf-8") as f:

@@ -11,12 +11,13 @@ import subprocess
 import time
 import sys
 import os
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from pywinauto import Application, Desktop
 
-OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
+OUTPUT_DIR = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) / "output"
 
 # Feature toggle buttons: name -> auto_id (Bulk Writer screen)
 FEATURE_TOGGLES = {
@@ -236,7 +237,7 @@ def main():
     # Take final screenshot
     try:
         img = bulk_win.wrapper_object().capture_as_image()
-        screenshot_path = os.path.join(OUTPUT_DIR, "feature_toggles_test.png")
+        screenshot_path = Path(OUTPUT_DIR) / "feature_toggles_test.png"
         img.save(screenshot_path)
         print(f"\nScreenshot: {screenshot_path}")
     except Exception as e:

@@ -5,7 +5,7 @@
 # Project: Printables Empire
 # Category: ecommerce
 # Priority: normal
-# Compiled: 2026-03-01 14:16
+# Compiled: 2026-03-06 22:29
 # -----------------------------------------------------------
 
 # EMPIRE GLOBAL RULES
@@ -124,3 +124,23 @@ Before writing any code or content for Printables Empire:
 > Add your project-specific instructions below this line.
 > The mesh context above is auto-generated and will be updated by `mesh compile`.
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# EMPIRE ARSENAL (Auto-Injected)
+# ═══════════════════════════════════════════════════════════════════════════════
+# ALWAYS read the Empire Arsenal skill at C:\Claude Code Projects\_SHARED\skills\empire-arsenal\SKILL.md
+# before starting any task. It contains:
+# - 60+ API keys and credentials
+# - 24 tool categories with integration matrix
+# - Anti-Generic Quality Enforcer (mandatory depth/uniqueness gates)
+# - Workflow patterns and pipeline templates
+# - MCP ecosystem and marketplace directory
+# - Digital product sales channels
+#
+# QUALITY RULES:
+# - Never produce generic/surface-level output
+# - Every result passes: uniqueness test, empire context, depth check, multiplication
+# - Use Nick's specific tools (check tool-registry.md), not generic suggestions
+# - Branch every output into 3+ revenue/impact streams
+# - Go Layer 3+ deep (niche-specific, cross-empire, competitor-blind)
+# ═══════════════════════════════════════════════════════════════════════════════

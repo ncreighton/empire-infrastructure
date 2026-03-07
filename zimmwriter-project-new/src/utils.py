@@ -170,12 +170,12 @@ def find_zimmwriter_exe() -> Optional[str]:
 
     for path in search_paths:
         # Check for AutoIt3.exe launcher (ZimmWriter's actual executable)
-        autoit_path = os.path.join(path, "bin", "util", "AutoIt3.exe")
+        autoit_path = Path(path) / "bin" / "util" / "AutoIt3.exe"
         if os.path.exists(autoit_path):
             return path
         # Also check for direct exe
         for exe in ["ZimmWriter.exe", "zimmwriter.exe"]:
-            exe_path = os.path.join(path, exe)
+            exe_path = Path(path) / exe
             if os.path.exists(exe_path):
                 return path
 

@@ -4,6 +4,7 @@ Audio files are uploaded to a temporary host so Creatomate can fetch them by URL
 """
 
 import os
+from pathlib import Path
 import base64
 import logging
 import asyncio
@@ -39,9 +40,7 @@ _VOICE_WPM = {
 def _get_elevenlabs_key() -> str:
     key = os.environ.get("ELEVENLABS_API_KEY", "")
     if not key:
-        env_path = os.path.join(
-            os.path.dirname(__file__), "..", "..", "configs", "api_keys.env"
-        )
+        env_path = Path(os.path.dirname(__file__)) / ".." / ".." / "configs" / "api_keys.env"
         if os.path.exists(env_path):
             with open(env_path) as f:
                 for line in f:
@@ -61,7 +60,7 @@ class AudioEngine:
         Returns path to generated audio file.
         """
         if not output_path:
-            output_path = os.path.join(tempfile.gettempdir(), "videoforge_narration.mp3")
+            output_path = Path(tempfile.gettempdir()) / "videoforge_narration.mp3"
 
         # Try ElevenLabs first
         el_key = _get_elevenlabs_key()
@@ -226,7 +225,7 @@ class AudioEngine:
         Audio files are uploaded to a temp host so Creatomate can fetch them.
         """
         if not output_dir:
-            output_dir = os.path.join(tempfile.gettempdir(), "videoforge_audio")
+            output_dir = Path(tempfile.gettempdir()) / "videoforge_audio"
         os.makedirs(output_dir, exist_ok=True)
 
         voice = get_voice(niche)
@@ -237,7 +236,7 @@ class AudioEngine:
             if not scene.narration:
                 continue
 
-            output_path = os.path.join(output_dir, f"scene_{scene.scene_number}.mp3")
+            output_path = Path(output_dir) / f"scene_{scene.scene_number}.mp3"
             path = self.generate_narration(
                 text=scene.narration,
                 niche=niche,

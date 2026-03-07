@@ -7,6 +7,7 @@ Usage:
 """
 import sys
 import os
+from pathlib import Path
 import time
 import ctypes
 from ctypes import wintypes
@@ -16,11 +17,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.controller import ZimmWriterController
 import pyautogui
 
-OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "output", "p_button_test")
+OUTPUT_DIR = Path(os.path.dirname(os.path.dirname(__file__))) / "output" / "p_button_test"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 def screenshot(name):
-    path = os.path.join(OUTPUT_DIR, f"{name}.png")
+    path = Path(OUTPUT_DIR) / f"{name}.png"
     pyautogui.screenshot(path)
     print(f"  [screenshot] {name}.png")
     return path

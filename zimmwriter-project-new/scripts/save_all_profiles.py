@@ -30,6 +30,7 @@ Usage:
 
 import sys
 import os
+from pathlib import Path
 import time
 import ctypes
 from ctypes import wintypes
@@ -49,10 +50,7 @@ except ImportError:
     HAS_PYAUTOGUI = False
 
 # Screenshot output directory
-SCREENSHOT_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "output", "screenshots"
-)
+SCREENSHOT_DIR = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) / "output" / "screenshots"
 
 
 def screenshot(domain: str, step: str):
@@ -63,10 +61,10 @@ def screenshot(domain: str, step: str):
     if not HAS_PYAUTOGUI:
         return
     try:
-        domain_dir = os.path.join(SCREENSHOT_DIR, domain.replace(".", "_"))
+        domain_dir = Path(SCREENSHOT_DIR) / domain.replace(".", "_")
         os.makedirs(domain_dir, exist_ok=True)
         ts = datetime.now().strftime("%H%M%S")
-        path = os.path.join(domain_dir, f"{ts}_{step}.png")
+        path = Path(domain_dir) / f"{ts}_{step}.png"
         pyautogui.screenshot(path)
         print(f"[ss:{step}]", end=" ", flush=True)
     except Exception:

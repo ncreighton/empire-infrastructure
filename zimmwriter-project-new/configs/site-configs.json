@@ -541,8 +541,8 @@
       ]
     },
     "pulsegearreviews.com": {
-      "niche": "EDC & Tactical Gear Reviews",
-      "tone": "rugged, field-tested, reliability-focused",
+      "niche": "Wearable Technology Reviews",
+      "tone": "clear, trustworthy, tech-savvy but approachable",
       "word_count": {
         "min": 1800,
         "max": 2200,
@@ -576,7 +576,7 @@
         "voice": "second_person"
       },
       "wordpress": {
-        "default_category": "EDC Reviews",
+        "default_category": "Wearable Reviews",
         "post_status": "draft",
         "auto_publish": false
       },
@@ -588,10 +588,10 @@
         "style_mimic": false
       },
       "special_requirements": [
-        "Durability testing emphasis",
-        "Field-use scenarios",
-        "Materials and build quality",
-        "Tactical/outdoor focus"
+        "Detailed spec comparisons",
+        "Real-world wearability testing",
+        "Battery life and sensor accuracy emphasis",
+        "Health and fitness tracking focus"
       ]
     },
     "aiinactionblueprint.com": {

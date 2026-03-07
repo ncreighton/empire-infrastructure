@@ -6,6 +6,7 @@ Navigates from Menu -> Options Menu, then maps every control.
 import json
 import sys
 import os
+from pathlib import Path
 import subprocess
 import time
 from io import StringIO
@@ -19,7 +20,7 @@ except ImportError:
     print("ERROR: pip install pywinauto")
     sys.exit(1)
 
-OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
+OUTPUT_DIR = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) / "output"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
@@ -193,12 +194,12 @@ def discover_screen(window, screen_name="options_menu"):
         print(f"  {cat:15s}: {len(visible)} visible / {len(report[cat])} total")
 
     # Save
-    map_file = os.path.join(OUTPUT_DIR, f"zimmwriter_{screen_name}_controls.json")
+    map_file = Path(OUTPUT_DIR) / f"zimmwriter_{screen_name}_controls.json"
     with open(map_file, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2, ensure_ascii=False, default=str)
     print(f"\nSaved: {map_file}")
 
-    tree_file = os.path.join(OUTPUT_DIR, f"zimmwriter_{screen_name}_tree.txt")
+    tree_file = Path(OUTPUT_DIR) / f"zimmwriter_{screen_name}_tree.txt"
     buf = StringIO()
     window.print_control_identifiers(depth=10, filename=buf)
     with open(tree_file, "w", encoding="utf-8") as f:

@@ -388,8 +388,9 @@ class Orchestrator:
         Expects CSV files named like: smarthomewizards.com.csv
         """
         import os
+        from pathlib import Path
         for domain in SITE_PRESETS:
-            csv_path = os.path.join(csv_dir, f"{domain}.csv")
+            csv_path = Path(csv_dir) / f"{domain}.csv"
             if os.path.exists(csv_path):
                 self.add_job(domain, csv_path=csv_path, wait=wait)
             else:

@@ -18,6 +18,7 @@ Usage:
 
 import sys
 import os
+from pathlib import Path
 import re
 import json
 import time
@@ -29,10 +30,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.site_presets import SITE_PRESETS
 
 # Paths
-DATA_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "data", "link_packs"
-)
+DATA_DIR = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) / "data" / "link_packs"
 LINKPACKS_DIR = r"D:\ZimmWriter\database\linkpacks"
 
 # Map domain -> link pack file name (without .txt)
@@ -172,9 +170,9 @@ def main():
     for i, domain in enumerate(domains, 1):
         file_key = DOMAIN_TO_FILE[domain]
         pack_name = DOMAIN_TO_PACK_NAME[domain]
-        filepath = os.path.join(DATA_DIR, f"{file_key}.txt")
+        filepath = Path(DATA_DIR) / f"{file_key}.txt"
         db_filename = f"zw_linkpack_{pack_name}.sqlite"
-        db_path = os.path.join(LINKPACKS_DIR, db_filename)
+        db_path = Path(LINKPACKS_DIR) / db_filename
 
         # Check if data file exists
         if not os.path.exists(filepath):
@@ -229,7 +227,7 @@ def main():
         if files:
             print(f"Files in {LINKPACKS_DIR}:")
             for f in sorted(files):
-                fpath = os.path.join(LINKPACKS_DIR, f)
+                fpath = Path(LINKPACKS_DIR) / f
                 size = os.path.getsize(fpath) / 1024
                 print(f"  {f:55s} {size:6.0f}KB")
 

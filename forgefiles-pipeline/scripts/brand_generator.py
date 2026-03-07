@@ -486,7 +486,7 @@ def generate_animated_intro_blender(output_path=None, width=1920, height=1080, f
             m = re.search(r'(\d+)\.png$', first)
             if m:
                 prefix = first[:m.start(1)]
-                pattern = os.path.join(os.path.dirname(frames[0]), f"{prefix}%0{len(m.group(1))}d.png")
+                pattern = Path(os.path.dirname(frames[0])) / f"{prefix}%0{len(m.group(1))}d.png"
                 if not output_path.endswith('.mp4'):
                     output_path += '.mp4'
                 sp.run(["ffmpeg", "-y", "-framerate", str(fps), "-i", pattern,
@@ -605,7 +605,7 @@ def generate_animated_outro_blender(output_path=None, width=1920, height=1080, f
             m = re.search(r'(\d+)\.png$', first)
             if m:
                 prefix = first[:m.start(1)]
-                pattern = os.path.join(os.path.dirname(frames[0]), f"{prefix}%0{len(m.group(1))}d.png")
+                pattern = Path(os.path.dirname(frames[0])) / f"{prefix}%0{len(m.group(1))}d.png"
                 if not output_path.endswith('.mp4'):
                     output_path += '.mp4'
                 sp.run(["ffmpeg", "-y", "-framerate", str(fps), "-i", pattern,
@@ -792,7 +792,7 @@ def generate_music_tracks(output_dir=None):
 
     generated = []
     for name, spec in tracks.items():
-        output_path = os.path.join(output_dir, f"{name}.mp3")
+        output_path = Path(output_dir) / f"{name}.mp3"
         if os.path.exists(output_path):
             generated.append(output_path)
             continue
