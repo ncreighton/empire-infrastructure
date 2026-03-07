@@ -99,6 +99,16 @@
         "N8N_BASE_URL": "http://89.116.29.33:5678",
         "N8N_API_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2Y2E1Y2NjNS1lYjEwLTQzYjEtYmYzNy1kM2ZmYzBhNzQ3MDUiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwianRpIjoiODI1MTMzZDAtOGRhMi00YmY5LWEzZTUtN2U4YTQ5OTgwYjdhIiwiaWF0IjoxNzcyOTIxOTY5LCJleHAiOjE4MDQ0NTc5Njk1Njd9.F7Wpdj4ZaWS2KGtoUfjahwFLo97UCEEUu1BU-2aej9s"
       }
+    },
+    "gologin-mcp": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "gologin-mcp"
+      ],
+      "env": {
+        "API_TOKEN": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2OWFjOWIwNDYxODZmMDBmMzc3NDllYWMiLCJ0eXBlIjoiZGV2Iiwiand0aWQiOiI2OWFjYWU0ZmEyMTAxY2IyMmU5NDVmZmQifQ.a1sQMCxTmyl41H1Ex4t9MB7n88RhFuLPPcqmuTSq2Mc"
+      }
     }
   }
 }
