@@ -96,7 +96,7 @@ class TestSessionRestore:
         mock_page = AsyncMock()
         mock_context = AsyncMock()
         mock_page.context = mock_context
-        mock_browser.get_current_page = MagicMock(return_value=mock_page)
+        mock_browser.get_current_page = AsyncMock(return_value=mock_page)
 
         with patch("browser_use.Browser", return_value=mock_browser):
             await bm.launch("gumroad")

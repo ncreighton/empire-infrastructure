@@ -28,6 +28,19 @@ Uses FORGE + AMPLIFY intelligence pattern. Deploys to VPS Docker on port 8100.
 - Sessions: `data/sessions/`
 - Screenshots: `data/screenshots/`
 
+## Deploy to VPS
+
+```bash
+# Deploy files
+cd "D:/Claude Code Projects"
+tar --exclude='data' --exclude='.env' --exclude='__pycache__' --exclude='.git' --exclude='*.pyc' -cf - -C . openclaw-agent/ | ssh empire@217.216.84.245 'cd /opt/empire && tar xf -'
+
+# Rebuild and recreate container (MUST use `up -d`, NOT `restart`)
+ssh empire@217.216.84.245 'cd /opt/empire/openclaw-agent && docker compose up -d --build'
+```
+
+**Important**: `docker compose restart` reuses the old image. Always use `docker compose up -d --build` to pick up code changes.
+
 ## Run Locally
 
 ```bash

@@ -63,7 +63,25 @@ class VerificationAgent:
         total = plan.total_steps
         completion_rate = completed / total if total > 0 else 0
 
-        if completion_rate >= 0.8:
+        # Critical steps must be actually completed (not skipped)
+        critical_types = {"navigate", "fill_field", "fill_textarea", "submit_form"}
+        critical_steps = [
+            s for s in plan.steps if s.step_type.value in critical_types
+        ]
+        critical_failed = [
+            s for s in critical_steps if s.status.value not in ("completed",)
+        ]
+
+        if critical_failed:
+            # Any critical step failure means signup didn't work
+            failed_descs = [s.description for s in critical_failed]
+            if len(critical_failed) >= len(critical_steps) / 2:
+                status = AccountStatus.SIGNUP_FAILED
+                issues.append(f"Critical steps failed: {', '.join(failed_descs[:3])}")
+            else:
+                status = AccountStatus.PROFILE_INCOMPLETE
+                issues.append(f"Incomplete: {len(critical_failed)} critical steps failed")
+        elif completion_rate >= 0.8:
             # Check for email verification pending
             email_steps = [
                 s for s in plan.steps
@@ -159,6 +177,18 @@ class VerificationAgent:
         )
         total = plan.total_steps
         rate = completed / total if total > 0 else 0
+
+        # Critical steps must be actually completed (not just skipped)
+        critical_types = {"navigate", "fill_field", "fill_textarea", "submit_form"}
+        critical_failed = any(
+            s.step_type.value in critical_types and s.status.value != "completed"
+            for s in plan.steps
+        )
+
+        if critical_failed:
+            if rate >= 0.5:
+                return False, AccountStatus.PROFILE_INCOMPLETE
+            return False, AccountStatus.SIGNUP_FAILED
 
         if rate >= 0.8:
             has_pending_email = any(
