@@ -524,6 +524,29 @@ def brain_witchcraft_costs(count: int = 1):
     return WitchcraftVideoPipeline().estimate_costs(count)
 
 
+# ── Article-to-Video Pipeline Endpoints ───────────────────────────────
+
+@app.get("/tools/brain_article_list")
+def brain_article_list(site: str, count: int = 10):
+    """List recent articles from a WordPress site, scored by video potential."""
+    from connectors.article_to_video import ArticleToVideoPipeline
+    return ArticleToVideoPipeline().list_articles(site, count)
+
+
+@app.post("/tools/brain_article_to_video")
+def brain_article_to_video(site: str, post_id: int, render: bool = False):
+    """Convert a WordPress article into a video via VideoForge."""
+    from connectors.article_to_video import ArticleToVideoPipeline
+    return ArticleToVideoPipeline().convert_article(site, post_id, render=render)
+
+
+@app.post("/tools/brain_article_batch")
+def brain_article_batch(site: str, count: int = 3, render: bool = False):
+    """Batch convert top articles from a site to videos."""
+    from connectors.article_to_video import ArticleToVideoPipeline
+    return ArticleToVideoPipeline().batch_convert(site, count, render=render)
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8200)
