@@ -9,7 +9,7 @@ import asyncio
 import json
 import logging
 import sqlite3
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -95,7 +95,7 @@ class Publisher:
             # 0b. Enforce minimum interval between publishes
             last_publish_time = self._get_last_publish_time()
             if last_publish_time:
-                elapsed = (datetime.utcnow() - last_publish_time).total_seconds()
+                elapsed = (datetime.now(timezone.utc) - last_publish_time).total_seconds()
                 if elapsed < MIN_PUBLISH_INTERVAL_SEC:
                     wait_sec = int(MIN_PUBLISH_INTERVAL_SEC - elapsed)
                     log.info(f"Rate limit: waiting {wait_sec}s before next publish...")

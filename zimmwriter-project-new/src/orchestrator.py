@@ -84,7 +84,17 @@ class Orchestrator:
         Use BEFORE starting a job to ensure no previous generation is running.
         Closes the Output window if present, then navigates to Menu if needed.
         Recognizes empty title '' and generation states as 'still busy'.
+        Requires 3 consecutive idle polls to avoid false detection when
+        ZimmWriter title briefly flashes 'Menu' during window transitions.
+
+        Tracks connection errors separately from idle state to avoid infinite
+        loops when stale window handles cause repeated exceptions. After 10+
+        consecutive connection errors, forces a fresh Application reconnect.
         """
+        consecutive_idle = 0
+        consecutive_errors = 0
+        REQUIRED_IDLE_POLLS = 3
+
         for _ in range(timeout // 10):
             try:
                 # Close Output window if left open from previous generation
@@ -92,8 +102,20 @@ class Orchestrator:
 
                 self.controller.connect()
                 title = self.controller.get_window_title()
+                consecutive_errors = 0  # Reset on successful connection
+
+                # Check for idle state (Bulk Writer or Menu)
                 if ("Bulk" in title or "Menu" in title) and title != "":
-                    return
+                    consecutive_idle += 1
+                    if consecutive_idle >= REQUIRED_IDLE_POLLS:
+                        return
+                    logger.info(f"Possible ready state, confirming... ({consecutive_idle}/{REQUIRED_IDLE_POLLS}, title: '{title}')")
+                    time.sleep(10)
+                    continue
+
+                # Any non-idle state resets the counter
+                consecutive_idle = 0
+
                 # On Output screen — close it and go to Menu
                 if title and "Output" in title:
                     self._close_output_window()
@@ -101,7 +123,10 @@ class Orchestrator:
                     self.controller.connect()
                     title = self.controller.get_window_title()
                     if "Bulk" in title or "Menu" in title:
-                        return
+                        consecutive_idle = 1
+                        logger.info(f"Output closed, confirming ready... ({consecutive_idle}/{REQUIRED_IDLE_POLLS})")
+                        time.sleep(10)
+                        continue
                 # Empty title or known busy states = still generating, just wait
                 if title == "" or any(kw in title for kw in self._BUSY_TITLES):
                     logger.info(f"Waiting for generation to finish (currently: '{title}')...")
@@ -113,13 +138,29 @@ class Orchestrator:
                         self.controller.connect()
                         new_title = self.controller.get_window_title()
                         if "Bulk" in new_title or "Menu" in new_title:
-                            return
+                            consecutive_idle = 1
+                            logger.info(f"Navigated to Menu, confirming... ({consecutive_idle}/{REQUIRED_IDLE_POLLS})")
+                            time.sleep(10)
+                            continue
                     except Exception:
                         pass
                 else:
                     logger.info(f"Waiting for ready (currently: '{title}')...")
             except Exception:
-                pass
+                consecutive_errors += 1
+                # Don't reset consecutive_idle on connection errors — the idle
+                # state may still be valid, we just can't read the title
+                if consecutive_errors >= 10:
+                    logger.warning(f"10+ consecutive connection errors, forcing fresh reconnect...")
+                    try:
+                        pid = self.controller._find_zimmwriter_pid()
+                        if pid:
+                            from pywinauto import Application
+                            self.controller.app = Application(backend=self.controller.backend).connect(process=pid)
+                            consecutive_errors = 0
+                            logger.info(f"Fresh reconnect to PID {pid} succeeded")
+                    except Exception:
+                        pass
             time.sleep(10)
         raise RuntimeError("Timed out waiting for ZimmWriter to become ready")
 
@@ -128,6 +169,9 @@ class Orchestrator:
 
         Use AFTER starting a job. Waits 30s for generation to begin,
         then polls until ZimmWriter returns to Bulk Writer or Menu.
+        Requires seeing generation activity AND 2 consecutive idle polls
+        to avoid false completion when ZimmWriter title briefly flashes 'Menu'
+        during window transitions.
         After generation, dismisses the results summary popup (X button).
         """
         from pywinauto import Desktop
@@ -135,6 +179,13 @@ class Orchestrator:
         # Give ZimmWriter time to transition into generation state
         logger.info("Waiting 30s for generation to begin...")
         time.sleep(30)
+
+        # Track generation state to avoid false completion detection.
+        # ZimmWriter title can briefly flash "Menu" during transitions;
+        # require 2 consecutive idle polls after seeing actual generation.
+        saw_generation = False
+        consecutive_idle = 0
+        REQUIRED_IDLE_POLLS = 2
 
         # Poll until it returns to idle.  "Output" screen also means done.
         for _ in range(timeout // 5):
@@ -144,18 +195,32 @@ class Orchestrator:
 
                 self.controller.connect()
                 title = self.controller.get_window_title()
-                if title and any(kw in title for kw in ("Bulk", "Menu")):
-                    logger.info(f"Generation complete (now: '{title}')")
-                    return
-                if title and "Output" in title:
+
+                # Empty title or known busy states = generation in progress
+                if title == "" or any(kw in title for kw in self._BUSY_TITLES):
+                    saw_generation = True
+                    consecutive_idle = 0
+                    logger.info(f"Generating (currently: '{title}')...")
+                elif title and any(kw in title for kw in ("Bulk", "Menu")):
+                    consecutive_idle += 1
+                    if saw_generation and consecutive_idle >= REQUIRED_IDLE_POLLS:
+                        logger.info(f"Generation complete (now: '{title}', confirmed after {consecutive_idle} consecutive idle polls)")
+                        return
+                    elif not saw_generation:
+                        logger.info(f"Waiting for generation to start (title: '{title}')...")
+                    else:
+                        logger.info(f"Possible completion, confirming... ({consecutive_idle}/{REQUIRED_IDLE_POLLS}, title: '{title}')")
+                elif title and "Output" in title:
                     logger.info(f"Generation complete (Output screen), closing...")
                     self._close_output_window()
                     time.sleep(2)
                     self.controller.connect()
                     return
-                logger.info(f"Generating (currently: '{title}')...")
+                else:
+                    consecutive_idle = 0
+                    logger.info(f"Generating (currently: '{title}')...")
             except Exception:
-                pass  # Connection error during generation is normal
+                consecutive_idle = 0  # Reset on connection errors
             time.sleep(5)
         raise RuntimeError("Timed out waiting for generation to complete")
 
@@ -248,7 +313,8 @@ class Orchestrator:
             # Wait for any active generation to finish first
             self._wait_until_ready()
 
-            # Run the job with inline model override (retry on stale handles)
+            # Run the job with inline model override (retry on stale handles
+            # and False returns from navigation/CSV failures)
             profile = job.profile_name or job.domain
             model = MODEL_ASSIGNMENTS.get(job.domain)
 
@@ -264,7 +330,13 @@ class Orchestrator:
                         ai_model_override=model,
                         wait=False,
                     )
-                    break
+                    if started:
+                        break
+                    # run_job returned False — retry after settling
+                    if attempt < 2:
+                        logger.warning(f"run_job returned False (attempt {attempt+1}), retrying...")
+                        time.sleep(10)
+                        self._wait_until_ready(timeout=120)
                 except Exception as e:
                     last_err = e
                     logger.warning(f"run_job attempt {attempt + 1} failed: {e}")

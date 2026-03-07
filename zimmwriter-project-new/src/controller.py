@@ -371,20 +371,30 @@ class ZimmWriterController:
 
         try:
             self.app = Application(backend=self.backend).connect(process=pid)
-            # Prefer the Bulk Writer window over sub-windows.
-            # Must match "Bulk Blog Writer" or "Bulk Writer" but NOT config
-            # windows like "Set Bulk SEO CSV" which also contain "Bulk".
+            # Prefer the most relevant visible window. Priority:
+            # 1. Bulk Writer (the main working screen)
+            # 2. Active generation window ("Writing Blog Post #N", etc.)
+            # 3. Any visible ZimmWriter window (Menu, etc.)
+            # Must NOT select config sub-windows like "Set Bulk SEO CSV".
             best_handle = None
+            generation_handle = None
             fallback_handle = None
+            _GENERATION_KEYWORDS = ("Writing", "Generating", "Uploading",
+                                    "Processing", "Scraping")
             try:
                 for w in self.app.windows():
                     try:
                         title = w.window_text()
-                        # Prefer Bulk Writer over other screens
+                        # Priority 1: Bulk Writer
                         if "Bulk" in title and "Writer" in title and "Set " not in title:
                             best_handle = w.handle
                             break
-                        # Track any visible ZimmWriter main window as fallback
+                        # Priority 2: Active generation window
+                        if not generation_handle and w.is_visible() and any(
+                            kw in title for kw in _GENERATION_KEYWORDS
+                        ):
+                            generation_handle = w.handle
+                        # Priority 3: Any visible ZimmWriter main window
                         if not fallback_handle and "ZimmWriter" in title and w.is_visible():
                             fallback_handle = w.handle
                     except Exception:
@@ -392,7 +402,7 @@ class ZimmWriterController:
             except Exception:
                 pass
             if not best_handle:
-                best_handle = fallback_handle
+                best_handle = generation_handle or fallback_handle
             if best_handle:
                 self.main_window = self.app.window(handle=best_handle)
             else:
@@ -525,7 +535,7 @@ class ZimmWriterController:
 
         # Wait for Bulk Writer window to appear (ZimmWriter has a transitional
         # state where the new window exists but has an empty title).
-        for wait_attempt in range(8):
+        for wait_attempt in range(12):
             time.sleep(2)
             try:
                 self.connect()
@@ -533,9 +543,44 @@ class ZimmWriterController:
                 if "Bulk" in title:
                     logger.info("Opened Bulk Writer screen")
                     return
+                if title == "":
+                    logger.info(f"Window in transition ({wait_attempt+1}/12)...")
             except Exception:
                 pass
-        logger.warning(f"open_bulk_writer: clicked button but title is '{self.get_window_title()}'")
+
+        # Last resort: try the full cycle once more
+        logger.warning("open_bulk_writer: first attempt failed, retrying full cycle...")
+        try:
+            self.connect()
+            if "Menu" not in self.get_window_title():
+                self.back_to_menu()
+                time.sleep(3)
+                self.connect()
+            # Re-click the button
+            self.bring_to_front()
+            time.sleep(0.5)
+            for child in self.main_window.children():
+                try:
+                    if child.control_id() == 14:
+                        rect = child.rectangle()
+                        cx = (rect.left + rect.right) // 2
+                        cy = (rect.top + rect.bottom) // 2
+                        pyautogui.click(cx, cy)
+                        break
+                except Exception:
+                    pass
+            for wait_attempt in range(8):
+                time.sleep(2)
+                try:
+                    self.connect()
+                    if "Bulk" in self.get_window_title():
+                        logger.info("Opened Bulk Writer screen (retry)")
+                        return
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        logger.warning("open_bulk_writer: failed after retry")
 
     def open_options_menu(self):
         """Navigate from Menu screen to Options Menu screen."""
@@ -1073,10 +1118,27 @@ class ZimmWriterController:
             btn_text = btn.window_text()
             if "Enabled" in btn_text:
                 logger.info(f"SEO CSV Enabled — loaded: {csv_path}")
-                return
+                return True
             logger.warning(f"SEO CSV button shows '{btn_text}' after load attempt")
+
+            # Retry once: disable toggle, re-enable, reload CSV
+            if not hasattr(self, '_seo_csv_retry_active'):
+                self._seo_csv_retry_active = True
+                logger.info("Retrying SEO CSV load (disable → re-enable → reload)...")
+                try:
+                    btn.click_input()
+                    time.sleep(1.5)
+                    self._dismiss_dialog(timeout=1)
+                    result = self.load_seo_csv(csv_path)
+                finally:
+                    del self._seo_csv_retry_active
+                return result
         except Exception as e:
             logger.warning(f"Could not verify SEO CSV state: {e}")
+            if hasattr(self, '_seo_csv_retry_active'):
+                del self._seo_csv_retry_active
+
+        return False
 
     # ═══════════════════════════════════════════
     # BULK WRITER — DROPDOWN CONFIGURATION
@@ -3277,16 +3339,31 @@ class ZimmWriterController:
                 self.open_bulk_writer()
 
             # Verify we actually landed on Bulk Writer
-            for retry in range(5):
+            for retry in range(8):
                 title = self.get_window_title()
                 if "Bulk" in title:
                     break
-                logger.info(f"Retry {retry + 1}: still on '{title}', reconnecting...")
-                time.sleep(3)
+                if title == "":
+                    logger.info(f"Retry {retry+1}: window in transition, waiting...")
+                    time.sleep(4)
+                else:
+                    logger.info(f"Retry {retry+1}: still on '{title}', reconnecting...")
+                    time.sleep(3)
                 self.connect()
             else:
-                logger.error(f"Failed to navigate to Bulk Writer (stuck on '{title}')")
-                return False
+                # One last attempt: full navigation cycle
+                try:
+                    self.back_to_menu()
+                    time.sleep(3)
+                    self.connect()
+                    self.open_bulk_writer()
+                    title = self.get_window_title()
+                    if "Bulk" not in title:
+                        logger.error(f"Failed to navigate to Bulk Writer (stuck on '{title}')")
+                        return False
+                except Exception:
+                    logger.error("Failed to navigate to Bulk Writer after all retries")
+                    return False
 
         # 1. Load profile
         if profile_name:
@@ -3314,17 +3391,18 @@ class ZimmWriterController:
 
         # 3. Load content
         if csv_path:
-            self.load_seo_csv(csv_path)
-            # Verify SEO CSV is actually enabled before proceeding
-            try:
-                self.connect()
-                btn = self._find_child(control_type="Button",
-                                       auto_id=self.FEATURE_TOGGLE_IDS["seo_csv"])
-                if "Enabled" not in btn.window_text():
-                    logger.error(f"SEO CSV failed to load — button shows '{btn.window_text()}'")
-                    return False
-            except Exception as e:
-                logger.warning(f"Could not verify SEO CSV state: {e}")
+            csv_loaded = False
+            for csv_attempt in range(2):
+                if self.load_seo_csv(csv_path):
+                    csv_loaded = True
+                    break
+                if csv_attempt == 0:
+                    logger.warning("CSV load failed, retrying after reconnect...")
+                    time.sleep(3)
+                    self.connect()
+            if not csv_loaded:
+                logger.error(f"SEO CSV failed to load after 2 attempts: {csv_path}")
+                return False
         elif titles:
             self.set_bulk_titles(titles)
         else:

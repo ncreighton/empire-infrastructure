@@ -47,7 +47,7 @@ import re
 import time
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
@@ -136,7 +136,7 @@ class ActionResult:
     screenshot_path: Optional[str] = None
     error: Optional[str] = None
     duration_ms: float = 0.0
-    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
 @dataclass
@@ -197,7 +197,7 @@ class TaskPlan:
     task_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     task_description: str = ""
     steps: List[TaskStep] = field(default_factory=list)
-    created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     status: str = "pending"  # pending, running, completed, failed
     forge_analysis: Optional[Dict[str, Any]] = None
     amplify_enhancements: Optional[Dict[str, Any]] = None
@@ -502,7 +502,7 @@ class PhoneController:
         base64 PNG via the node, and saved locally for vision analysis.
         """
         self._screenshot_counter += 1
-        ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         filename = f"screen_{ts}_{self._screenshot_counter:04d}.png"
         local_path = str(SCREENSHOT_DIR / filename)
 
@@ -545,7 +545,7 @@ class PhoneController:
             return []
 
         # Save locally for debugging
-        ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         local_path = UI_DUMP_DIR / f"ui_{ts}.xml"
         local_path.write_text(xml_content, encoding="utf-8")
 
@@ -1586,7 +1586,7 @@ class TaskExecutor:
                 "duration_ms": sum(
                     s.result.duration_ms for s in plan.steps if s.result
                 ),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             })
         except Exception as exc:
             logger.debug("Failed to record to FORGE Codex: %s", exc)

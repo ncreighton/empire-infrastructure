@@ -38,6 +38,13 @@ from supporter_notifications import (
     notify_membership_started,
     notify_membership_cancelled,
 )
+from premium_content import (
+    register_member,
+    cancel_member,
+    check_access,
+    get_member,
+    PremiumGrimoireContent,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
 logger = logging.getLogger("bmc-webhook")
@@ -303,6 +310,11 @@ async def _handle_membership_started(data: dict, referrer: str = "", utm: dict =
     })
     _update_stats("membership_started", amount)
     _update_revenue_attribution("membership", amount, tier_name, attribution)
+
+    # Register in premium content system
+    if email:
+        register_member(email, supporter_name, tier_name)
+
     await notify_membership_started(supporter_name, tier_name, amount)
 
 
@@ -313,11 +325,18 @@ async def _handle_membership_cancelled(data: dict):
 
     logger.info(f"Membership cancelled: {supporter_name} left {tier_name}")
 
+    email = data.get("supporter_email", data.get("email", ""))
+
     _append_supporter_event("membership_cancelled", {
         "name": supporter_name,
         "tier": tier_name,
     })
     _update_stats("membership_cancelled")
+
+    # Remove from premium content system
+    if email:
+        cancel_member(email)
+
     await notify_membership_cancelled(supporter_name, tier_name)
 
 
@@ -385,6 +404,77 @@ async def get_revenue_attribution():
         "recent_events": data.get("events", [])[-20:],
         "last_updated": data.get("last_updated"),
     }
+
+
+# --- Premium Content Endpoints ---
+
+_premium = PremiumGrimoireContent()
+
+
+@app.get("/premium/content/{email}")
+async def get_premium_content(email: str, content_type: str = "daily"):
+    """Get tier-gated content for a member."""
+    member = get_member(email)
+    if not member:
+        raise HTTPException(status_code=403, detail="Active membership required")
+
+    tier = member["tier"]
+
+    if content_type == "daily":
+        return _premium._grimoire_get("/daily")
+    elif content_type == "energy":
+        return _premium._grimoire_get("/energy")
+    elif content_type == "full_moon":
+        return _premium.generate_full_moon_ritual(tier)
+    elif content_type == "spell_kit":
+        return _premium.generate_spell_kit(tier=tier)
+    elif content_type == "tarot":
+        return _premium.generate_tarot_pull(tier=tier)
+    elif content_type == "sabbat":
+        return _premium.generate_sabbat_workbook(tier)
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown content type: {content_type}")
+
+
+@app.post("/premium/personalized-spell")
+async def personalized_spell(email: str, intention: str):
+    """Generate personalized spell — High Priestess only."""
+    result = _premium.generate_personalized_spell(email, intention)
+    if "error" in result:
+        raise HTTPException(status_code=403, detail=result["error"])
+    return result
+
+
+@app.post("/premium/birthday-ritual")
+async def birthday_ritual(email: str):
+    """Generate birthday ritual — High Priestess only."""
+    result = _premium.generate_birthday_ritual(email)
+    if "error" in result:
+        raise HTTPException(status_code=403, detail=result["error"])
+    return result
+
+
+@app.get("/premium/vault/{email}")
+async def knowledge_vault(email: str):
+    """Access tier-gated knowledge vault."""
+    result = _premium.get_knowledge_vault(email)
+    if "error" in result:
+        raise HTTPException(status_code=403, detail=result["error"])
+    return result
+
+
+@app.post("/premium/generate-bundle/{tier}")
+async def generate_monthly_bundle(tier: str):
+    """Generate monthly content bundle for a tier."""
+    if tier not in ("candlelight", "moonlit", "high_priestess"):
+        raise HTTPException(status_code=400, detail=f"Invalid tier: {tier}")
+    return _premium.generate_monthly_bundle(tier)
+
+
+@app.get("/premium/members")
+async def get_premium_members():
+    """Get premium member stats."""
+    return _premium.get_member_stats()
 
 
 # --- Health Check ---

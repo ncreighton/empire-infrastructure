@@ -27,7 +27,7 @@ import sys
 import uuid
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -261,7 +261,7 @@ DEFAULT_SCHEDULES: Dict[str, dict] = {
 
 def _now_iso() -> str:
     """Return current UTC time in ISO 8601."""
-    return datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _today_str() -> str:

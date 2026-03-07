@@ -1,6 +1,6 @@
 {
   "bmc": {
-    "page_url": "https://buymeacoffee.com/witchcraftyou",
+    "page_url": "https://buymeacoffee.com/witchcraft",
     "display_name": "Witchcraft For Beginners",
     "coffee_name": "potion",
     "webhook_url": "http://localhost:8095/webhooks/bmc"

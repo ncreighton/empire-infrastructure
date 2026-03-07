@@ -12,6 +12,7 @@ ZimmWriter expects the Sheet2 format from its Google Sheet template:
 
 import csv
 import json
+import re
 import sys
 from pathlib import Path
 from typing import List, Dict, Optional
@@ -20,6 +21,21 @@ from typing import List, Dict, Optional
 # ZimmWriter Sheet2 field names (column order matters)
 ZW_FIELDS = ['title', 'outline_focus', 'background', 'outline',
              'keywords', 'category', 'slug']
+
+
+def _expand_auto_h3(outline: str) -> str:
+    """Expand {auto_h3_#} tags into explicit H3 placeholder lines.
+
+    ZimmWriter's SEO CSV format does not support {auto_h3_#} tags (they work
+    only in the direct UI outline input).  Replace each occurrence with the
+    corresponding number of H3 placeholder lines that ZimmWriter will
+    rewrite via {optimize_title}.
+    """
+    def _replace(m):
+        count = int(m.group(1))
+        lines = '\n'.join(f'- Subtopic {i+1}{{optimize_title}}' for i in range(count))
+        return '\n' + lines
+    return re.sub(r'\{auto_h3_(\d+)\}', _replace, outline)
 
 
 def _zw_wrap(field_name: str, value: str) -> str:
@@ -101,7 +117,7 @@ def generate_bulk_csv(
                 _zw_wrap('title', article.get('title', '')),
                 _zw_wrap('outline_focus', article.get('outline_focus', '')),
                 _zw_wrap('background', background),
-                _zw_wrap('outline', article.get('outline', '')),
+                _zw_wrap('outline', _expand_auto_h3(article.get('outline', ''))),
                 _zw_wrap('keywords', keywords),
                 _zw_wrap('category', category),
                 _zw_wrap('slug', slug),
