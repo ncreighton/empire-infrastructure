@@ -6,7 +6,9 @@
       "health_path": "/health",
       "description": "OCR + audio capture",
       "category": "infrastructure",
-      "auto_start": true
+      "auto_start": false,
+      "auto_heal": false,
+      "note": "Binary not installed at expected path — manual start only"
     },
     "dashboard": {
       "name": "Empire Dashboard",
@@ -22,7 +24,9 @@
       "health_path": "/health",
       "description": "Anthropic Haiku vision analysis",
       "category": "infrastructure",
-      "auto_start": true
+      "auto_start": false,
+      "auto_heal": false,
+      "note": "Requires geelark-automation venv — manual start only"
     },
     "grimoire": {
       "name": "Grimoire API",

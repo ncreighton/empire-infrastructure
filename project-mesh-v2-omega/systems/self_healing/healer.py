@@ -58,7 +58,11 @@ class SelfHealer:
         except ImportError:
             return {"error": "ServiceMonitor not available"}
 
+        # Load service config to check auto_heal flag
+        svc_config = monitor.services
+
         healed = []
+        skipped = []
         for svc_id, svc_status in status.items():
             # Log health check
             self.codex.log_health_check(
@@ -69,6 +73,13 @@ class SelfHealer:
             )
 
             if svc_status.get("status") == "down":
+                # Skip services with auto_heal disabled
+                cfg = svc_config.get(svc_id, {})
+                if cfg.get("auto_heal") is False:
+                    log.info(f"Service {svc_id} is DOWN but auto_heal=false — skipping")
+                    skipped.append(svc_id)
+                    continue
+
                 log.warning(f"Service {svc_id} is DOWN — attempting restart")
                 restart_result = self.service_healer.restart_service(svc_id)
                 healed.append(restart_result)
@@ -90,6 +101,7 @@ class SelfHealer:
             "healthy": healthy,
             "down": len(status) - healthy,
             "healed": healed,
+            "skipped_auto_heal": skipped,
         }
 
     def _check_wordpress(self) -> Dict:

@@ -100,7 +100,7 @@ class ServiceMonitor:
         try:
             import requests
             start = time.time()
-            resp = requests.get(url, timeout=5)
+            resp = requests.get(url, timeout=30)
             elapsed = time.time() - start
 
             result["status"] = "healthy" if resp.status_code == 200 else "degraded"
@@ -117,7 +117,7 @@ class ServiceMonitor:
             import urllib.error
             try:
                 start = time.time()
-                req = urllib.request.urlopen(url, timeout=5)
+                req = urllib.request.urlopen(url, timeout=30)
                 elapsed = time.time() - start
                 result["status"] = "healthy"
                 result["status_code"] = req.getcode()
