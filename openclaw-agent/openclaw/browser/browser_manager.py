@@ -57,6 +57,7 @@ class BrowserManager:
         browser_kwargs: dict[str, Any] = {
             "headless": config_dict["headless"],
             "args": config_dict["args"],
+            "keep_alive": True,  # Prevent session reset between Agent runs
         }
 
         # Apply proxy if available
@@ -78,7 +79,7 @@ class BrowserManager:
             state = self.session_manager.load_session(platform_id)
             if state:
                 try:
-                    page = self._browser.get_current_page()
+                    page = await self._browser.get_current_page()
                     if page:
                         context = page.context
                         await context.add_cookies(state.get("cookies", []))
@@ -103,28 +104,31 @@ class BrowserManager:
         """
         try:
             from browser_use import Agent
-            from langchain_anthropic import ChatAnthropic
+            from browser_use.llm.anthropic.chat import ChatAnthropic
         except ImportError:
             raise ImportError(
-                "browser-use and langchain-anthropic required: "
-                "pip install browser-use langchain-anthropic"
+                "browser-use is required: pip install browser-use"
             )
 
         llm = ChatAnthropic(
-            model_name="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-20250514",
             temperature=0,
         )
 
         if not self._browser:
             await self.launch(platform_id)
 
-        agent = Agent(
-            task=task,
-            llm=llm,
-            browser=self._browser,
-            max_actions_per_step=3,
-            use_vision=True,
-        )
+        agent_kwargs: dict[str, Any] = {
+            "task": task,
+            "llm": llm,
+            "browser": self._browser,
+            "max_actions_per_step": 3,
+            "use_vision": True,
+        }
+        if sensitive_data:
+            agent_kwargs["sensitive_data"] = sensitive_data
+
+        agent = Agent(**agent_kwargs)
 
         return agent
 

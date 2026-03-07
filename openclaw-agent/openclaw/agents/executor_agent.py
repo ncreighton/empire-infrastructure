@@ -268,10 +268,11 @@ class ExecutorAgent:
             value = credentials.get("password", step.value)
 
         field_name = step.target
+        # Always pass actual value — browser-use sensitive_data handles log masking
         result = await self.browser.run_agent(
             task=(
                 f"Find the input field for '{field_name}' and type the following value: "
-                f"{value if not step.is_sensitive else '[REDACTED]'}"
+                f"{value}"
             ),
             platform_id=plan.platform_id,
             sensitive_data=sensitive_data,
