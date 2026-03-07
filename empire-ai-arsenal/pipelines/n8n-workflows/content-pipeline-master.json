@@ -1,0 +1,309 @@
+{
+  "name": "Arsenal Content Pipeline Master",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "content-pipeline",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-site",
+              "leftValue": "={{ $json.body.site_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "isNotEmpty"
+              }
+            },
+            {
+              "id": "check-topic",
+              "leftValue": "={{ $json.body.topic }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "isNotEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "validate-input",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:4000/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer sk-arsenal-fec2dfe2b1256586b84b962c9d25e4e9"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-haiku\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a keyword research expert. Extract the primary SEO keyword (2-4 words) from this topic. Return ONLY the keyword, nothing else.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Topic: {{ $json.body.topic }}\\nSite niche: {{ $json.body.niche || 'general' }}\"\n    }\n  ],\n  \"max_tokens\": 50,\n  \"temperature\": 0.3\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "extract-keyword",
+      "name": "Extract Keyword (Haiku)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 240]
+    },
+    {
+      "parameters": {
+        "url": "=http://localhost:8080/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "={{ $json.body.topic }} guide 2026"
+            },
+            {
+              "name": "format",
+              "value": "json"
+            },
+            {
+              "name": "categories",
+              "value": "general"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "research-searxng",
+      "name": "Research (SearXNG)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 420]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:4000/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer sk-arsenal-fec2dfe2b1256586b84b962c9d25e4e9"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are an expert content writer. Write a comprehensive, SEO-optimized article in HTML format (use h2, h3, p, ul/ol tags). Target 2000-3000 words. Include practical advice, examples, and actionable tips. Use the keyword naturally throughout. Voice: {{ $node['Webhook Trigger'].json.body.voice || 'Professional and helpful' }}\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Write a complete article about: {{ $node['Webhook Trigger'].json.body.topic }}\\n\\nPrimary keyword: {{ $node['Extract Keyword (Haiku)'].json.choices[0].message.content }}\\n\\nResearch context: {{ JSON.stringify($node['Research (SearXNG)'].json.results?.slice(0,5)?.map(r => r.title + ': ' + r.content) || []) }}\"\n    }\n  ],\n  \"max_tokens\": 4096,\n  \"temperature\": 0.75\n}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "generate-article",
+      "name": "Generate Article (Sonnet)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [940, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:4000/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer sk-arsenal-fec2dfe2b1256586b84b962c9d25e4e9"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-haiku\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Generate SEO metadata. Return ONLY valid JSON with keys: seo_title (50-60 chars), meta_description (150-160 chars), excerpt (2 sentences), slug (url-safe), categories (array of 1-2), tags (array of 5-8)\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Topic: {{ $node['Webhook Trigger'].json.body.topic }}\\nKeyword: {{ $node['Extract Keyword (Haiku)'].json.choices[0].message.content }}\\nSite: {{ $node['Webhook Trigger'].json.body.site_name || 'Empire Site' }}\"\n    }\n  ],\n  \"max_tokens\": 500,\n  \"temperature\": 0.3\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "generate-seo-meta",
+      "name": "SEO Metadata (Haiku)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1180, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $node['Webhook Trigger'].json.body.domain }}/wp-json/wp/v2/posts",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"title\": {{ JSON.stringify($node['Webhook Trigger'].json.body.topic) }},\n  \"content\": {{ JSON.stringify($node['Generate Article (Sonnet)'].json.choices[0].message.content) }},\n  \"status\": \"{{ $node['Webhook Trigger'].json.body.status || 'draft' }}\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "publish-wordpress",
+      "name": "Publish to WordPress",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1420, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"post_id\": {{ $json.id || 0 }},\n  \"post_url\": {{ JSON.stringify($json.link || '') }},\n  \"site\": {{ JSON.stringify($node['Webhook Trigger'].json.body.site_id) }},\n  \"topic\": {{ JSON.stringify($node['Webhook Trigger'].json.body.topic) }},\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {}
+      },
+      "id": "respond-success",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1660, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": false,\n  \"error\": \"Missing required fields: site_id, topic\",\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "respond-error",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [700, 520]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Extract Keyword (Haiku)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Research (SearXNG)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Keyword (Haiku)": {
+      "main": [
+        [
+          {
+            "node": "Generate Article (Sonnet)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Research (SearXNG)": {
+      "main": [
+        [
+          {
+            "node": "Generate Article (Sonnet)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Article (Sonnet)": {
+      "main": [
+        [
+          {
+            "node": "SEO Metadata (Haiku)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SEO Metadata (Haiku)": {
+      "main": [
+        [
+          {
+            "node": "Publish to WordPress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish to WordPress": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "content-pipeline"
+    }
+  ]
+}

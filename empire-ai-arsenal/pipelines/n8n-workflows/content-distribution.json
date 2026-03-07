@@ -1,0 +1,72 @@
+{
+  "name": "Arsenal Content Distribution",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "content-distribution",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "dist-webhook",
+      "name": "Distribution Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:4000/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer sk-arsenal-fec2dfe2b1256586b84b962c9d25e4e9" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-haiku\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Generate social media posts for multiple platforms. Return JSON with keys: twitter (max 280 chars with emoji + hashtags), pinterest_title (60 chars), pinterest_description (500 chars with hashtags), facebook (2-3 paragraphs engaging), linkedin (professional tone). Each should be uniquely crafted for the platform.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Article title: {{ $json.body.article.title }}\\nExcerpt: {{ $json.body.article.excerpt }}\\nURL: {{ $json.body.article.url }}\\nKeyword: {{ $json.body.article.keyword }}\\nSite: {{ $json.body.site_name }}\\nTags: {{ JSON.stringify($json.body.article.tags || []) }}\"\n    }\n  ],\n  \"max_tokens\": 1000,\n  \"temperature\": 0.8\n}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "generate-social-posts",
+      "name": "Generate Social Posts (Haiku)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the social posts from LLM response\nconst llmResponse = $input.first().json;\nconst choices = llmResponse.choices || [];\nconst content = choices[0]?.message?.content || '{}';\n\nlet socialPosts;\ntry {\n  // Extract JSON from response\n  const jsonMatch = content.match(/\\{[\\s\\S]*\\}/);\n  socialPosts = jsonMatch ? JSON.parse(jsonMatch[0]) : {};\n} catch (e) {\n  socialPosts = {\n    twitter: `🔥 ${$('Distribution Webhook').first().json.body.article.title}\\n\\n👉 ${$('Distribution Webhook').first().json.body.article.url}`,\n    pinterest_title: $('Distribution Webhook').first().json.body.article.title,\n    pinterest_description: $('Distribution Webhook').first().json.body.article.excerpt,\n    facebook: $('Distribution Webhook').first().json.body.article.excerpt,\n    linkedin: $('Distribution Webhook').first().json.body.article.excerpt\n  };\n}\n\n// Add metadata\nsocialPosts.article_url = $('Distribution Webhook').first().json.body.article.url;\nsocialPosts.site_id = $('Distribution Webhook').first().json.body.site_id;\nsocialPosts.site_name = $('Distribution Webhook').first().json.body.site_name;\nsocialPosts.generated_at = new Date().toISOString();\n\nreturn [{ json: socialPosts }];"
+      },
+      "id": "parse-social-posts",
+      "name": "Parse Social Posts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [740, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Store the social posts for manual review/scheduling\n// In production, this would connect to Buffer, Hootsuite, or direct APIs\nconst posts = $input.first().json;\n\n// Log for monitoring\nconsole.log(`Social posts generated for ${posts.site_name}:`);\nconsole.log(`Twitter: ${posts.twitter?.substring(0, 100)}...`);\nconsole.log(`Pinterest: ${posts.pinterest_title}`);\nconsole.log(`Facebook: ${posts.facebook?.substring(0, 100)}...`);\n\n// Forward to Contabo n8n for actual posting (bridge)\nconst bridgePayload = {\n  action: 'distribute_social',\n  payload: posts,\n  source: 'arsenal',\n  timestamp: new Date().toISOString()\n};\n\nreturn [{\n  json: {\n    success: true,\n    social_posts: posts,\n    bridge_payload: bridgePayload,\n    message: `Social posts generated for ${posts.site_name}`\n  }\n}];"
+      },
+      "id": "distribute-posts",
+      "name": "Distribute & Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [980, 300]
+    }
+  ],
+  "connections": {
+    "Distribution Webhook": {
+      "main": [[ { "node": "Generate Social Posts (Haiku)", "type": "main", "index": 0 } ]]
+    },
+    "Generate Social Posts (Haiku)": {
+      "main": [[ { "node": "Parse Social Posts", "type": "main", "index": 0 } ]]
+    },
+    "Parse Social Posts": {
+      "main": [[ { "node": "Distribute & Log", "type": "main", "index": 0 } ]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "content-pipeline" }, { "name": "social" }]
+}

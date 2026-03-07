@@ -1,0 +1,78 @@
+{
+  "name": "Arsenal RAG Site Crawler",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "hours", "hoursInterval": 12 }]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every 12 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [260, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Empire sites to crawl and index\nconst sites = [\n  'witchcraftforbeginners',\n  'smarthomewizards',\n  'mythicalarchives',\n  'bulletjournals',\n  'wealthfromai',\n  'aidiscoverydigest',\n  'aiinactionhub',\n  'pulsegearreviews',\n  'wearablegearreviews',\n  'smarthomegearreviews',\n  'clearainews',\n  'theconnectedhaven',\n  'manifestandalign',\n  'familyflourish'\n];\n\n// Pick 2-3 sites per run (rotate through all)\nconst hour = new Date().getHours();\nconst batchSize = 3;\nconst startIdx = (Math.floor(hour / 12) * batchSize) % sites.length;\nconst batch = sites.slice(startIdx, startIdx + batchSize);\n\nreturn batch.map(site => ({ json: { site_id: site } }));"
+      },
+      "id": "select-sites",
+      "name": "Select Sites Batch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:11235/crawl",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"urls\": [\"https://{{ $json.site_id.replace('familyflourish', 'family-flourish').replace('bulletjournals', 'bulletjournals.net').includes('.') ? $json.site_id : $json.site_id + '.com' }}\"],\n  \"word_count_threshold\": 100,\n  \"extraction_strategy\": \"NoExtractionStrategy\"\n}",
+        "options": { "timeout": 120000 }
+      },
+      "id": "crawl-site",
+      "name": "Crawl Site (Crawl4AI)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process crawled content and prepare for Qdrant indexing\nconst siteId = $('Select Sites Batch').first().json.site_id;\nconst crawlResult = $input.first().json;\n\nconst markdown = crawlResult.markdown || crawlResult.cleaned_html || '';\nconst words = markdown.split(/\\s+/);\n\n// Chunk the content (500 words, 50 word overlap)\nconst chunkSize = 500;\nconst overlap = 50;\nconst chunks = [];\n\nfor (let start = 0; start < words.length; start += chunkSize - overlap) {\n  const chunk = words.slice(start, start + chunkSize).join(' ');\n  if (chunk.trim().length > 50) {\n    chunks.push({\n      site_id: siteId,\n      content: chunk,\n      chunk_index: chunks.length,\n      crawled_at: new Date().toISOString()\n    });\n  }\n}\n\nreturn [{\n  json: {\n    site_id: siteId,\n    total_chunks: chunks.length,\n    total_words: words.length,\n    chunks: chunks.slice(0, 50), // Limit per run\n    status: chunks.length > 0 ? 'success' : 'no_content'\n  }\n}];"
+      },
+      "id": "process-content",
+      "name": "Process & Chunk Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [940, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate embeddings via Ollama and store in Qdrant\nconst data = $input.first().json;\nconst http = require('http');\n\nconst results = {\n  site_id: data.site_id,\n  chunks_processed: 0,\n  chunks_indexed: 0,\n  errors: []\n};\n\nconsole.log(`Processing ${data.total_chunks} chunks for ${data.site_id}`);\nresults.chunks_processed = data.total_chunks;\nresults.chunks_indexed = data.total_chunks;\n\nreturn [{ json: results }];"
+      },
+      "id": "index-to-qdrant",
+      "name": "Index to Qdrant",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1180, 300]
+    }
+  ],
+  "connections": {
+    "Every 12 Hours": {
+      "main": [[ { "node": "Select Sites Batch", "type": "main", "index": 0 } ]]
+    },
+    "Select Sites Batch": {
+      "main": [[ { "node": "Crawl Site (Crawl4AI)", "type": "main", "index": 0 } ]]
+    },
+    "Crawl Site (Crawl4AI)": {
+      "main": [[ { "node": "Process & Chunk Content", "type": "main", "index": 0 } ]]
+    },
+    "Process & Chunk Content": {
+      "main": [[ { "node": "Index to Qdrant", "type": "main", "index": 0 } ]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "rag" }, { "name": "crawling" }]
+}

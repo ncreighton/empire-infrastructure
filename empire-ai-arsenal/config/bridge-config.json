@@ -1,0 +1,38 @@
+{
+  "bridge": {
+    "arsenal": {
+      "url": "http://89.116.29.33:5678",
+      "webhook_base": "http://89.116.29.33:5678/webhook",
+      "endpoints": {
+        "content_pipeline": "/webhook/content-pipeline",
+        "content_distribution": "/webhook/content-distribution",
+        "bridge_relay": "/webhook/bridge-relay",
+        "rag_crawler": "/webhook/rag-crawler"
+      },
+      "capabilities": [
+        "llm_inference",
+        "rag_search",
+        "content_generation",
+        "image_generation",
+        "vector_search",
+        "web_crawling",
+        "meta_search"
+      ]
+    },
+    "contabo": {
+      "url": "https://ncreighton.app.n8n.cloud",
+      "capabilities": [
+        "wordpress_publishing",
+        "social_distribution",
+        "email_marketing",
+        "analytics_sync",
+        "cron_scheduling"
+      ]
+    },
+    "routing": {
+      "ai_tasks": "arsenal",
+      "publishing": "contabo",
+      "monitoring": "both"
+    }
+  }
+}

@@ -1,0 +1,131 @@
+{
+  "witchcraftforbeginners": {
+    "name": "Witchcraft Wisdom AI",
+    "icon": "\ud83d\udd2e",
+    "description": "AI assistant for Witchcraft For Beginners - answers questions about spells, rituals, crystals, and magical practices.",
+    "suggested_questions": [
+      "What crystals are best for protection?",
+      "How do I cast my first spell?",
+      "What are the phases of the moon for rituals?",
+      "How do I set up an altar for beginners?"
+    ],
+    "model_provider": {
+      "provider": "openai_api_compatible",
+      "name": "Arsenal LiteLLM",
+      "base_url": "http://89.116.29.33:4000/v1",
+      "api_key": "sk-arsenal-fec2dfe2b1256586b84b962c9d25e4e9",
+      "models": [
+        {
+          "name": "claude-sonnet",
+          "type": "chat",
+          "default": true
+        },
+        {
+          "name": "claude-haiku",
+          "type": "chat"
+        },
+        {
+          "name": "gpt-4o",
+          "type": "chat"
+        },
+        {
+          "name": "deepseek-chat",
+          "type": "chat"
+        }
+      ]
+    },
+    "knowledge_base": {
+      "source": "qdrant",
+      "collection": "site_witchcraftforbeginners",
+      "embedding_model": "nomic-embed-text",
+      "top_k": 5,
+      "score_threshold": 0.5
+    }
+  },
+  "smarthomewizards": {
+    "name": "Smart Home Wizard AI",
+    "icon": "\ud83c\udfe0",
+    "description": "AI assistant for Smart Home Wizards - helps with home automation, device setup, and smart home troubleshooting.",
+    "suggested_questions": [
+      "What's the best smart hub for beginners?",
+      "How do I automate my morning routine?",
+      "Zigbee vs Z-Wave comparison?",
+      "Best smart security cameras 2026?"
+    ],
+    "model_provider": {
+      "provider": "openai_api_compatible",
+      "name": "Arsenal LiteLLM",
+      "base_url": "http://89.116.29.33:4000/v1",
+      "api_key": "sk-arsenal-fec2dfe2b1256586b84b962c9d25e4e9",
+      "models": [
+        {
+          "name": "claude-sonnet",
+          "type": "chat",
+          "default": true
+        },
+        {
+          "name": "claude-haiku",
+          "type": "chat"
+        },
+        {
+          "name": "gpt-4o",
+          "type": "chat"
+        },
+        {
+          "name": "deepseek-chat",
+          "type": "chat"
+        }
+      ]
+    },
+    "knowledge_base": {
+      "source": "qdrant",
+      "collection": "site_smarthomewizards",
+      "embedding_model": "nomic-embed-text",
+      "top_k": 5,
+      "score_threshold": 0.5
+    }
+  },
+  "wealthfromai": {
+    "name": "AI Wealth Advisor",
+    "icon": "\ud83d\udcb0",
+    "description": "AI assistant for Wealth From AI - guides on AI side hustles, income strategies, and building AI-powered businesses.",
+    "suggested_questions": [
+      "How can I start making money with AI today?",
+      "Best AI tools for freelancing?",
+      "How to build an AI SaaS business?",
+      "What are the top AI side hustles in 2026?"
+    ],
+    "model_provider": {
+      "provider": "openai_api_compatible",
+      "name": "Arsenal LiteLLM",
+      "base_url": "http://89.116.29.33:4000/v1",
+      "api_key": "sk-arsenal-fec2dfe2b1256586b84b962c9d25e4e9",
+      "models": [
+        {
+          "name": "claude-sonnet",
+          "type": "chat",
+          "default": true
+        },
+        {
+          "name": "claude-haiku",
+          "type": "chat"
+        },
+        {
+          "name": "gpt-4o",
+          "type": "chat"
+        },
+        {
+          "name": "deepseek-chat",
+          "type": "chat"
+        }
+      ]
+    },
+    "knowledge_base": {
+      "source": "qdrant",
+      "collection": "site_wealthfromai",
+      "embedding_model": "nomic-embed-text",
+      "top_k": 5,
+      "score_threshold": 0.5
+    }
+  }
+}

@@ -1,0 +1,215 @@
+{
+  "name": "Arsenal ↔ Contabo n8n Bridge",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "bridge-relay",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "bridge-webhook",
+      "name": "Bridge Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false
+          },
+          "conditions": [
+            {
+              "id": "check-action",
+              "leftValue": "={{ $json.body.action }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "isNotEmpty"
+              }
+            }
+          ]
+        }
+      },
+      "id": "validate-bridge",
+      "name": "Validate Request",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": false },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.action }}",
+                    "rightValue": "generate_content",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ]
+              },
+              "renameOutput": "Generate Content"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": false },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.action }}",
+                    "rightValue": "health_check",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ]
+              },
+              "renameOutput": "Health Check"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": false },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.action }}",
+                    "rightValue": "rag_search",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ]
+              },
+              "renameOutput": "RAG Search"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": false },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.action }}",
+                    "rightValue": "llm_query",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ]
+              },
+              "renameOutput": "LLM Query"
+            }
+          ]
+        }
+      },
+      "id": "route-action",
+      "name": "Route Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/content-pipeline",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body.payload) }}",
+        "options": { "timeout": 120000 }
+      },
+      "id": "relay-content",
+      "name": "Relay to Content Pipeline",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [940, 160]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://localhost:4000/health",
+        "options": { "timeout": 10000 }
+      },
+      "id": "litellm-health",
+      "name": "LiteLLM Health",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [940, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://localhost:6333/collections/empire_knowledge/points/search",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"vector\": {{ JSON.stringify($json.body.payload.vector || []) }},\n  \"limit\": {{ $json.body.payload.limit || 5 }},\n  \"with_payload\": true\n}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "rag-search",
+      "name": "RAG Vector Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [940, 440]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:4000/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer sk-arsenal-fec2dfe2b1256586b84b962c9d25e4e9" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"{{ $json.body.payload.model || 'claude-sonnet' }}\",\n  \"messages\": {{ JSON.stringify($json.body.payload.messages) }},\n  \"max_tokens\": {{ $json.body.payload.max_tokens || 2048 }},\n  \"temperature\": {{ $json.body.payload.temperature || 0.7 }}\n}",
+        "options": { "timeout": 120000 }
+      },
+      "id": "llm-query",
+      "name": "LLM Query",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [940, 580]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"action\": {{ JSON.stringify($node['Bridge Webhook'].json.body.action) }},\n  \"result\": {{ JSON.stringify($json) }},\n  \"source\": \"arsenal-n8n\",\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}"
+      },
+      "id": "bridge-response",
+      "name": "Bridge Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1200, 300]
+    }
+  ],
+  "connections": {
+    "Bridge Webhook": {
+      "main": [[ { "node": "Validate Request", "type": "main", "index": 0 } ]]
+    },
+    "Validate Request": {
+      "main": [
+        [{ "node": "Route Action", "type": "main", "index": 0 }],
+        [{ "node": "Bridge Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Route Action": {
+      "main": [
+        [{ "node": "Relay to Content Pipeline", "type": "main", "index": 0 }],
+        [{ "node": "LiteLLM Health", "type": "main", "index": 0 }],
+        [{ "node": "RAG Vector Search", "type": "main", "index": 0 }],
+        [{ "node": "LLM Query", "type": "main", "index": 0 }]
+      ]
+    },
+    "Relay to Content Pipeline": {
+      "main": [[ { "node": "Bridge Response", "type": "main", "index": 0 } ]]
+    },
+    "LiteLLM Health": {
+      "main": [[ { "node": "Bridge Response", "type": "main", "index": 0 } ]]
+    },
+    "RAG Vector Search": {
+      "main": [[ { "node": "Bridge Response", "type": "main", "index": 0 } ]]
+    },
+    "LLM Query": {
+      "main": [[ { "node": "Bridge Response", "type": "main", "index": 0 } ]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "bridge" }, { "name": "infrastructure" }]
+}
