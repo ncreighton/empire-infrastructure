@@ -41,7 +41,7 @@ class TestStateManager:
 
     def test_create_state_manager(self, tmp_path):
         from core.state_manager import StateManager
-        sm = StateManager(state_dir=str(tmp_path))
+        sm = StateManager(data_dir=tmp_path)
         assert sm is not None
 
 
@@ -59,7 +59,7 @@ class TestSEOModules:
 
     def test_striking_distance_module(self):
         from modules.seo_intelligence import striking_distance
-        assert hasattr(striking_distance, 'find_striking_distance') or hasattr(striking_distance, 'StrikingDistance')
+        assert hasattr(striking_distance, 'StrikingDistanceAnalyzer')
 
     def test_content_decay_module(self):
         from modules.seo_intelligence import content_decay

@@ -50,19 +50,18 @@ class TestFunctionExistence:
         from server import handle_tools_list
         assert handle_tools_list is not None
 
-    def test_project_templates_ProjectTemplates_exists(self):
-        from project_templates import ProjectTemplates
-        assert ProjectTemplates is not None
+    def test_project_templates_create_function_exists(self):
+        from project_templates import create_project_from_template
+        assert callable(create_project_from_template)
 
 
 class TestClassInstantiation:
     """Verify key classes can be instantiated."""
 
-    @pytest.mark.skip(reason="Requires empire-skill-library on path")
-    def test_create_project_templates_ProjectTemplates(self):
-        from project_templates import ProjectTemplates
-        obj = ProjectTemplates()
-        assert obj is not None
+    def test_list_templates_returns_list(self):
+        from project_templates import list_templates
+        templates = list_templates()
+        assert isinstance(templates, list)
 
 
 class TestMCPServerFunctions:
