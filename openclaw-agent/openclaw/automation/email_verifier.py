@@ -266,7 +266,7 @@ class EmailVerifier:
 
         while time.time() < deadline:
             # Run IMAP check in thread to avoid blocking the event loop
-            emails = await asyncio.get_event_loop().run_in_executor(
+            emails = await asyncio.get_running_loop().run_in_executor(
                 None,
                 self.check_inbox,
                 self.config.max_email_age_minutes,

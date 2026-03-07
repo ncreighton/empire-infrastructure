@@ -17,15 +17,18 @@ SERVICE_RESTART_MAP = {
         "fallback_cmd": None,  # Complex binary, VBS only
     },
     "dashboard": {
-        "launcher": PROJECTS_ROOT / "launchers" / "launch-dashboard.vbs",
-        "fallback_cmd": [sys.executable, str(PROJECTS_ROOT / "empire-dashboard" / "app.py")],
+        "launcher": PROJECTS_ROOT / "launchers" / "launch-empire-dashboard.vbs",
+        "fallback_cmd": [
+            sys.executable, "-m", "uvicorn", "main:app", "--port", "8000"
+        ],
+        "cwd": str(PROJECTS_ROOT / "empire-dashboard"),
     },
     "vision": {
-        "launcher": PROJECTS_ROOT / "launchers" / "launch-vision.vbs",
+        "launcher": PROJECTS_ROOT / "launchers" / "launch-vision-service.vbs",
         "fallback_cmd": None,
     },
     "grimoire": {
-        "launcher": PROJECTS_ROOT / "launchers" / "launch-grimoire.vbs",
+        "launcher": PROJECTS_ROOT / "launchers" / "launch-grimoire-api.vbs",
         "fallback_cmd": [
             sys.executable, "-m", "uvicorn", "api.app:app", "--port", "8080"
         ],
