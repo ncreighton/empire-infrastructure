@@ -31,6 +31,21 @@ Tools:
 - brain_invalidate_cycle  — Invalidate all results from a bad evolution cycle
 - brain_sync_evolution    — Push evolution tables to remote PostgreSQL
 - brain_auto_apply        — Auto-apply safe, high-confidence enhancements
+- brain_grimoire_health   — Grimoire API health + energy
+- brain_grimoire_recommend — Enhanced recommendations (brain + grimoire)
+- brain_grimoire_ideas    — Content ideas from brain + grimoire skills
+- brain_grimoire_insights — Cross-system insights
+- brain_grimoire_sync     — Sync grimoire practice stats to brain
+- brain_witchcraft_topics — Generate witchcraft video topics
+- brain_witchcraft_video  — Create witchcraft video via VideoForge
+- brain_witchcraft_calendar — Content calendar (sabbats + moon + videos)
+- brain_witchcraft_costs  — Estimate video production costs
+- brain_article_list      — List articles scored by video potential
+- brain_article_to_video  — Convert article to video
+- brain_article_batch     — Batch convert top articles to videos
+- brain_auto_pins         — Generate Pinterest pins for recent articles
+- brain_auto_pin          — Generate pin for specific article
+- brain_pin_calendar      — Pinterest pin content calendar
 
 Pages:
 - /dashboard              — Evolution approval dashboard (HTML)
@@ -545,6 +560,29 @@ def brain_article_batch(site: str, count: int = 3, render: bool = False):
     """Batch convert top articles from a site to videos."""
     from connectors.article_to_video import ArticleToVideoPipeline
     return ArticleToVideoPipeline().batch_convert(site, count, render=render)
+
+
+# ── Auto-Pin Connector Endpoints ─────────────────────────────────────
+
+@app.get("/tools/brain_auto_pins")
+def brain_auto_pins(site: str, count: int = 5):
+    """Generate Pinterest pin data for recent published articles."""
+    from connectors.auto_pin import AutoPinConnector
+    return AutoPinConnector().generate_pins(site, count)
+
+
+@app.post("/tools/brain_auto_pin")
+def brain_auto_pin(site: str, post_id: int):
+    """Generate a Pinterest pin for a specific article."""
+    from connectors.auto_pin import AutoPinConnector
+    return AutoPinConnector().generate_pin(site, post_id)
+
+
+@app.get("/tools/brain_pin_calendar")
+def brain_pin_calendar(site: str, days: int = 7):
+    """Get a Pinterest pin content calendar with optimal scheduling."""
+    from connectors.auto_pin import AutoPinConnector
+    return AutoPinConnector().get_pin_calendar(site, days)
 
 
 if __name__ == "__main__":
