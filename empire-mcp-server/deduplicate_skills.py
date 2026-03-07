@@ -61,7 +61,7 @@ def get_project_name(skill_path: Path) -> str:
                 if i > 0:
                     return parts[i-1]
         return parts[-3] if len(parts) >= 3 else "unknown"
-    except:
+    except Exception:
         return "unknown"
 
 def find_duplicates(skills: List[Dict]) -> Dict[str, List[Dict]]:

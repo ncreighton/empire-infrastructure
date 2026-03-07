@@ -24,7 +24,7 @@ DEFAULT_HUB_PATH = r"D:\Claude Code Projects\project-mesh-v2-omega"
 def load_json(p):
     if not Path(p).exists(): return {}
     try: return json.loads(Path(p).read_text("utf-8"))
-    except: return {}
+    except Exception: return {}
 
 def save_json(p, d):
     Path(p).parent.mkdir(parents=True, exist_ok=True)
@@ -91,7 +91,7 @@ def predict_drift_risk(hub: Path, manifests: Dict) -> List[Dict]:
                 last = max(h["timestamp"] for h in history if h.get("timestamp"))
                 ls = datetime.fromisoformat(last.replace("Z", "+00:00"))
                 days_since_sync = (datetime.now(timezone.utc) - ls).days
-            except: pass
+            except Exception: pass
         
         # Factor 4: System evolution velocity (how fast consumed systems change)
         system_velocity = 0
@@ -325,7 +325,7 @@ def generate_recommendations(hub: Path, manifests: Dict) -> List[Dict]:
                 age = (datetime.now() - datetime.fromisoformat(cm["compiled_at"])).total_seconds() / 3600
                 if age > 72:
                     stale_projects.append(proj_name)
-            except: pass
+            except Exception: pass
     
     if stale_projects:
         recs.append({
@@ -362,7 +362,7 @@ def analyze_trends(hub: Path, manifests: Dict) -> Dict:
                 weekly_syncs[week] += 1
                 if e.get("status") == "failed":
                     weekly_failures[week] += 1
-            except: pass
+            except Exception: pass
     
     # Most synced systems
     system_sync_count = defaultdict(int)
@@ -403,7 +403,7 @@ def _within_days(ts, days):
     try:
         dt = datetime.fromisoformat(ts.replace("Z","+00:00"))
         return dt >= datetime.now(timezone.utc) - timedelta(days=days)
-    except: return False
+    except Exception: return False
 
 
 # ============================================================================

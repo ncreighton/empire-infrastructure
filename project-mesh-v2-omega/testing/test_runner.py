@@ -23,7 +23,7 @@ DEFAULT_HUB_PATH = r"D:\Claude Code Projects\project-mesh-v2-omega"
 def load_json(p):
     if not Path(p).exists(): return {}
     try: return json.loads(Path(p).read_text("utf-8"))
-    except: return {}
+    except Exception: return {}
 
 def save_json(p, d):
     Path(p).parent.mkdir(parents=True, exist_ok=True)

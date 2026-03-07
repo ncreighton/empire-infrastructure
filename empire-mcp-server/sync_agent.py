@@ -135,7 +135,7 @@ def scan_project(path: Path) -> Optional[Dict[str, Any]]:
             try:
                 content = claude_md.read_text(encoding='utf-8', errors='replace')
                 project["claude_md_content"] = content[:50000]  # Limit size
-            except:
+            except Exception:
                 pass
 
         # Check for skills
@@ -163,7 +163,7 @@ def scan_project(path: Path) -> Optional[Dict[str, Any]]:
                 project["has_mcp"] = True
                 try:
                     project["mcp_config"] = mcp_file.read_text(encoding='utf-8')
-                except:
+                except Exception:
                     pass
                 break
 
@@ -183,7 +183,7 @@ def scan_project(path: Path) -> Optional[Dict[str, Any]]:
                     content = head_file.read_text().strip()
                     if content.startswith("ref: refs/heads/"):
                         project["git_branch"] = content.replace("ref: refs/heads/", "")
-                except:
+                except Exception:
                     pass
 
         # Get last modified time
@@ -194,7 +194,7 @@ def scan_project(path: Path) -> Optional[Dict[str, Any]]:
                 if f.is_file() and not any(x in str(f) for x in ['.git', '__pycache__', 'node_modules'])
             )
             project["last_modified"] = datetime.fromtimestamp(latest_time).isoformat()
-        except:
+        except Exception:
             pass
 
         # Count files
@@ -203,7 +203,7 @@ def scan_project(path: Path) -> Optional[Dict[str, Any]]:
                 1 for f in path.rglob("*")
                 if f.is_file() and not any(x in str(f) for x in ['.git', '__pycache__', 'node_modules'])
             )
-        except:
+        except Exception:
             pass
 
         return project

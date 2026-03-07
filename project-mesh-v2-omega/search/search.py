@@ -28,7 +28,7 @@ MAX_RESULTS_PER_CATEGORY = 10
 def load_json(p):
     if not Path(p).exists(): return {}
     try: return json.loads(Path(p).read_text("utf-8"))
-    except: return {}
+    except Exception: return {}
 
 def save_json(p, d):
     Path(p).parent.mkdir(parents=True, exist_ok=True)
@@ -65,7 +65,7 @@ def search_code(hub_path: Path, query_terms: List[str]) -> List[Dict]:
             fpath = Path(root) / fname
             try:
                 content = fpath.read_text("utf-8", errors="ignore")
-            except: continue
+            except Exception: continue
             
             score = score_match(query_terms, content, boost=1.5)  # Boost shared-core
             if score > 0:
@@ -103,7 +103,7 @@ def search_code(hub_path: Path, query_terms: List[str]) -> List[Dict]:
                     fpath = Path(root) / fname
                     try:
                         content = fpath.read_text("utf-8", errors="ignore")
-                    except: continue
+                    except Exception: continue
                     
                     score = score_match(query_terms, content)
                     if score > 0:

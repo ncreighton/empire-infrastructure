@@ -29,7 +29,7 @@ ROLLBACK_DAYS = 30
 def load_json(p):
     if not Path(p).exists(): return {}
     try: return json.loads(Path(p).read_text("utf-8"))
-    except: return {}
+    except Exception: return {}
 
 def save_json(p, d):
     Path(p).parent.mkdir(parents=True, exist_ok=True)
@@ -58,7 +58,7 @@ def version_distance(old, new):
         if n[0]>o[0]: return (n[0]-o[0])*100
         if n[1]>o[1]: return (n[1]-o[1])*10
         return max(0,n[2]-o[2])
-    except: return 0
+    except Exception: return 0
 
 # --- DEPENDENCY GRAPH ---
 def build_dependency_graph(hub, manifests):
@@ -140,7 +140,7 @@ def check_project_status(hub, pn, mf):
     age = 999
     if cm.get("compiled_at"):
         try: age = (datetime.now()-datetime.fromisoformat(cm["compiled_at"])).total_seconds()/3600
-        except: pass
+        except Exception: pass
     return {"project":pn,"sync_pct":round(pct,1),"total":len(consumed),"outdated":outdated,
         "systems":systems,"claude_md_age_h":round(age,1),"claude_md_stale":age>72,
         "priority":mf.get("project",{}).get("priority","normal")}

@@ -514,7 +514,7 @@ def main():
                 content = content.replace(r"D:\Claude Code Projects\project-mesh-v2-omega", hub_path_str)
                 py_file.write_text(content, "utf-8")
                 fixed += 1
-        except:
+        except Exception:
             pass
     print(f"  Hub path: {hub}" + (f" (fixed {fixed} files)" if fixed else " (all correct)"))
     

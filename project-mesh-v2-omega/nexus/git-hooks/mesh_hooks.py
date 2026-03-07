@@ -20,7 +20,7 @@ HUB_PATH = Path(os.environ.get("MESH_HUB_PATH", r"D:\Claude Code Projects\projec
 def load_json(p):
     if not Path(p).exists(): return {}
     try: return json.loads(Path(p).read_text("utf-8"))
-    except: return {}
+    except Exception: return {}
 
 
 # ============================================================================
@@ -56,7 +56,7 @@ def pre_commit():
         
         try:
             content = fp.read_text("utf-8", errors="ignore")
-        except:
+        except Exception:
             continue
         
         for pattern in patterns:

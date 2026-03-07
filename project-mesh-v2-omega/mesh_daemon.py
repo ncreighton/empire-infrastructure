@@ -292,7 +292,7 @@ class PollingWatcher:
         try:
             stat = path.stat()
             return f"{stat.st_mtime}:{stat.st_size}"
-        except:
+        except Exception:
             return ""
     
     def _scan(self):
@@ -440,7 +440,7 @@ class ActionExecutor:
                     f'Start-Sleep -Seconds 6; $n.Dispose()'
                 ], capture_output=True, timeout=10,
                    creationflags=subprocess.CREATE_NO_WINDOW)
-        except:
+        except Exception:
             pass  # Notifications are nice-to-have, not critical
     
     def _log_action(self, action_type: str, details: dict):
@@ -1035,7 +1035,7 @@ class MeshDaemon:
         
         try:
             STATUS_FILE.write_text(json.dumps(status, indent=2, default=str), "utf-8")
-        except:
+        except Exception:
             pass
 
 
@@ -1050,7 +1050,7 @@ def is_running() -> tuple:
     
     try:
         pid = int(PID_FILE.read_text("utf-8").strip())
-    except:
+    except Exception:
         return False, 0
     
     # Check if process exists
@@ -1103,7 +1103,7 @@ def show_status():
         if STATUS_FILE.exists():
             try:
                 status = json.loads(STATUS_FILE.read_text("utf-8"))
-            except:
+            except Exception:
                 pass
         
         uptime = status.get("uptime_seconds", 0)

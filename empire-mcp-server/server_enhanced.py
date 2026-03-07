@@ -564,7 +564,7 @@ def execute_tool(name: str, args: dict) -> Any:
             )
             files = result.stdout.strip().split("\n")[:20]
             return [{"file": f, "pattern": pattern} for f in files if f]
-        except:
+        except Exception:
             return [{"error": "Search failed or grep not available"}]
 
     # ═══════════════════════════════════════════════════════════════
@@ -1064,7 +1064,7 @@ def execute_tool(name: str, args: dict) -> Any:
                 if len(content) > 10000:
                     content = content[:10000] + "\n... [truncated]"
                 return {"path": str(full_path), "content": content}
-            except:
+            except Exception:
                 return {"error": "Could not read file (possibly binary)"}
         return {"error": f"File not found: {file_path}"}
 

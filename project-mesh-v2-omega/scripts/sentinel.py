@@ -26,7 +26,7 @@ SKIP_DIRS = {"node_modules", ".git", "dist", "build", "__pycache__", ".project-m
 def load_json(p):
     if not Path(p).exists(): return {}
     try: return json.loads(Path(p).read_text("utf-8"))
-    except: return {}
+    except Exception: return {}
 
 def save_json(p, d):
     Path(p).parent.mkdir(parents=True, exist_ok=True)
@@ -96,7 +96,7 @@ def evaluate_alerts(hub_path: Path) -> List[Dict]:
                         "message": f"No sync in {days} days",
                         "timestamp": datetime.now(timezone.utc).isoformat()
                     })
-            except: pass
+            except Exception: pass
         
         # Check critical systems outdated
         for sys in manifest.get("consumes", {}).get("shared-core", []):
@@ -127,7 +127,7 @@ def evaluate_alerts(hub_path: Path) -> List[Dict]:
                         "message": f"CLAUDE.md is {hours:.0f}h old (>72h threshold)",
                         "timestamp": datetime.now(timezone.utc).isoformat()
                     })
-            except: pass
+            except Exception: pass
     
     # Check deprecation exceptions
     exc_data = load_json(hub_path / "deprecated" / "exceptions" / "exceptions-registry.json")
@@ -145,7 +145,7 @@ def evaluate_alerts(hub_path: Path) -> List[Dict]:
                                    f"{'expires in ' + str(days_left) + ' days' if days_left > 0 else 'HAS EXPIRED'}",
                         "timestamp": datetime.now(timezone.utc).isoformat()
                     })
-            except: pass
+            except Exception: pass
     
     return alerts
 
@@ -192,7 +192,7 @@ def scan_compliance(hub_path: Path, project_name: Optional[str] = None) -> Dict:
                 fpath = Path(root) / fname
                 try:
                     content = fpath.read_text("utf-8", errors="ignore")
-                except:
+                except Exception:
                     continue
                 
                 files_scanned += 1
@@ -303,7 +303,7 @@ def detect_anomalies(hub_path: Path) -> List[Dict]:
                 if ts >= cutoff:
                     for s in e.get("systems_synced", []):
                         recent[s.get("system", "")] += 1
-            except: pass
+            except Exception: pass
         
         for sys_name, count in recent.items():
             if count > 5:  # More than 5 syncs in 24h for same system

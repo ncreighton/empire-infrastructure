@@ -149,7 +149,7 @@ def extract_template_from_project(project_name: str) -> dict:
                     if 'args' in server:
                         server['args'] = ['path/to/server.py']
             template['files']['.claude/mcp.json'] = json.dumps(config, indent=2)
-        except:
+        except Exception:
             pass
 
     # Get directory structure
@@ -229,7 +229,7 @@ def load_custom_templates() -> dict:
         for template_file in TEMPLATES_DIR.glob("*.json"):
             try:
                 custom[template_file.stem] = json.loads(template_file.read_text())
-            except:
+            except Exception:
                 pass
     return custom
 

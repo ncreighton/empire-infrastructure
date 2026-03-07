@@ -182,7 +182,7 @@ class CodeScanner:
             if arg.annotation:
                 try:
                     arg_name += f": {ast.unparse(arg.annotation)}"
-                except:
+                except Exception:
                     pass
             args.append(arg_name)
 
@@ -190,7 +190,7 @@ class CodeScanner:
         if node.returns:
             try:
                 signature += f" -> {ast.unparse(node.returns)}"
-            except:
+            except Exception:
                 pass
 
         docstring = ast.get_docstring(node) or ""
@@ -200,7 +200,7 @@ class CodeScanner:
         for dec in node.decorator_list:
             try:
                 tags.append(ast.unparse(dec))
-            except:
+            except Exception:
                 pass
 
         self.graph.add_function(
@@ -221,7 +221,7 @@ class CodeScanner:
         for base in node.bases:
             try:
                 bases.append(ast.unparse(base))
-            except:
+            except Exception:
                 pass
 
         methods = sum(1 for n in node.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)))

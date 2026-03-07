@@ -397,7 +397,7 @@ def extract_from_code_files(project_name: str, project_path: Path) -> List[dict]
                     confidence=0.7,
                     tags=[]
                 ))
-            except:
+            except Exception:
                 pass
     
     return entries

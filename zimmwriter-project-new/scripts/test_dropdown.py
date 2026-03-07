@@ -24,7 +24,7 @@ combo2 = bulk.child_window(auto_id="46", control_type="ComboBox")
 try:
     sel = combo2.selected_text()
     print(f"  Selected: {sel}")
-except:
+except Exception:
     print("  (Could not read selected_text)")
 
 # Reset
