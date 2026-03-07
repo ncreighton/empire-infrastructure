@@ -70,10 +70,14 @@ class TestProxyIntegration:
             proxy_manager=pm,
         )
 
-        # The launch will fail because browser-use is not installed, but
-        # we can verify proxy_manager.get_best is called via the proxy check
-        with pytest.raises(ImportError, match="browser-use"):
+        mock_browser = AsyncMock()
+        mock_browser.start = AsyncMock()
+        with patch("browser_use.Browser", return_value=mock_browser) as MockBrowser:
             await bm.launch("gumroad")
+            # Verify proxy config was passed to Browser constructor
+            call_kwargs = MockBrowser.call_args[1]
+            assert "proxy" in call_kwargs
+            await bm.close()
 
 
 class TestSessionRestore:
@@ -87,9 +91,18 @@ class TestSessionRestore:
             screenshot_dir=tmp_screenshot_dir,
             session_manager=sm,
         )
-        # Should raise ImportError for browser-use, but session load was attempted
-        with pytest.raises(ImportError):
+        mock_browser = AsyncMock()
+        mock_browser.start = AsyncMock()
+        mock_page = AsyncMock()
+        mock_context = AsyncMock()
+        mock_page.context = mock_context
+        mock_browser.get_current_page = MagicMock(return_value=mock_page)
+
+        with patch("browser_use.Browser", return_value=mock_browser):
             await bm.launch("gumroad")
+            # Verify session cookies were restored
+            mock_context.add_cookies.assert_awaited_once()
+            await bm.close()
 
 
 class TestTakeScreenshot:
@@ -120,12 +133,12 @@ class TestSaveSession:
             session_manager=sm,
         )
 
-        # Simulate a browser context with cookies
-        mock_context = AsyncMock()
-        mock_context.cookies = AsyncMock(return_value=[
+        # Simulate a browser with cookies
+        mock_browser = AsyncMock()
+        mock_browser.cookies = AsyncMock(return_value=[
             {"name": "session", "value": "abc123", "domain": "gumroad.com"}
         ])
-        bm._context = mock_context
+        bm._browser = mock_browser
 
         await bm.save_session("gumroad")
 
@@ -163,7 +176,7 @@ class TestClose:
         assert bm._context is None
         assert bm._page is None
         assert bm._current_proxy is None
-        mock_browser.close.assert_awaited_once()
+        mock_browser.stop.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_close_noop_when_no_browser(self, tmp_screenshot_dir):
