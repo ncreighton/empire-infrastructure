@@ -362,6 +362,97 @@ class DashboardStats:
     recent_activity: list[dict[str, Any]] = field(default_factory=list)
 
 
+# ─── Daemon Enums ────────────────────────────────────────────────────────────
+
+
+class AlertSeverity(str, Enum):
+    """Alert severity levels for the daemon alert router."""
+    CRITICAL = "critical"    # Bypasses quiet hours
+    WARNING = "warning"      # Normal routing
+    INFO = "info"            # Low priority, batched
+
+
+class HeartbeatTier(str, Enum):
+    """Heartbeat check tiers — cascading from fast to slow."""
+    PULSE = "pulse"          # 5 min  — site up/down, service ports
+    SCAN = "scan"            # 30 min — n8n, email, profile freshness
+    INTEL = "intel"          # 6 hr   — GSC traffic, keyword gaps
+    DAILY = "daily"          # 24 hr  — full report, security audit
+
+
+class CheckResult(str, Enum):
+    """Result of a health check."""
+    HEALTHY = "healthy"
+    DEGRADED = "degraded"
+    DOWN = "down"
+    UNKNOWN = "unknown"
+
+
+class CronStatus(str, Enum):
+    """Status of a persistent cron job."""
+    ACTIVE = "active"
+    PAUSED = "paused"
+    DISABLED = "disabled"
+
+
+# ─── Daemon Dataclasses ──────────────────────────────────────────────────────
+
+
+@dataclass
+class HealthCheck:
+    """Result from a single health check."""
+    name: str
+    tier: HeartbeatTier
+    result: CheckResult
+    message: str = ""
+    details: dict[str, Any] = field(default_factory=dict)
+    checked_at: Optional[datetime] = None
+    duration_ms: float = 0.0
+
+
+@dataclass
+class Alert:
+    """An alert to be routed through severity/dedup/quiet-hours pipeline."""
+    alert_id: str = ""
+    severity: AlertSeverity = AlertSeverity.INFO
+    source: str = ""              # e.g., "wordpress_check", "n8n_check"
+    title: str = ""
+    message: str = ""
+    details: dict[str, Any] = field(default_factory=dict)
+    content_hash: str = ""        # For dedup
+    created_at: Optional[datetime] = None
+    delivered: bool = False
+    suppressed: bool = False      # True if quiet hours / rate limit
+
+
+@dataclass
+class CronJob:
+    """A persistent cron job backed by SQLite."""
+    job_id: str = ""
+    name: str = ""
+    schedule: str = ""            # e.g., "every 5m", "daily 8am"
+    action: str = ""              # Python callable path
+    params: dict[str, Any] = field(default_factory=dict)
+    status: CronStatus = CronStatus.ACTIVE
+    last_run: Optional[datetime] = None
+    next_run: Optional[datetime] = None
+    run_count: int = 0
+    fail_count: int = 0
+    created_at: Optional[datetime] = None
+
+
+@dataclass
+class ProactiveAction:
+    """An action recommended by the proactive agent."""
+    action_type: str = ""         # retry_signup, new_signup, refresh_profile, etc.
+    priority: int = 99            # 1=highest
+    target: str = ""              # platform_id, service name, etc.
+    description: str = ""
+    requires_browser: bool = False
+    requires_approval: bool = False
+    params: dict[str, Any] = field(default_factory=dict)
+
+
 @dataclass
 class CaptchaTask:
     """A CAPTCHA that needs solving."""

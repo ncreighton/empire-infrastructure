@@ -25,6 +25,13 @@ from typing import Any
 
 from openclaw.models import (
     AccountStatus,
+    Alert,
+    AlertSeverity,
+    CheckResult,
+    CronJob,
+    CronStatus,
+    HealthCheck,
+    HeartbeatTier,
     ProfileContent,
     SentinelScore,
     SignupStep,
@@ -95,6 +102,76 @@ CREATE INDEX IF NOT EXISTS idx_signup_log_timestamp ON signup_log(timestamp);
 CREATE INDEX IF NOT EXISTS idx_captcha_log_platform ON captcha_log(platform_id);
 CREATE INDEX IF NOT EXISTS idx_captcha_log_timestamp ON captcha_log(timestamp);
 CREATE INDEX IF NOT EXISTS idx_accounts_status ON accounts(status);
+
+-- Daemon tables (heartbeat, alerts, cron, action log)
+
+CREATE TABLE IF NOT EXISTS heartbeat_results (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    check_name TEXT NOT NULL,
+    tier TEXT NOT NULL,
+    result TEXT NOT NULL,
+    message TEXT DEFAULT '',
+    details_json TEXT DEFAULT '{}',
+    duration_ms REAL DEFAULT 0.0,
+    checked_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS alerts (
+    alert_id TEXT PRIMARY KEY,
+    severity TEXT NOT NULL,
+    source TEXT NOT NULL,
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    details_json TEXT DEFAULT '{}',
+    content_hash TEXT DEFAULT '',
+    created_at TEXT NOT NULL,
+    delivered INTEGER DEFAULT 0,
+    suppressed INTEGER DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS cron_jobs (
+    job_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    schedule TEXT NOT NULL,
+    action TEXT NOT NULL,
+    params_json TEXT DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'active',
+    last_run TEXT,
+    next_run TEXT,
+    run_count INTEGER DEFAULT 0,
+    fail_count INTEGER DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS cron_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    completed_at TEXT,
+    success INTEGER DEFAULT 0,
+    result_json TEXT DEFAULT '{}',
+    error TEXT DEFAULT '',
+    FOREIGN KEY (job_id) REFERENCES cron_jobs(job_id)
+);
+
+CREATE TABLE IF NOT EXISTS action_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    action_type TEXT NOT NULL,
+    target TEXT DEFAULT '',
+    description TEXT DEFAULT '',
+    result TEXT DEFAULT '',
+    autonomous INTEGER DEFAULT 1,
+    timestamp TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_heartbeat_tier ON heartbeat_results(tier);
+CREATE INDEX IF NOT EXISTS idx_heartbeat_time ON heartbeat_results(checked_at);
+CREATE INDEX IF NOT EXISTS idx_alerts_severity ON alerts(severity);
+CREATE INDEX IF NOT EXISTS idx_alerts_hash ON alerts(content_hash);
+CREATE INDEX IF NOT EXISTS idx_alerts_time ON alerts(created_at);
+CREATE INDEX IF NOT EXISTS idx_cron_next ON cron_jobs(next_run);
+CREATE INDEX IF NOT EXISTS idx_cron_history_job ON cron_history(job_id);
+CREATE INDEX IF NOT EXISTS idx_action_log_time ON action_log(timestamp);
 """
 
 
@@ -683,3 +760,372 @@ class PlatformCodex:
         # Sort all activities by timestamp descending and limit
         activities.sort(key=lambda a: a["timestamp"], reverse=True)
         return activities[:limit]
+
+    # ================================================================== #
+    #  Heartbeat results                                                   #
+    # ================================================================== #
+
+    def log_health_check(self, check: HealthCheck) -> None:
+        """Persist a health check result."""
+        checked_at = (check.checked_at or datetime.now()).isoformat()
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO heartbeat_results
+                    (check_name, tier, result, message, details_json, duration_ms, checked_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    check.name,
+                    check.tier.value,
+                    check.result.value,
+                    check.message,
+                    json.dumps(check.details),
+                    check.duration_ms,
+                    checked_at,
+                ),
+            )
+
+    def get_recent_checks(
+        self,
+        tier: HeartbeatTier | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Get recent health check results, optionally filtered by tier."""
+        with self._connect() as conn:
+            if tier:
+                rows = conn.execute(
+                    "SELECT * FROM heartbeat_results WHERE tier = ? ORDER BY checked_at DESC LIMIT ?",
+                    (tier.value, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM heartbeat_results ORDER BY checked_at DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+            results = []
+            for row in rows:
+                d = dict(row)
+                d["details"] = json.loads(d.pop("details_json", "{}"))
+                results.append(d)
+            return results
+
+    def get_latest_checks(self) -> dict[str, dict[str, Any]]:
+        """Get the latest check result for each check_name."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT h.* FROM heartbeat_results h
+                INNER JOIN (
+                    SELECT check_name, MAX(checked_at) as max_time
+                    FROM heartbeat_results GROUP BY check_name
+                ) latest ON h.check_name = latest.check_name
+                    AND h.checked_at = latest.max_time
+                ORDER BY h.check_name
+                """
+            ).fetchall()
+            results = {}
+            for row in rows:
+                d = dict(row)
+                d["details"] = json.loads(d.pop("details_json", "{}"))
+                results[d["check_name"]] = d
+            return results
+
+    # ================================================================== #
+    #  Alerts                                                              #
+    # ================================================================== #
+
+    def insert_alert(self, alert: Alert) -> None:
+        """Persist an alert record."""
+        created_at = (alert.created_at or datetime.now()).isoformat()
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO alerts
+                    (alert_id, severity, source, title, message,
+                     details_json, content_hash, created_at, delivered, suppressed)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    alert.alert_id,
+                    alert.severity.value,
+                    alert.source,
+                    alert.title,
+                    alert.message,
+                    json.dumps(alert.details),
+                    alert.content_hash,
+                    created_at,
+                    1 if alert.delivered else 0,
+                    1 if alert.suppressed else 0,
+                ),
+            )
+
+    def get_alerts(
+        self,
+        severity: AlertSeverity | None = None,
+        source: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Get recent alerts with optional filtering."""
+        query = "SELECT * FROM alerts WHERE 1=1"
+        params: list[Any] = []
+        if severity:
+            query += " AND severity = ?"
+            params.append(severity.value)
+        if source:
+            query += " AND source = ?"
+            params.append(source)
+        query += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+            results = []
+            for row in rows:
+                d = dict(row)
+                d["details"] = json.loads(d.pop("details_json", "{}"))
+                results.append(d)
+            return results
+
+    def alert_hash_exists(self, content_hash: str, window_hours: int = 6) -> bool:
+        """Check if an alert with the same content_hash exists within the dedup window."""
+        from datetime import timedelta
+        cutoff = (datetime.now() - timedelta(hours=window_hours)).isoformat()
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM alerts WHERE content_hash = ? AND created_at > ?",
+                (content_hash, cutoff),
+            ).fetchone()
+            return (row[0] or 0) > 0
+
+    def get_alert_count_today(self, source: str) -> int:
+        """Count alerts from a source in the current day."""
+        today = datetime.now().strftime("%Y-%m-%d")
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM alerts WHERE source = ? AND created_at >= ? AND delivered = 1",
+                (source, today),
+            ).fetchone()
+            return row[0] or 0
+
+    def acknowledge_alert(self, alert_id: str) -> bool:
+        """Mark an alert as acknowledged (delivered)."""
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "UPDATE alerts SET delivered = 1 WHERE alert_id = ?",
+                (alert_id,),
+            )
+            return cursor.rowcount > 0
+
+    def get_suppressed_alerts(self) -> list[dict[str, Any]]:
+        """Get alerts that were suppressed (for later flushing)."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM alerts WHERE suppressed = 1 AND delivered = 0 ORDER BY created_at ASC"
+            ).fetchall()
+            results = []
+            for row in rows:
+                d = dict(row)
+                d["details"] = json.loads(d.pop("details_json", "{}"))
+                results.append(d)
+            return results
+
+    def get_alert_stats(self) -> dict[str, Any]:
+        """Get alert statistics."""
+        with self._connect() as conn:
+            total = conn.execute("SELECT COUNT(*) FROM alerts").fetchone()[0]
+            delivered = conn.execute("SELECT COUNT(*) FROM alerts WHERE delivered = 1").fetchone()[0]
+            suppressed = conn.execute("SELECT COUNT(*) FROM alerts WHERE suppressed = 1").fetchone()[0]
+            by_severity = {}
+            for row in conn.execute("SELECT severity, COUNT(*) as cnt FROM alerts GROUP BY severity").fetchall():
+                by_severity[row["severity"]] = row["cnt"]
+            return {
+                "total_alerts": total,
+                "delivered": delivered,
+                "suppressed": suppressed,
+                "by_severity": by_severity,
+            }
+
+    # ================================================================== #
+    #  Cron jobs                                                           #
+    # ================================================================== #
+
+    def upsert_cron_job(self, job: CronJob) -> None:
+        """Insert or update a cron job."""
+        now = datetime.now().isoformat()
+        created_at = (job.created_at or datetime.now()).isoformat()
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO cron_jobs
+                    (job_id, name, schedule, action, params_json, status,
+                     last_run, next_run, run_count, fail_count, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(job_id) DO UPDATE SET
+                    name = excluded.name,
+                    schedule = excluded.schedule,
+                    action = excluded.action,
+                    params_json = excluded.params_json,
+                    status = excluded.status,
+                    last_run = excluded.last_run,
+                    next_run = excluded.next_run,
+                    run_count = excluded.run_count,
+                    fail_count = excluded.fail_count
+                """,
+                (
+                    job.job_id,
+                    job.name,
+                    job.schedule,
+                    job.action,
+                    json.dumps(job.params),
+                    job.status.value,
+                    job.last_run.isoformat() if job.last_run else None,
+                    job.next_run.isoformat() if job.next_run else None,
+                    job.run_count,
+                    job.fail_count,
+                    created_at,
+                ),
+            )
+
+    def get_cron_job(self, job_id: str) -> CronJob | None:
+        """Get a single cron job by ID."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM cron_jobs WHERE job_id = ?", (job_id,)
+            ).fetchone()
+            if not row:
+                return None
+            return self._row_to_cron_job(dict(row))
+
+    def get_all_cron_jobs(self) -> list[CronJob]:
+        """Get all cron jobs."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM cron_jobs ORDER BY next_run ASC"
+            ).fetchall()
+            return [self._row_to_cron_job(dict(r)) for r in rows]
+
+    def get_due_cron_jobs(self) -> list[CronJob]:
+        """Get cron jobs whose next_run <= now and status == active."""
+        now = datetime.now().isoformat()
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM cron_jobs WHERE status = ? AND next_run <= ? ORDER BY next_run ASC",
+                (CronStatus.ACTIVE.value, now),
+            ).fetchall()
+            return [self._row_to_cron_job(dict(r)) for r in rows]
+
+    def update_cron_status(self, job_id: str, status: CronStatus) -> bool:
+        """Update a cron job's status."""
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "UPDATE cron_jobs SET status = ? WHERE job_id = ?",
+                (status.value, job_id),
+            )
+            return cursor.rowcount > 0
+
+    def update_cron_after_run(
+        self, job_id: str, next_run: datetime, success: bool
+    ) -> None:
+        """Update a cron job after execution."""
+        now = datetime.now().isoformat()
+        with self._connect() as conn:
+            if success:
+                conn.execute(
+                    "UPDATE cron_jobs SET last_run = ?, next_run = ?, run_count = run_count + 1 WHERE job_id = ?",
+                    (now, next_run.isoformat(), job_id),
+                )
+            else:
+                conn.execute(
+                    "UPDATE cron_jobs SET last_run = ?, next_run = ?, run_count = run_count + 1, fail_count = fail_count + 1 WHERE job_id = ?",
+                    (now, next_run.isoformat(), job_id),
+                )
+
+    def log_cron_run(
+        self,
+        job_id: str,
+        started_at: datetime,
+        completed_at: datetime | None = None,
+        success: bool = False,
+        result: dict[str, Any] | None = None,
+        error: str = "",
+    ) -> None:
+        """Log a cron job execution to history."""
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO cron_history (job_id, started_at, completed_at, success, result_json, error)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    job_id,
+                    started_at.isoformat(),
+                    completed_at.isoformat() if completed_at else None,
+                    1 if success else 0,
+                    json.dumps(result or {}),
+                    error,
+                ),
+            )
+
+    def get_cron_history(self, job_id: str, limit: int = 20) -> list[dict[str, Any]]:
+        """Get execution history for a cron job."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM cron_history WHERE job_id = ? ORDER BY started_at DESC LIMIT ?",
+                (job_id, limit),
+            ).fetchall()
+            results = []
+            for row in rows:
+                d = dict(row)
+                d["result"] = json.loads(d.pop("result_json", "{}"))
+                results.append(d)
+            return results
+
+    @staticmethod
+    def _row_to_cron_job(d: dict[str, Any]) -> CronJob:
+        """Convert a database row dict to a CronJob dataclass."""
+        return CronJob(
+            job_id=d["job_id"],
+            name=d["name"],
+            schedule=d["schedule"],
+            action=d["action"],
+            params=json.loads(d.get("params_json", "{}")),
+            status=CronStatus(d["status"]),
+            last_run=datetime.fromisoformat(d["last_run"]) if d.get("last_run") else None,
+            next_run=datetime.fromisoformat(d["next_run"]) if d.get("next_run") else None,
+            run_count=d.get("run_count", 0),
+            fail_count=d.get("fail_count", 0),
+            created_at=datetime.fromisoformat(d["created_at"]) if d.get("created_at") else None,
+        )
+
+    # ================================================================== #
+    #  Action log                                                          #
+    # ================================================================== #
+
+    def log_action(
+        self,
+        action_type: str,
+        target: str = "",
+        description: str = "",
+        result: str = "",
+        autonomous: bool = True,
+    ) -> None:
+        """Log an action taken by the daemon."""
+        now = datetime.now().isoformat()
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO action_log (action_type, target, description, result, autonomous, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (action_type, target, description, result, 1 if autonomous else 0, now),
+            )
+
+    def get_action_history(self, limit: int = 50) -> list[dict[str, Any]]:
+        """Get recent action log entries."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM action_log ORDER BY timestamp DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+            return [dict(r) for r in rows]

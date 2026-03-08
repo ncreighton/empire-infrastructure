@@ -36,6 +36,7 @@ import asyncio
 import json
 import os
 import sys
+import time
 from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -1332,6 +1333,235 @@ def cmd_health(engine: OpenClawEngine, args: argparse.Namespace) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Daemon commands
+# ---------------------------------------------------------------------------
+
+
+def cmd_daemon(engine: OpenClawEngine, args: argparse.Namespace) -> None:
+    """Manage the heartbeat daemon."""
+    from openclaw.daemon.heartbeat_daemon import HeartbeatDaemon
+
+    action = args.action
+
+    if action == "start":
+        if HeartbeatDaemon.is_running():
+            _error("Daemon is already running. Use 'daemon stop' first.")
+            return
+
+        daemon = HeartbeatDaemon(engine)
+        _header("Starting Heartbeat Daemon")
+        print("  Tiers: PULSE (5m), SCAN (30m), INTEL (6h), DAILY (24h)")
+        print("  Press Ctrl+C to stop.")
+        print()
+
+        try:
+            asyncio.run(daemon.start())
+        except KeyboardInterrupt:
+            asyncio.run(daemon.stop())
+            _success("Daemon stopped.")
+
+    elif action == "stop":
+        pid_file = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "data", "daemon.pid"
+        )
+        if os.path.exists(pid_file):
+            try:
+                pid = int(open(pid_file).read().strip())
+                import signal
+                os.kill(pid, signal.SIGTERM)
+                os.unlink(pid_file)
+                _success(f"Daemon stopped (PID {pid}).")
+            except (OSError, ValueError) as e:
+                _error(f"Failed to stop daemon: {e}")
+                if os.path.exists(pid_file):
+                    os.unlink(pid_file)
+        else:
+            _warn("No daemon PID file found.")
+
+    elif action == "status":
+        _header("Daemon Status")
+        if HeartbeatDaemon.is_running():
+            _kv("Status", "RUNNING")
+        else:
+            _kv("Status", "STOPPED")
+
+        # Show latest health checks
+        try:
+            latest = engine.codex.get_latest_checks()
+            if latest:
+                _subheader("Latest Health Checks")
+                for name, check in latest.items():
+                    result = check.get("result", "unknown")
+                    msg = check.get("message", "")
+                    status_icon = "OK" if result == "healthy" else result.upper()
+                    _kv(name, f"[{status_icon}] {msg}")
+        except Exception:
+            pass
+
+        # Show cron jobs
+        try:
+            from openclaw.daemon.cron_scheduler import CronScheduler
+            cron = CronScheduler(engine.codex)
+            jobs = cron.get_all()
+            if jobs:
+                _subheader("Cron Jobs")
+                for job in jobs:
+                    next_run = job.next_run.strftime("%Y-%m-%d %H:%M") if job.next_run else "N/A"
+                    _kv(job.name, f"[{job.status.value}] next: {next_run} (runs: {job.run_count})")
+        except Exception:
+            pass
+
+        print()
+
+
+def cmd_cron(engine: OpenClawEngine, args: argparse.Namespace) -> None:
+    """Manage persistent cron jobs."""
+    from openclaw.daemon.cron_scheduler import CronScheduler
+
+    cron = CronScheduler(engine.codex)
+    action = args.action
+
+    if action == "list":
+        _header("Cron Jobs")
+        jobs = cron.get_all()
+        if not jobs:
+            _warn("No cron jobs registered.")
+            return
+
+        for job in jobs:
+            _kv(f"{job.name} ({job.job_id})", "")
+            _kv("  Schedule", job.schedule)
+            _kv("  Status", job.status.value)
+            _kv("  Action", job.action)
+            _kv("  Runs", f"{job.run_count} (failed: {job.fail_count})")
+            last = job.last_run.strftime("%Y-%m-%d %H:%M") if job.last_run else "never"
+            next_r = job.next_run.strftime("%Y-%m-%d %H:%M") if job.next_run else "N/A"
+            _kv("  Last/Next", f"{last} / {next_r}")
+            print()
+
+    elif action == "add":
+        if not args.name or not args.schedule or not args.job_action:
+            _error("Usage: cron add --name NAME --schedule SCHED --action ACTION")
+            return
+        job_id = cron.register(args.name, args.schedule, args.job_action)
+        _success(f"Cron job registered: {job_id}")
+
+    elif action == "pause":
+        if not args.job_id:
+            _error("Usage: cron pause --job-id JOB_ID")
+            return
+        if cron.pause(args.job_id):
+            _success(f"Paused job {args.job_id}")
+        else:
+            _error(f"Job not found: {args.job_id}")
+
+    elif action == "resume":
+        if not args.job_id:
+            _error("Usage: cron resume --job-id JOB_ID")
+            return
+        if cron.resume(args.job_id):
+            _success(f"Resumed job {args.job_id}")
+        else:
+            _error(f"Job not found: {args.job_id}")
+
+    elif action == "history":
+        if not args.job_id:
+            _error("Usage: cron history --job-id JOB_ID")
+            return
+        history = cron.get_history(args.job_id)
+        if not history:
+            _warn(f"No history for job {args.job_id}")
+            return
+        _header(f"Cron History: {args.job_id}")
+        for entry in history:
+            status = "OK" if entry.get("success") else "FAIL"
+            started = entry.get("started_at", "?")[:19]
+            error = entry.get("error", "")
+            line = f"[{status}] {started}"
+            if error:
+                line += f" — {error[:60]}"
+            print(f"  {line}")
+
+
+def cmd_alerts(engine: OpenClawEngine, args: argparse.Namespace) -> None:
+    """View and manage alerts."""
+    from openclaw.models import AlertSeverity
+
+    action = getattr(args, "action", "list")
+
+    if action == "list" or action is None:
+        _header("Recent Alerts")
+        severity = None
+        if hasattr(args, "severity") and args.severity:
+            severity = AlertSeverity(args.severity)
+        alerts = engine.codex.get_alerts(severity=severity, limit=20)
+        if not alerts:
+            _warn("No alerts found.")
+            return
+        for alert in alerts:
+            sev = alert.get("severity", "info").upper()
+            delivered = "delivered" if alert.get("delivered") else "suppressed"
+            title = alert.get("title", "")
+            ts = alert.get("created_at", "")[:19]
+            print(f"  [{sev}] {ts} — {title} ({delivered})")
+
+    elif action == "ack":
+        alert_id = getattr(args, "alert_id", "")
+        if not alert_id:
+            _error("Usage: alerts ack ALERT_ID")
+            return
+        if engine.codex.acknowledge_alert(alert_id):
+            _success(f"Alert {alert_id} acknowledged.")
+        else:
+            _error(f"Alert not found: {alert_id}")
+
+    elif action == "stats":
+        _header("Alert Statistics")
+        stats = engine.codex.get_alert_stats()
+        _kv("Total alerts", stats.get("total_alerts", 0))
+        _kv("Delivered", stats.get("delivered", 0))
+        _kv("Suppressed", stats.get("suppressed", 0))
+        _kv("By severity", json.dumps(stats.get("by_severity", {})))
+
+    print()
+
+
+def cmd_empire_health(engine: OpenClawEngine, args: argparse.Namespace) -> None:
+    """Show empire-wide health status."""
+    _header("Empire Health Status")
+
+    latest = engine.codex.get_latest_checks()
+    if not latest:
+        _warn("No health checks recorded yet. Start the daemon first.")
+        return
+
+    # Filter by tier if requested
+    tier_filter = getattr(args, "tier", None)
+
+    for name, check in sorted(latest.items()):
+        if tier_filter and check.get("tier") != tier_filter:
+            continue
+
+        result = check.get("result", "unknown")
+        msg = check.get("message", "")
+        tier = check.get("tier", "?")
+        ts = check.get("checked_at", "")[:19]
+
+        if result == "healthy":
+            status = "OK"
+        elif result == "degraded":
+            status = "WARN"
+        elif result == "down":
+            status = "DOWN"
+        else:
+            status = "????"
+
+        _kv(f"[{tier}] {name}", f"[{status}] {msg} ({ts})")
+
+    print()
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -1491,6 +1721,28 @@ def main() -> None:
     # -- health --
     subparsers.add_parser("health", help="Check system health and dependencies")
 
+    # -- daemon --
+    daemon_parser = subparsers.add_parser("daemon", help="Manage the heartbeat daemon")
+    daemon_parser.add_argument("action", choices=["start", "stop", "status"])
+
+    # -- cron --
+    cron_parser = subparsers.add_parser("cron", help="Manage persistent cron jobs")
+    cron_parser.add_argument("action", choices=["list", "add", "pause", "resume", "history"])
+    cron_parser.add_argument("--job-id", help="Cron job ID")
+    cron_parser.add_argument("--name", help="Job name (for add)")
+    cron_parser.add_argument("--schedule", help="Schedule string (for add)")
+    cron_parser.add_argument("--action", dest="job_action", help="Action callable (for add)")
+
+    # -- alerts --
+    alerts_parser = subparsers.add_parser("alerts", help="View and manage alerts")
+    alerts_parser.add_argument("action", nargs="?", default="list", choices=["list", "ack", "stats"])
+    alerts_parser.add_argument("alert_id", nargs="?", help="Alert ID (for ack)")
+    alerts_parser.add_argument("--severity", choices=["critical", "warning", "info"])
+
+    # -- empire-health --
+    eh_parser = subparsers.add_parser("empire-health", help="Empire-wide health status")
+    eh_parser.add_argument("--tier", choices=["pulse", "scan", "intel", "daily"])
+
     args = parser.parse_args()
 
     if not args.command:
@@ -1525,6 +1777,10 @@ def main() -> None:
         "captcha": cmd_captcha,
         "platforms": cmd_platforms,
         "health": cmd_health,
+        "daemon": cmd_daemon,
+        "cron": cmd_cron,
+        "alerts": cmd_alerts,
+        "empire-health": cmd_empire_health,
     }
 
     handler = commands.get(args.command)

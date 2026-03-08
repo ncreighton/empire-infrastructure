@@ -662,7 +662,7 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "openclaw-agent",
-        "version": "2.3.0",
+        "version": "3.0.0",
         "timestamp": datetime.now().isoformat(),
         "platforms_registered": len(get_all_platform_ids()),
         "active_jobs": active_jobs,
@@ -670,4 +670,206 @@ async def health_check():
         "email_verifier_configured": engine.email_verifier.is_configured,
         "scheduler_stats": scheduler.get_stats(),
         "rate_limiter": engine.rate_limiter.get_stats(),
+        "daemon_running": _daemon is not None and _daemon._running,
     }
+
+
+# ─── Daemon Endpoints ───────────────────────────────────────────────────────
+
+_daemon = None  # HeartbeatDaemon singleton
+_daemon_task = None
+
+
+@app.post("/daemon/start")
+async def daemon_start():
+    """Start the heartbeat daemon."""
+    global _daemon, _daemon_task
+    from openclaw.daemon.heartbeat_daemon import HeartbeatDaemon
+
+    if _daemon and _daemon._running:
+        return {"status": "already_running", "uptime": _daemon.get_status().get("uptime_seconds", 0)}
+
+    _daemon = HeartbeatDaemon(engine)
+    _daemon_task = asyncio.create_task(_daemon.start())
+    return {"status": "starting"}
+
+
+@app.post("/daemon/stop")
+async def daemon_stop():
+    """Stop the heartbeat daemon."""
+    global _daemon, _daemon_task
+    if not _daemon or not _daemon._running:
+        return {"status": "not_running"}
+
+    await _daemon.stop()
+    if _daemon_task:
+        _daemon_task.cancel()
+    _daemon = None
+    _daemon_task = None
+    return {"status": "stopped"}
+
+
+@app.get("/daemon/status")
+async def daemon_status():
+    """Get daemon running state, uptime, tier stats."""
+    from openclaw.daemon.heartbeat_daemon import HeartbeatDaemon
+    if _daemon:
+        return _daemon.get_status()
+    return {
+        "running": False,
+        "started_at": None,
+        "uptime_seconds": 0,
+        "tier_runs": {},
+        "cron_jobs": 0,
+        "pending_actions": 0,
+    }
+
+
+# ─── Cron Endpoints ─────────────────────────────────────────────────────────
+
+
+class CronJobRequest(BaseModel):
+    name: str
+    schedule: str
+    action: str
+    params: dict = {}
+
+
+@app.get("/cron/jobs")
+async def list_cron_jobs():
+    """List all cron jobs."""
+    from openclaw.daemon.cron_scheduler import CronScheduler
+    cron = CronScheduler(engine.codex)
+    jobs = cron.get_all()
+    return [
+        {
+            "job_id": j.job_id,
+            "name": j.name,
+            "schedule": j.schedule,
+            "action": j.action,
+            "status": j.status.value,
+            "run_count": j.run_count,
+            "fail_count": j.fail_count,
+            "last_run": j.last_run.isoformat() if j.last_run else None,
+            "next_run": j.next_run.isoformat() if j.next_run else None,
+        }
+        for j in jobs
+    ]
+
+
+@app.post("/cron/jobs")
+async def create_cron_job(req: CronJobRequest):
+    """Create a new cron job."""
+    from openclaw.daemon.cron_scheduler import CronScheduler
+    cron = CronScheduler(engine.codex)
+    job_id = cron.register(req.name, req.schedule, req.action, req.params)
+    return {"job_id": job_id, "name": req.name, "status": "active"}
+
+
+@app.get("/cron/job/{job_id}")
+async def get_cron_job(job_id: str):
+    """Get cron job details + history."""
+    from openclaw.daemon.cron_scheduler import CronScheduler
+    cron = CronScheduler(engine.codex)
+    job = engine.codex.get_cron_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Cron job not found: {job_id}")
+    history = cron.get_history(job_id, limit=10)
+    return {
+        "job_id": job.job_id,
+        "name": job.name,
+        "schedule": job.schedule,
+        "action": job.action,
+        "status": job.status.value,
+        "run_count": job.run_count,
+        "fail_count": job.fail_count,
+        "last_run": job.last_run.isoformat() if job.last_run else None,
+        "next_run": job.next_run.isoformat() if job.next_run else None,
+        "history": history,
+    }
+
+
+@app.post("/cron/job/{job_id}/pause")
+async def pause_cron_job(job_id: str):
+    """Pause a cron job."""
+    from openclaw.daemon.cron_scheduler import CronScheduler
+    cron = CronScheduler(engine.codex)
+    if cron.pause(job_id):
+        return {"success": True, "status": "paused"}
+    raise HTTPException(status_code=404, detail=f"Cron job not found: {job_id}")
+
+
+@app.post("/cron/job/{job_id}/resume")
+async def resume_cron_job(job_id: str):
+    """Resume a paused cron job."""
+    from openclaw.daemon.cron_scheduler import CronScheduler
+    cron = CronScheduler(engine.codex)
+    if cron.resume(job_id):
+        return {"success": True, "status": "active"}
+    raise HTTPException(status_code=404, detail=f"Cron job not found: {job_id}")
+
+
+@app.delete("/cron/job/{job_id}")
+async def disable_cron_job(job_id: str):
+    """Disable a cron job."""
+    from openclaw.daemon.cron_scheduler import CronScheduler
+    cron = CronScheduler(engine.codex)
+    if cron.disable(job_id):
+        return {"success": True, "status": "disabled"}
+    raise HTTPException(status_code=404, detail=f"Cron job not found: {job_id}")
+
+
+# ─── Alert Endpoints ────────────────────────────────────────────────────────
+
+
+@app.get("/alerts")
+async def list_alerts(severity: str = None, source: str = None, limit: int = 50):
+    """Get recent alerts with optional filtering."""
+    from openclaw.models import AlertSeverity
+    sev = AlertSeverity(severity) if severity else None
+    return engine.codex.get_alerts(severity=sev, source=source, limit=limit)
+
+
+@app.get("/alerts/stats")
+async def alert_stats():
+    """Get alert statistics."""
+    return engine.codex.get_alert_stats()
+
+
+@app.post("/alerts/{alert_id}/acknowledge")
+async def acknowledge_alert(alert_id: str):
+    """Acknowledge an alert."""
+    if engine.codex.acknowledge_alert(alert_id):
+        return {"success": True, "alert_id": alert_id}
+    raise HTTPException(status_code=404, detail=f"Alert not found: {alert_id}")
+
+
+# ─── Empire Health Endpoints ────────────────────────────────────────────────
+
+
+@app.get("/health/empire")
+async def empire_health():
+    """Full empire health (last check results per tier)."""
+    return engine.codex.get_latest_checks()
+
+
+@app.get("/health/history")
+async def health_history(tier: str = None, limit: int = 50):
+    """Health check history."""
+    from openclaw.models import HeartbeatTier
+    t = HeartbeatTier(tier) if tier else None
+    return engine.codex.get_recent_checks(tier=t, limit=limit)
+
+
+# ─── Daemon auto-start ──────────────────────────────────────────────────────
+
+
+@app.router.on_startup.append
+async def startup_event():
+    """Auto-start daemon if OPENCLAW_DAEMON_MODE is set."""
+    global _daemon, _daemon_task
+    if os.environ.get("OPENCLAW_DAEMON_MODE", "").lower() in ("true", "1", "yes"):
+        from openclaw.daemon.heartbeat_daemon import HeartbeatDaemon
+        _daemon = HeartbeatDaemon(engine)
+        _daemon_task = asyncio.create_task(_daemon.start())
+        logger.info("Daemon auto-started via OPENCLAW_DAEMON_MODE")

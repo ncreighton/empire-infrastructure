@@ -10,7 +10,9 @@ Uses FORGE + AMPLIFY intelligence pattern. Deploys to VPS Docker on port 8100.
 - **Browser**: browser-use (Playwright + Claude Sonnet vision) + proxy rotation + stealth
 - **Agents**: PlannerAgent (algorithmic), ExecutorAgent (LLM), MonitorAgent, VerificationAgent
 - **Automation**: EmailVerifier, RateLimiter, RetryEngine, Scheduler, ProfileSync, WebhookNotifier, Analytics
-- **API**: FastAPI port 8100 (30+ endpoints)
+- **Daemon**: HeartbeatDaemon (4-tier cascading loops), AlertRouter, CronScheduler, ProactiveAgent, SelfHealer
+- **Health Checks**: WordPress, Services, n8n, Email, Profiles, SEO/GSC, Security
+- **API**: FastAPI port 8100 (49 endpoints)
 - **CLI**: Full command-line interface (`python cli.py`)
 
 ## Key Paths
@@ -22,11 +24,15 @@ Uses FORGE + AMPLIFY intelligence pattern. Deploys to VPS Docker on port 8100.
 - Browser automation: `openclaw/browser/` (browser_manager, stealth, captcha_handler, session_manager, proxy_manager)
 - Agent system: `openclaw/agents/`
 - Automation: `openclaw/automation/` (email_verifier, rate_limiter, retry_engine, scheduler, profile_sync, webhook_notifier, analytics)
+- Daemon: `openclaw/daemon/` (heartbeat_daemon, alert_router, cron_scheduler, proactive_agent, self_healer, heartbeat_config)
+- Health checks: `openclaw/daemon/checks/` (wordpress, service, n8n, email, profile, seo, security)
+- Daemon config: `openclaw/daemon/HEARTBEAT.md`
 - API server: `api/app.py`
 - CLI: `cli.py`
-- SQLite DB: `data/openclaw.db`
+- SQLite DB: `data/openclaw.db` (10 tables: 5 original + 5 daemon)
 - Sessions: `data/sessions/`
 - Screenshots: `data/screenshots/`
+- PID file: `data/daemon.pid`
 
 ## Deploy to VPS
 
@@ -82,6 +88,28 @@ python cli.py captcha pending                       # View pending CAPTCHAs
 python cli.py captcha solve --task-id X --solution Y  # Submit CAPTCHA solution
 python cli.py platforms --category ai_marketplace   # List platforms
 python cli.py health                                # System health check
+
+# Daemon
+python cli.py daemon start                          # Start daemon (foreground)
+python cli.py daemon stop                           # Stop running daemon
+python cli.py daemon status                         # Show daemon status + tier stats
+
+# Cron
+python cli.py cron list                             # Show all cron jobs + next run times
+python cli.py cron add --name "..." --schedule "every 6h" --action "..."
+python cli.py cron pause --job-id <id>
+python cli.py cron resume --job-id <id>
+python cli.py cron history --job-id <id>            # Show execution history
+
+# Alerts
+python cli.py alerts                                # Recent alerts
+python cli.py alerts --severity critical
+python cli.py alerts ack <alert_id>                 # Acknowledge
+python cli.py alerts stats                          # Alert statistics
+
+# Empire health
+python cli.py empire-health                         # Current health status
+python cli.py empire-health --tier pulse            # Filter by tier
 ```
 
 ## Run Tests
@@ -146,6 +174,28 @@ PYTHONPATH=. python -m pytest tests/ -v
 - `WS /ws/live` — Real-time monitoring with heartbeat + event broadcast
 - `GET /health` — Health check
 
+### Daemon
+- `POST /daemon/start` — Start heartbeat daemon
+- `POST /daemon/stop` — Stop heartbeat daemon
+- `GET /daemon/status` — Running state, uptime, tier stats
+
+### Cron
+- `GET /cron/jobs` — List all cron jobs
+- `POST /cron/jobs` — Create new cron job
+- `GET /cron/job/{id}` — Job details + history
+- `POST /cron/job/{id}/pause` — Pause job
+- `POST /cron/job/{id}/resume` — Resume job
+- `DELETE /cron/job/{id}` — Disable job
+
+### Alerts
+- `GET /alerts` — Recent alerts (filterable by severity, source)
+- `GET /alerts/stats` — Alert statistics
+- `POST /alerts/{id}/acknowledge` — Acknowledge an alert
+
+### Empire Health
+- `GET /health/empire` — Full empire health (last check results per tier)
+- `GET /health/history` — Health check history
+
 ## Environment Variables
 
 Required:
@@ -161,6 +211,12 @@ Optional:
 - `OPENCLAW_PROXIES` — Comma-separated proxy URLs for rotation
 - `OPENCLAW_WEBHOOK_URL` — Primary webhook for notifications
 - `OPENCLAW_DASHBOARD_URL` — Empire dashboard alerts endpoint
+- `OPENCLAW_DAEMON_MODE` — Auto-start daemon with API server (true/false)
+- `OPENCLAW_QUIET_START`, `OPENCLAW_QUIET_END` — Quiet hours (EST, default 23-7)
+- `OPENCLAW_MAX_ALERTS_PER_DAY` — Per-source alert limit (default 5)
+- `OPENCLAW_DEDUP_WINDOW_HOURS` — Alert dedup window (default 6)
+- `GSC_CREDENTIALS_PATH` — Google Search Console OAuth JSON
+- `N8N_API_KEY` — n8n API key for workflow health checks
 
 ## Platform Categories (46 platforms)
 
