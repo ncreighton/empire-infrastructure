@@ -135,10 +135,12 @@ class VibePlannerAgent:
         """Generate steps from the scope template."""
         template = _SCOPE_STEPS.get(mission.scope, _SCOPE_STEPS[MissionScope.FEATURE])
         steps = []
+        # Extract target once from both title and description
+        target = self._extract_target_file(
+            f"{mission.title} {mission.description}"
+        )
         for i, tmpl in enumerate(template):
             desc = tmpl["desc"]
-            # Replace {target} with best guess from description
-            target = self._extract_target_file(mission.description)
             desc = desc.replace("{target}", target or "target file")
 
             steps.append(MissionStep(

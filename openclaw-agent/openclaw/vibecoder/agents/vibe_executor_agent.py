@@ -522,7 +522,7 @@ class VibeExecutorAgent:
 
             if "/" not in target_rel and not os.path.exists(target):
                 # Bare filename — search the project for an existing match
-                found = self._find_file_in_tree(root, target_rel)
+                found = self._find_file_in_tree(root, target_rel, context=step.description)
                 if found:
                     target = found
                     # Update step.target_file to the discovered relative path
@@ -557,16 +557,44 @@ class VibeExecutorAgent:
             step.output = result_text
 
     @staticmethod
-    def _find_file_in_tree(root: str, filename: str) -> str | None:
-        """Search project tree for a file by name, return full path."""
+    def _find_file_in_tree(
+        root: str, filename: str, context: str = ""
+    ) -> str | None:
+        """Search project tree for a file by name, return full path.
+
+        When multiple matches exist, prefer paths containing context words
+        (e.g. context="vibecoder" prefers openclaw/vibecoder/models.py
+        over openclaw/models.py).
+        """
+        candidates: list[str] = []
         for dirpath, _dirs, files in os.walk(root):
-            # Skip hidden dirs, __pycache__, node_modules, .git
             base = os.path.basename(dirpath)
             if base.startswith(".") or base in ("__pycache__", "node_modules", ".git"):
                 continue
             if filename in files:
-                return os.path.join(dirpath, filename)
-        return None
+                candidates.append(os.path.join(dirpath, filename))
+
+        if not candidates:
+            return None
+        if len(candidates) == 1:
+            return candidates[0]
+
+        # Multiple matches — use context words to pick the best one
+        if context:
+            ctx_words = [
+                w.lower() for w in re.split(r'[\s/\\._-]+', context) if len(w) > 2
+            ]
+            best_score = -1
+            best = candidates[0]
+            for c in candidates:
+                rel = c.replace("\\", "/").lower()
+                score = sum(1 for w in ctx_words if w in rel)
+                if score > best_score:
+                    best_score = score
+                    best = c
+            return best
+
+        return candidates[0]
 
     @staticmethod
     def _extract_code_blocks(text: str) -> list[str]:
