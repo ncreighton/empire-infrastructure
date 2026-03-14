@@ -20,7 +20,7 @@ import asyncio
 import logging
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable
 
@@ -109,6 +109,10 @@ class HeartbeatDaemon:
             f"DAILY=24h"
         )
 
+        # Start MissionDaemon alongside tier loops
+        from openclaw.vibecoder.daemon.mission_daemon import MissionDaemon
+        self._mission_daemon = MissionDaemon(self.engine.vibecoder)
+
         try:
             await asyncio.gather(
                 self._tier_loop("PULSE", self.config.pulse_interval, self._run_pulse),
@@ -117,6 +121,7 @@ class HeartbeatDaemon:
                 self._tier_loop("DAILY", 86400, self._run_daily),
                 self._cron_loop(),
                 self._proactive_loop(),
+                self._mission_daemon.start(),
             )
         finally:
             self._cleanup_pid()
@@ -176,7 +181,8 @@ class HeartbeatDaemon:
         # Service port checks
         if self.config.service_ports:
             svc_checks = await service_check.check_all_services(
-                self.config.service_ports
+                self.config.service_ports,
+                service_hosts=self.config.service_hosts,
             )
             checks.extend(svc_checks)
 
@@ -301,32 +307,82 @@ class HeartbeatDaemon:
         while self._running:
             try:
                 actions = self.proactive.evaluate()
-                for action in actions:
-                    if action.requires_approval:
-                        # Log for human review, don't execute
-                        self.codex.log_action(
-                            action.action_type,
-                            action.target,
-                            action.description,
-                            "pending_approval",
-                            autonomous=False,
-                        )
-                        continue
+                auto = [a for a in actions if not a.requires_approval]
+                pending = [a for a in actions if a.requires_approval]
 
-                    # Auto-approved actions: execute
+                logger.info(
+                    f"[PROACTIVE] Evaluated: {len(actions)} total, "
+                    f"{len(auto)} auto-approved, {len(pending)} pending approval"
+                )
+
+                # Deduplicate pending_approval logs: only log if not
+                # already logged for this (action_type, target) in last 6h
+                if pending:
+                    recently_logged = set()
                     try:
-                        await self._execute_proactive_action(action)
+                        history = self.codex.get_action_history(limit=200)
+                        cutoff_6h = (
+                            datetime.now() - timedelta(hours=6)
+                        ).isoformat()
+                        for h in history:
+                            if (
+                                h.get("result") == "pending_approval"
+                                and h.get("timestamp", "") > cutoff_6h
+                            ):
+                                recently_logged.add(
+                                    (h.get("action_type", ""), h.get("target", ""))
+                                )
+                    except Exception:
+                        pass
+
+                    for action in pending:
+                        key = (action.action_type, action.target)
+                        if key not in recently_logged:
+                            self.codex.log_action(
+                                action.action_type,
+                                action.target,
+                                action.description,
+                                "pending_approval",
+                                autonomous=False,
+                            )
+
+                # Limit to 1 real browser signup per cycle to keep daemon responsive.
+                # Pre-flight rejections (disabled, 403, already-complete) don't count.
+                browser_signup_running = False
+                for action in auto:
+                    if action.action_type in ("new_signup", "retry_signup"):
+                        if browser_signup_running:
+                            logger.info(
+                                f"[PROACTIVE] Deferring {action.action_type} "
+                                f"-> {action.target} (1 signup per cycle)"
+                            )
+                            continue
+
+                    logger.info(
+                        f"[PROACTIVE] Executing: {action.action_type} "
+                        f"-> {action.target}"
+                    )
+                    try:
+                        was_real = await self._execute_proactive_action(action)
+                        if was_real and action.action_type in (
+                            "new_signup", "retry_signup"
+                        ):
+                            browser_signup_running = True
                     except Exception as e:
                         logger.error(
-                            f"Proactive action {action.action_type} failed: {e}"
+                            f"Proactive action {action.action_type} failed: {e}",
+                            exc_info=True,
                         )
             except Exception as e:
-                logger.error(f"Proactive loop error: {e}")
+                logger.error(f"Proactive loop error: {e}", exc_info=True)
 
             await asyncio.sleep(900)  # 15 min
 
-    async def _execute_proactive_action(self, action):
-        """Execute an auto-approved proactive action."""
+    async def _execute_proactive_action(self, action) -> bool:
+        """Execute an auto-approved proactive action.
+
+        Returns True if a real browser signup ran (not a pre-flight rejection).
+        """
         if action.action_type == "verify_email":
             if self.engine.email_verifier.is_configured:
                 ok = await self.engine.email_verifier.auto_verify(
@@ -337,20 +393,145 @@ class HeartbeatDaemon:
                     "verify_email", action.target,
                     action.description, result,
                 )
+            return False  # Not a browser signup
+
+        elif action.action_type == "new_signup":
+            # Autonomous signup — generate password, execute pipeline
+            import secrets
+            import string
+            password = os.environ.get("OPENCLAW_DEFAULT_PASSWORD")
+            if not password:
+                # Generate a strong random password
+                chars = string.ascii_letters + string.digits + "!@#$%"
+                password = "".join(secrets.choice(chars) for _ in range(20))
+
+            credentials = {
+                "password": password,
+                "email": os.environ.get("OPENCLAW_EMAIL", ""),
+            }
+
+            logger.info(
+                f"[PROACTIVE] Autonomous signup: {action.target} "
+                f"(difficulty={action.params.get('difficulty', '?')})"
+            )
+
+            try:
+                result = await self.engine.signup_async(
+                    action.target, credentials
+                )
+
+                # Only log "starting" if the attempt actually ran
+                # (not rejected by pre-flight checks like disabled/403/already-complete)
+                preflight_reject = (
+                    not result.success
+                    and result.errors
+                    and any(
+                        kw in result.errors[0]
+                        for kw in ("disabled", "Already signed up", "HTTP 403",
+                                   "HTTP 404", "HTTP 502", "HTTP 503",
+                                   "unreachable", "Unknown platform")
+                    )
+                )
+                if not preflight_reject:
+                    self.codex.log_action(
+                        "new_signup", action.target,
+                        action.description, "starting",
+                    )
+
+                status = "success" if result.success else "failed"
+                detail = f"status={result.status.value}"
+                if result.errors:
+                    detail += f", error={result.errors[0][:100]}"
+                if not preflight_reject:
+                    self.codex.log_action(
+                        "new_signup", action.target,
+                        f"{action.description} -> {detail}", status,
+                    )
+                else:
+                    logger.debug(
+                        f"[PROACTIVE] Pre-flight reject {action.target}: "
+                        f"{result.errors[0][:100]}"
+                    )
+
+                if result.success:
+                    logger.info(
+                        f"[PROACTIVE] Signup SUCCESS: {action.target} "
+                        f"(profile_url={result.profile_url})"
+                    )
+                    # Alert on success
+                    await self.alert_router.route(Alert(
+                        severity=AlertSeverity.INFO,
+                        source="proactive_agent",
+                        title=f"Signup completed: {action.target}",
+                        message=f"Successfully signed up for {action.target}. "
+                                f"Status: {result.status.value}",
+                    ))
+                else:
+                    logger.warning(
+                        f"[PROACTIVE] Signup FAILED: {action.target} "
+                        f"({result.errors})"
+                    )
+
+                return not preflight_reject
+
+            except Exception as e:
+                logger.error(f"[PROACTIVE] Signup error for {action.target}: {e}")
+                self.codex.log_action(
+                    "new_signup", action.target,
+                    action.description, f"error: {str(e)[:200]}",
+                )
+                return True  # Error during real attempt = still counts
 
         elif action.action_type == "retry_signup":
             try:
-                result = await self.engine.signup_async(action.target)
-                status = "success" if result.success else "failed"
-                self.codex.log_action(
-                    "retry_signup", action.target,
-                    action.description, status,
+                # Build credentials (same as new_signup)
+                import secrets
+                import string
+                password = os.environ.get("OPENCLAW_DEFAULT_PASSWORD")
+                if not password:
+                    chars = string.ascii_letters + string.digits + "!@#$%"
+                    password = "".join(secrets.choice(chars) for _ in range(20))
+                credentials = {
+                    "password": password,
+                    "email": os.environ.get("OPENCLAW_EMAIL", ""),
+                }
+                result = await self.engine.signup_async(
+                    action.target, credentials
                 )
+
+                # Detect pre-flight rejections
+                preflight_reject = (
+                    not result.success
+                    and result.errors
+                    and any(
+                        kw in result.errors[0]
+                        for kw in ("disabled", "Already signed up", "HTTP 403",
+                                   "HTTP 404", "HTTP 502", "HTTP 503",
+                                   "unreachable", "Unknown platform")
+                    )
+                )
+
+                if not preflight_reject:
+                    status = "success" if result.success else "failed"
+                    detail = f"status={result.status.value}"
+                    if result.errors:
+                        detail += f", error={result.errors[0][:100]}"
+                    self.codex.log_action(
+                        "retry_signup", action.target,
+                        f"{action.description} -> {detail}", status,
+                    )
+                else:
+                    logger.debug(
+                        f"[PROACTIVE] Pre-flight reject {action.target}: "
+                        f"{result.errors[0][:100]}"
+                    )
+                return not preflight_reject
             except Exception as e:
                 self.codex.log_action(
                     "retry_signup", action.target,
                     action.description, f"error: {e}",
                 )
+                return True  # Error during real attempt = still counts
 
         elif action.action_type == "session_cleanup":
             cleared = await self.healer.clear_expired_sessions()
@@ -358,6 +539,8 @@ class HeartbeatDaemon:
                 "session_cleanup", "sessions",
                 f"Cleared {cleared} stale sessions", "success",
             )
+
+        return False  # Non-signup actions don't count
 
     # ================================================================== #
     #  Helpers                                                             #
@@ -476,6 +659,11 @@ class HeartbeatDaemon:
             ("email-inbox-sweep", "every 2h", "email_sweep", {}),
             ("platform-scout", "weekly wed", "platform_scout", {}),
             ("daily-report", "daily 8pm", "daily_report", {}),
+            # Product Factory — autonomous skill/workflow generation
+            ("product-factory-daily", "daily 4am", "factory_daily_run",
+             {"skills": 2, "workflows": 3}),
+            ("product-factory-performance", "daily 2pm", "factory_performance", {}),
+            ("product-factory-weekly-bundle", "weekly sun", "factory_weekly_bundle", {}),
         ]
         for name, schedule, action, params in defaults:
             self.cron.register(name, schedule, action, params)
@@ -491,6 +679,10 @@ class HeartbeatDaemon:
             "email_sweep": self._cron_email_sweep,
             "platform_scout": self._cron_platform_scout,
             "daily_report": self._cron_daily_report,
+            # Product Factory actions
+            "factory_daily_run": self._cron_factory_daily_run,
+            "factory_performance": self._cron_factory_performance,
+            "factory_weekly_bundle": self._cron_factory_weekly_bundle,
         }
 
     # ─── Cron action handlers ───
@@ -545,6 +737,150 @@ class HeartbeatDaemon:
             message=report,
         ))
         return {"delivered": True}
+
+    # ─── Product Factory cron actions ───
+
+    async def _run_factory_subprocess(self, script: str, args: list[str]) -> dict:
+        """Run a Product Factory script as a subprocess.
+
+        The factory scripts live in the Supercharger workspace (read-only mount)
+        but write output to /app/data/factory/ (writable Docker volume).
+        """
+        import asyncio as _asyncio
+
+        # Locate factory script — try Supercharger mount first, then fallback
+        factory_paths = [
+            "/app/supercharger/workspace/skills/product-factory",
+            "/app/data/factory",
+        ]
+        script_path = None
+        for base in factory_paths:
+            candidate = f"{base}/{script}"
+            if Path(candidate).exists():
+                script_path = candidate
+                break
+
+        if not script_path:
+            msg = f"Factory script not found: {script} (searched {factory_paths})"
+            logger.error(f"[FACTORY] {msg}")
+            return {"error": msg}
+
+        cmd = ["python3", script_path] + args
+        logger.info(f"[FACTORY] Running: {' '.join(cmd)}")
+
+        try:
+            proc = await _asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=_asyncio.subprocess.PIPE,
+                stderr=_asyncio.subprocess.PIPE,
+                env={**os.environ, "PYTHONUNBUFFERED": "1"},
+            )
+            stdout, stderr = await _asyncio.wait_for(
+                proc.communicate(), timeout=600,  # 10 min max
+            )
+            stdout_text = stdout.decode("utf-8", errors="replace").strip()
+            stderr_text = stderr.decode("utf-8", errors="replace").strip()
+
+            if stdout_text:
+                for line in stdout_text.split("\n")[-20:]:
+                    logger.info(f"[FACTORY] {line}")
+
+            if proc.returncode != 0:
+                logger.error(f"[FACTORY] Exit code {proc.returncode}: {stderr_text[-500:]}")
+                return {
+                    "success": False,
+                    "exit_code": proc.returncode,
+                    "stderr": stderr_text[-500:],
+                    "stdout": stdout_text[-500:],
+                }
+
+            return {
+                "success": True,
+                "exit_code": 0,
+                "stdout": stdout_text[-1000:],
+            }
+
+        except asyncio.TimeoutError:
+            logger.error("[FACTORY] Subprocess timed out after 600s")
+            try:
+                proc.kill()
+            except Exception:
+                pass
+            return {"error": "timeout", "success": False}
+        except Exception as e:
+            logger.error(f"[FACTORY] Subprocess error: {e}", exc_info=True)
+            return {"error": str(e)[:200], "success": False}
+
+    async def _cron_factory_daily_run(self, skills: int = 2, workflows: int = 3, **kwargs):
+        """Daily factory run: generate skills + workflows, publish to marketplaces."""
+        logger.info(f"[FACTORY] Daily run starting: {skills} skills, {workflows} workflows")
+
+        result = await self._run_factory_subprocess(
+            "product_factory.py",
+            ["run", "--skills", str(skills), "--workflows", str(workflows)],
+        )
+
+        # Send alert with results
+        if result.get("success"):
+            await self.alert_router.route(Alert(
+                severity=AlertSeverity.INFO,
+                source="product_factory",
+                title="Product Factory Daily Run Complete",
+                message=f"Generated {skills} skills + {workflows} workflows.\n"
+                        f"Output: {result.get('stdout', '')[-300:]}",
+            ))
+        else:
+            await self.alert_router.route(Alert(
+                severity=AlertSeverity.WARNING,
+                source="product_factory",
+                title="Product Factory Daily Run Failed",
+                message=f"Error: {result.get('error') or result.get('stderr', 'unknown')[:300]}",
+            ))
+
+        self.codex.log_action(
+            "factory_daily_run", "product_factory",
+            f"skills={skills}, workflows={workflows}",
+            "success" if result.get("success") else "failed",
+        )
+        return result
+
+    async def _cron_factory_performance(self, **kwargs):
+        """Daily performance check: update metrics, extract learnings."""
+        logger.info("[FACTORY] Performance check starting")
+
+        result = await self._run_factory_subprocess(
+            "product_factory.py", ["performance"],
+        )
+
+        self.codex.log_action(
+            "factory_performance", "product_factory",
+            "Performance metrics update",
+            "success" if result.get("success") else "failed",
+        )
+        return result
+
+    async def _cron_factory_weekly_bundle(self, **kwargs):
+        """Weekly bundle: package accumulated products into Gumroad bundles."""
+        logger.info("[FACTORY] Weekly bundle starting")
+
+        result = await self._run_factory_subprocess(
+            "factory_daemon.py", ["bundle"],
+        )
+
+        if result.get("success"):
+            await self.alert_router.route(Alert(
+                severity=AlertSeverity.INFO,
+                source="product_factory",
+                title="Product Factory Weekly Bundle Complete",
+                message=f"Bundle packaged.\n{result.get('stdout', '')[-300:]}",
+            ))
+
+        self.codex.log_action(
+            "factory_weekly_bundle", "product_factory",
+            "Weekly Gumroad bundle creation",
+            "success" if result.get("success") else "failed",
+        )
+        return result
 
     # ─── PID file management ───
 

@@ -93,6 +93,7 @@ class BrowserManager:
         platform_id: str | None = None,
         sensitive_data: dict[str, str] | None = None,
         max_steps: int = 25,
+        model: str = "claude-sonnet-4-20250514",
     ) -> Any:
         """Create a browser-use Agent for a specific task.
 
@@ -101,6 +102,7 @@ class BrowserManager:
             platform_id: Platform ID for session management
             sensitive_data: Dict of {placeholder: secret_value} to mask in logs
             max_steps: Maximum browser actions before stopping
+            model: Anthropic model ID (e.g. claude-sonnet-4-20250514, claude-haiku-4-5-20251001)
         """
         try:
             from browser_use import Agent
@@ -111,7 +113,7 @@ class BrowserManager:
             )
 
         llm = ChatAnthropic(
-            model="claude-sonnet-4-20250514",
+            model=model,
             temperature=0,
         )
 
@@ -139,6 +141,7 @@ class BrowserManager:
         sensitive_data: dict[str, str] | None = None,
         max_steps: int = 25,
         on_step: Callable | None = None,
+        model: str = "claude-sonnet-4-20250514",
     ) -> dict[str, Any]:
         """Create and run a browser-use agent, returning results.
 
@@ -148,12 +151,14 @@ class BrowserManager:
             sensitive_data: Secrets to mask in logs
             max_steps: Max browser steps
             on_step: Callback for each step (step_number, action, screenshot_path)
+            model: Anthropic model ID for this agent run
         """
         agent = await self.create_agent(
             task=task,
             platform_id=platform_id,
             sensitive_data=sensitive_data,
             max_steps=max_steps,
+            model=model,
         )
 
         screenshots = []
@@ -161,18 +166,30 @@ class BrowserManager:
 
         try:
             result = await agent.run(max_steps=max_steps)
-            step_count += 1
+            step_count = result.number_of_steps() if hasattr(result, 'number_of_steps') else 1
+
+            # Check the agent's actual success status
+            agent_success = result.is_successful() if hasattr(result, 'is_successful') else True
+            # is_successful() returns None if agent didn't finish — treat as failure
+            if agent_success is None:
+                agent_success = False
 
             # Notify step callbacks
             await self._notify_step(step_count, task)
 
-            # Report proxy success
+            # Report proxy success/failure based on actual result
             if self._current_proxy:
-                self.proxy_manager.report_success(self._current_proxy)
+                if agent_success:
+                    self.proxy_manager.report_success(self._current_proxy)
+                else:
+                    self.proxy_manager.report_failure(
+                        self._current_proxy, platform_id or ""
+                    )
 
             return {
-                "success": True,
+                "success": agent_success,
                 "result": result,
+                "final_text": result.final_result() if hasattr(result, 'final_result') else "",
                 "steps": step_count,
                 "screenshots": screenshots,
             }
@@ -202,6 +219,59 @@ class BrowserManager:
             return str(filepath)
 
         return ""
+
+    async def execute_js(self, script: str, retries: int = 3) -> Any:
+        """Execute JavaScript on the current page via Playwright.
+
+        Note: browser-use wraps ``page.evaluate`` and requires scripts in
+        arrow-function format ``() => { ... }``.  Callers should use this
+        format.
+
+        Retries on stale CDP context errors (common after long waits like
+        CAPTCHA solving).
+
+        Returns the result of the script evaluation, or None on failure.
+        """
+        import asyncio as _asyncio
+
+        if not self._browser:
+            return None
+
+        for attempt in range(retries):
+            try:
+                page = await self._browser.get_current_page()
+                if not page:
+                    return None
+                # On retry, wait for page to stabilize before evaluating
+                if attempt > 0:
+                    try:
+                        await page.wait_for_load_state("domcontentloaded", timeout=5000)
+                    except Exception:
+                        pass
+                result = await page.evaluate(script)
+                return result
+            except Exception as e:
+                err_str = str(e)
+                if "Cannot find context" in err_str and attempt < retries - 1:
+                    logger.debug(
+                        f"JS context stale (attempt {attempt + 1}/{retries}), "
+                        f"refreshing..."
+                    )
+                    await _asyncio.sleep(2)
+                    continue
+                logger.warning(f"JS execution failed: {e}")
+                return None
+        return None
+
+    async def get_page_url(self) -> str:
+        """Get the current page URL."""
+        if not self._browser:
+            return ""
+        try:
+            page = await self._browser.get_current_page()
+            return page.url if page else ""
+        except Exception:
+            return ""
 
     async def save_session(self, platform_id: str) -> None:
         """Save current browser session (cookies + storage) for a platform."""

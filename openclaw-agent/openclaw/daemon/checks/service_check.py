@@ -57,6 +57,10 @@ async def _check_single_service(
             if resp.status_code == 200:
                 check.result = CheckResult.HEALTHY
                 check.message = f"OK (port {port})"
+            elif resp.status_code == 404:
+                # No /health endpoint — service is up (TCP connected), treat as healthy
+                check.result = CheckResult.HEALTHY
+                check.message = f"TCP OK (port {port}, no /health endpoint)"
             else:
                 check.result = CheckResult.DEGRADED
                 check.message = f"Health endpoint returned {resp.status_code}"
@@ -73,12 +77,14 @@ async def _check_single_service(
 async def check_all_services(
     service_ports: dict[str, int],
     host: str = "127.0.0.1",
+    service_hosts: dict[str, str] | None = None,
 ) -> list[HealthCheck]:
     """Check all empire services concurrently.
 
     Args:
         service_ports: Mapping of service name to port number.
-        host: Host address to check (default localhost).
+        host: Default host address (default localhost).
+        service_hosts: Per-service host overrides (service_name → host).
 
     Returns:
         List of HealthCheck results, one per service.
@@ -86,8 +92,9 @@ async def check_all_services(
     if not service_ports:
         return []
 
+    hosts = service_hosts or {}
     tasks = [
-        _check_single_service(name, port, host)
+        _check_single_service(name, port, hosts.get(name, host))
         for name, port in service_ports.items()
     ]
     results = await asyncio.gather(*tasks, return_exceptions=True)

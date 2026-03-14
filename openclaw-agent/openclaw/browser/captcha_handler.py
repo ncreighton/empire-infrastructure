@@ -84,13 +84,24 @@ class CaptchaHandler:
             async with httpx.AsyncClient(timeout=30) as client:
                 # Submit task
                 resp = await client.post(TWOCAPTCHA_IN, data=params)
-                text = resp.text
 
-                if not text.startswith("OK|"):
-                    logger.error(f"2Captcha submit error: {text}")
-                    return None
+                # Parse response — JSON when json=1 is set, else plain text
+                task_id = None
+                try:
+                    data = resp.json()
+                    if data.get("status") == 1:
+                        task_id = str(data["request"])
+                    else:
+                        logger.error(f"2Captcha submit error: {data}")
+                        return None
+                except (ValueError, KeyError):
+                    text = resp.text
+                    if text.startswith("OK|"):
+                        task_id = text.split("|")[1]
+                    else:
+                        logger.error(f"2Captcha submit error: {text}")
+                        return None
 
-                task_id = text.split("|")[1]
                 logger.info(f"2Captcha task submitted: {task_id}")
 
                 # Poll for result

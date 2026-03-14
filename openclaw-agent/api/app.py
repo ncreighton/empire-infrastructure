@@ -864,6 +864,236 @@ async def health_history(tier: str = None, limit: int = 50):
 # ─── Daemon auto-start ──────────────────────────────────────────────────────
 
 
+# ─── VibeCoder Endpoints ──────────────────────────────────────────────────────
+
+
+class VibeMissionRequest(BaseModel):
+    project_id: str
+    title: str
+    description: str
+    priority: int = 5
+    auto_deploy: bool = False
+
+
+class VibeProjectRequest(BaseModel):
+    project_id: str
+    root_path: str
+
+
+class VibeEstimateRequest(BaseModel):
+    project_id: str
+    title: str
+    description: str
+
+
+@app.post("/vibe/mission")
+async def vibe_submit_mission(req: VibeMissionRequest):
+    """Submit a coding mission to the queue."""
+    mission = engine.vibecoder.submit_mission(
+        project_id=req.project_id,
+        title=req.title,
+        description=req.description,
+        priority=req.priority,
+        auto_deploy=req.auto_deploy,
+    )
+    return _to_dict(mission)
+
+
+@app.get("/vibe/missions")
+async def vibe_list_missions(status: str = None, project_id: str = None, limit: int = 50):
+    """List missions with optional filters."""
+    return engine.vibecoder.list_missions(status=status, project_id=project_id, limit=limit)
+
+
+@app.get("/vibe/mission/{mission_id}")
+async def vibe_get_mission(mission_id: str):
+    """Get mission details including steps and changes."""
+    result = engine.vibecoder.get_mission(mission_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Mission not found")
+    return result
+
+
+@app.delete("/vibe/mission/{mission_id}")
+async def vibe_cancel_mission(mission_id: str):
+    """Cancel a queued or paused mission."""
+    ok = engine.vibecoder.cancel_mission(mission_id)
+    if not ok:
+        raise HTTPException(status_code=400, detail="Cannot cancel — mission not queued/paused")
+    return {"cancelled": True, "mission_id": mission_id}
+
+
+@app.post("/vibe/mission/{mission_id}/retry")
+async def vibe_retry_mission(mission_id: str):
+    """Retry a failed mission."""
+    mission = await engine.vibecoder.retry_mission(mission_id)
+    return _to_dict(mission)
+
+
+@app.post("/vibe/mission/{mission_id}/execute")
+async def vibe_execute_mission(mission_id: str):
+    """Force immediate execution of a queued mission."""
+    mission = await engine.vibecoder.execute_mission(mission_id)
+    return _to_dict(mission)
+
+
+@app.post("/vibe/mission/{mission_id}/pause")
+async def vibe_pause(mission_id: str):
+    """Pause a running or queued mission."""
+    ok = engine.vibecoder.pause_mission(mission_id)
+    if not ok:
+        raise HTTPException(400, "Cannot pause — mission not in pausable state")
+    return {"status": "paused", "mission_id": mission_id}
+
+
+@app.post("/vibe/mission/{mission_id}/resume")
+async def vibe_resume(mission_id: str):
+    """Resume a paused mission."""
+    ok = engine.vibecoder.resume_mission(mission_id)
+    if not ok:
+        raise HTTPException(400, "Cannot resume — mission not paused")
+    return {"status": "queued", "mission_id": mission_id}
+
+
+@app.post("/vibe/mission/{mission_id}/approve")
+async def vibe_approve(mission_id: str):
+    """Approve a mission waiting for approval."""
+    ok = engine.vibecoder.approve_mission(mission_id)
+    if not ok:
+        raise HTTPException(400, "Cannot approve — mission not awaiting approval")
+    return {"status": "approved", "mission_id": mission_id}
+
+
+@app.post("/vibe/mission/{mission_id}/deploy")
+async def vibe_deploy(mission_id: str):
+    """Manually deploy a completed mission."""
+    result = await engine.vibecoder.deploy_mission(mission_id)
+    return {"result": result, "mission_id": mission_id}
+
+
+@app.get("/vibe/projects")
+async def vibe_list_projects():
+    """List all registered projects."""
+    return engine.vibecoder.list_projects()
+
+
+@app.post("/vibe/project/register")
+async def vibe_register_project(req: VibeProjectRequest):
+    """Register and scan a project."""
+    info = engine.vibecoder.register_project(req.project_id, req.root_path)
+    return _to_dict(info)
+
+
+@app.get("/vibe/project/{project_id}/scout")
+async def vibe_scout_project(project_id: str):
+    """Analyze/re-scan a project codebase."""
+    info = engine.vibecoder.scout_project(project_id)
+    if not info:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return _to_dict(info)
+
+
+@app.post("/vibe/estimate")
+async def vibe_estimate(req: VibeEstimateRequest):
+    """Get cost/time estimate without executing."""
+    estimate = engine.vibecoder.estimate(req.project_id, req.title, req.description)
+    return _to_dict(estimate)
+
+
+@app.get("/vibe/dashboard")
+async def vibe_dashboard():
+    """VibeCoder aggregate statistics."""
+    return _to_dict(engine.vibecoder.get_dashboard())
+
+
+# ─── ModelRouter (cost optimization) ─────────────────────────────────────────
+
+
+class ModelRouteRequest(BaseModel):
+    task_description: str
+    system_prompt: str = ""
+    input_text: str = ""
+    context: dict[str, Any] | None = None
+
+
+@app.post("/vibe/route")
+async def model_route(req: ModelRouteRequest):
+    """Get intelligent model routing recommendation for a task."""
+    decision = engine.vibecoder.model_router.route(
+        task_description=req.task_description,
+        system_prompt=req.system_prompt,
+        input_text=req.input_text,
+        context=req.context,
+    )
+    return {
+        "model_id": decision.model_spec.model_id,
+        "tier": decision.model_spec.tier.value,
+        "max_tokens": decision.max_tokens,
+        "use_cache": decision.use_cache,
+        "estimated_cost": decision.estimated_cost,
+        "savings_vs_opus": decision.savings_vs_opus,
+        "reasoning": decision.reasoning,
+        "confidence": decision.confidence,
+        "complexity_score": decision.complexity_profile.complexity_score,
+        "category": decision.complexity_profile.category.value,
+    }
+
+
+@app.get("/vibe/spend")
+async def model_spend(days: int = 30):
+    """Get model spend report for the given period."""
+    report = engine.vibecoder.model_router.get_spend_report(days)
+    return _to_dict(report)
+
+
+@app.get("/vibe/optimize")
+async def model_optimize():
+    """Get optimization tips based on spend patterns."""
+    tips = engine.vibecoder.model_router.get_optimization_tips()
+    return {"tips": tips}
+
+
+@app.get("/vibe/budget")
+async def model_budget():
+    """Get current budget status."""
+    router = engine.vibecoder.model_router
+    report = router.get_spend_report(30)
+    return {
+        "monthly_budget": router._monthly_budget,
+        "spent_this_month": round(router._get_month_spend(), 4),
+        "budget_remaining": report.budget_remaining,
+        "budget_pressure": round(router._get_budget_pressure(), 3),
+        "burn_rate_per_day": report.burn_rate_per_day,
+        "days_until_exhausted": report.days_until_budget_exhausted,
+        "savings_vs_opus": report.savings_vs_opus,
+        "total_requests": report.total_requests,
+        "avg_quality": report.avg_quality_score,
+    }
+
+
+# ─── Step Model Router (cost optimization) ───────────────────────────────────
+
+
+@app.get("/model/costs")
+async def step_model_costs(days: int = 30):
+    """Get browser step model cost savings report (Haiku vs Sonnet routing)."""
+    try:
+        report = engine.step_router.get_cost_report(days)
+        report["routing_map"] = engine.step_router.get_routing_summary()
+        return report
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.get("/model/routing")
+async def step_model_routing():
+    """Get current step-to-model routing map."""
+    return engine.step_router.get_routing_summary()
+
+
+# ─── Daemon auto-start ──────────────────────────────────────────────────────
+
+
 @app.router.on_startup.append
 async def startup_event():
     """Auto-start daemon if OPENCLAW_DAEMON_MODE is set."""

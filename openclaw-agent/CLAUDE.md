@@ -12,7 +12,8 @@ Uses FORGE + AMPLIFY intelligence pattern. Deploys to VPS Docker on port 8100.
 - **Automation**: EmailVerifier, RateLimiter, RetryEngine, Scheduler, ProfileSync, WebhookNotifier, Analytics
 - **Daemon**: HeartbeatDaemon (4-tier cascading loops), AlertRouter, CronScheduler, ProactiveAgent, SelfHealer
 - **Health Checks**: WordPress, Services, n8n, Email, Profiles, SEO/GSC, Security
-- **API**: FastAPI port 8100 (49 endpoints)
+- **VibeCoder**: Autonomous coding agent — natural language → code changes → review → commit → deploy
+- **API**: FastAPI port 8100 (49+ endpoints)
 - **CLI**: Full command-line interface (`python cli.py`)
 
 ## Key Paths
@@ -27,6 +28,11 @@ Uses FORGE + AMPLIFY intelligence pattern. Deploys to VPS Docker on port 8100.
 - Daemon: `openclaw/daemon/` (heartbeat_daemon, alert_router, cron_scheduler, proactive_agent, self_healer, heartbeat_config)
 - Health checks: `openclaw/daemon/checks/` (wordpress, service, n8n, email, profile, seo, security)
 - Daemon config: `openclaw/daemon/HEARTBEAT.md`
+- VibeCoder: `openclaw/vibecoder/` (models, vibecoder_engine, agents/, forge/, amplify/, daemon/)
+- VibeCoder FORGE: `openclaw/vibecoder/forge/` (project_scout, code_sentinel, mission_oracle, code_smith, vibe_codex, model_router)
+- VibeCoder Agents: `openclaw/vibecoder/agents/` (vibe_planner_agent, vibe_executor_agent, vibe_reviewer_agent)
+- VibeCoder AMPLIFY: `openclaw/vibecoder/amplify/code_amplify.py`
+- VibeCoder Daemon: `openclaw/vibecoder/daemon/mission_daemon.py`
 - API server: `api/app.py`
 - CLI: `cli.py`
 - SQLite DB: `data/openclaw.db` (10 tables: 5 original + 5 daemon)
@@ -110,6 +116,30 @@ python cli.py alerts stats                          # Alert statistics
 # Empire health
 python cli.py empire-health                         # Current health status
 python cli.py empire-health --tier pulse            # Filter by tier
+
+# VibeCoder (autonomous coding agent)
+python cli.py vibe submit --project myproj --title "Fix bug" --description "..."
+python cli.py vibe run --project myproj --title "Add feature" --description "..." --immediate
+python cli.py vibe list                             # List missions
+python cli.py vibe list --status executing          # Filter by status
+python cli.py vibe show --mission-id <id>           # Mission details
+python cli.py vibe cancel --mission-id <id>         # Cancel mission
+python cli.py vibe retry --mission-id <id>          # Retry failed
+python cli.py vibe pause --mission-id <id>          # Pause running
+python cli.py vibe resume --mission-id <id>         # Resume paused
+python cli.py vibe approve --mission-id <id>        # Approve after review
+python cli.py vibe deploy --mission-id <id>         # Manual deploy
+python cli.py vibe projects                         # List registered projects
+python cli.py vibe register --project-id myproj --root-path /path
+python cli.py vibe scout --project-id myproj --root-path /path
+python cli.py vibe estimate --project-id myproj --title "Fix bug" --description "..."
+python cli.py vibe dashboard                        # VibeCoder stats
+
+# ModelRouter (cost optimization)
+python cli.py vibe route --task "Classify this text"   # Test model routing
+python cli.py vibe spend                               # Spend report
+python cli.py vibe optimize                            # Optimization tips
+python cli.py vibe budget                              # Budget status
 ```
 
 ## Run Tests
@@ -196,6 +226,27 @@ PYTHONPATH=. python -m pytest tests/ -v
 - `GET /health/empire` — Full empire health (last check results per tier)
 - `GET /health/history` — Health check history
 
+### VibeCoder (19 endpoints)
+- `POST /vibe/mission` — Submit mission to queue
+- `GET /vibe/missions` — List missions (filterable by status/project)
+- `GET /vibe/mission/{id}` — Mission details + steps
+- `DELETE /vibe/mission/{id}` — Cancel queued mission
+- `POST /vibe/mission/{id}/retry` — Retry failed mission
+- `POST /vibe/mission/{id}/execute` — Force immediate execution
+- `POST /vibe/mission/{id}/pause` — Pause running mission
+- `POST /vibe/mission/{id}/resume` — Resume paused mission
+- `POST /vibe/mission/{id}/approve` — Approve after review
+- `POST /vibe/mission/{id}/deploy` — Manual deploy
+- `GET /vibe/projects` — List registered projects
+- `POST /vibe/project/register` — Register project
+- `GET /vibe/project/{id}/scout` — Analyze codebase
+- `POST /vibe/estimate` — Cost estimate
+- `GET /vibe/dashboard` — VibeCoder stats
+- `POST /vibe/route` — Test ModelRouter routing decision
+- `GET /vibe/spend` — ModelRouter spend report
+- `GET /vibe/optimize` — Cost optimization tips
+- `GET /vibe/budget` — Budget pressure status
+
 ## Environment Variables
 
 Required:
@@ -250,6 +301,49 @@ All modules are fully connected — no dead code:
 Only the ExecutorAgent calls LLM (Claude Sonnet) for browser visual navigation.
 All FORGE modules, AMPLIFY, and automation are 100% algorithmic — zero AI cost.
 
+## VibeCoder System
+
+Autonomous coding agent: natural language → code changes → review → commit → deploy.
+
+### Pipeline
+```
+Mission submitted (API/CLI) → Queue (SQLite)
+  → MissionDaemon picks up
+  → Scout → Plan → AMPLIFY → Execute → Review → Git → Deploy
+```
+
+### ModelRouter (Cost Optimization)
+- 12-dimension complexity analysis routes tasks to cheapest viable model
+- Quality feedback loop: records outcomes with quality scores, learns which categories safely use cheaper models
+- Budget pressure adaptation: as monthly spend approaches budget, auto-downgrades non-critical tasks
+- Prompt compression: algorithmic system prompt compression (58% reduction)
+- Tiers: HAIKU ($0.80/$4.00) → SONNET ($3.00/$15.00) → OPUS ($15.00/$75.00)
+
+### Hybrid Engine Routing
+- Algorithmic ($0): git commands, shell, templates, file ops
+- API Haiku: classification, commit messages, scope detection
+- API Sonnet: single-file edits, focused code gen
+- CLI Claude: multi-file refactors, new projects, complex bugs
+
+### Git Workflow
+- Branch: `vibe/{project_id}/{scope}-{slug}-{short_id}`
+- Commit: `[{scope}] {description}\n\nCo-Authored-By: VibeCoder Agent <vibecoder@empire>`
+- Auto-PR via `gh pr create` if remote exists
+- Safety: only stages mission-changed files (not entire repo)
+
+### SQLite Tables (in openclaw.db)
+- `missions` — Mission lifecycle + metadata
+- `mission_steps` — Step execution log
+- `code_changes` — File-level diffs
+- `project_registry` — Known projects + deploy configs
+- `model_router_log` — Spend tracking + quality feedback
+
+### Tests
+```bash
+PYTHONPATH=. python tests/test_vibecoder.py      # 12 test suites
+PYTHONPATH=. python tests/test_model_router.py    # 5 ModelRouter tests
+```
+
 ## Development
 
 ### Run tests
@@ -283,6 +377,8 @@ mypy openclaw/ --ignore-missing-imports
 PYTHONPATH=. python -c "from openclaw.openclaw_engine import OpenClawEngine; print('OK')"
 PYTHONPATH=. python -c "from openclaw.browser import BrowserManager, ProxyManager; print('OK')"
 PYTHONPATH=. python -c "from openclaw.automation import RetryEngine, EmailVerifier; print('OK')"
+PYTHONPATH=. python -c "from openclaw.vibecoder import VibeCoderEngine; print('OK')"
+PYTHONPATH=. python -c "from openclaw.vibecoder.forge import ModelRouter; print('OK')"
 ```
 
 ### Start API locally

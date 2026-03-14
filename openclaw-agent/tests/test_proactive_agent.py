@@ -8,6 +8,7 @@ import json
 import os
 
 from openclaw.daemon.proactive_agent import ProactiveAgent, _APPROVAL_REQUIRED, _AUTO_APPROVED
+from openclaw.knowledge.platforms import get_platform
 from openclaw.daemon.heartbeat_config import HeartbeatConfig
 from openclaw.models import AccountStatus
 
@@ -151,11 +152,12 @@ class TestUnsignedPlatforms:
         rec.score = 85.0
         mock_engine.prioritize.return_value = [rec]
         mock_engine.codex.get_account.return_value = None
+        mock_engine.codex.get_action_history.return_value = []
 
         actions = agent._check_unsigned_platforms()
         assert len(actions) == 1
         assert actions[0].action_type == "new_signup"
-        assert actions[0].requires_approval is True
+        assert actions[0].requires_approval is False
         assert actions[0].priority == 4
 
     def test_skips_already_signed_up(self, agent, mock_engine):
@@ -165,12 +167,14 @@ class TestUnsignedPlatforms:
         mock_engine.codex.get_account.return_value = {
             "status": AccountStatus.ACTIVE.value,
         }
+        mock_engine.codex.get_action_history.return_value = []
 
         actions = agent._check_unsigned_platforms()
         assert actions == []
 
     def test_handles_prioritize_error(self, agent, mock_engine):
         mock_engine.prioritize.side_effect = RuntimeError("boom")
+        mock_engine.codex.get_action_history.return_value = []
         actions = agent._check_unsigned_platforms()
         assert actions == []
 
@@ -292,10 +296,68 @@ class TestSessionCleanup:
 
 class TestConstants:
     def test_approval_required_set(self):
-        assert "new_signup" in _APPROVAL_REQUIRED
         assert "restart_service" in _APPROVAL_REQUIRED
+        assert "profile_content_change" in _APPROVAL_REQUIRED
 
     def test_auto_approved_set(self):
         assert "verify_email" in _AUTO_APPROVED
         assert "retry_signup" in _AUTO_APPROVED
         assert "session_cleanup" in _AUTO_APPROVED
+        assert "new_signup" in _AUTO_APPROVED
+
+
+class TestDailySignupCap:
+    def test_cap_enforced(self, agent, mock_engine):
+        """When daily cap reached, no new_signup actions returned."""
+        rec = MagicMock()
+        rec.platform_id = "gumroad"
+        rec.platform_name = "Gumroad"
+        rec.priority = MagicMock()
+        rec.priority.value = "high"
+        rec.score = 85.0
+        mock_engine.prioritize.return_value = [rec]
+        mock_engine.codex.get_account.return_value = None
+        # Simulate cap reached (only "starting" entries are counted)
+        mock_engine.codex.get_action_history.return_value = [
+            {"action_type": "new_signup", "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"), "result": "starting"},
+            {"action_type": "new_signup", "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"), "result": "starting"},
+            {"action_type": "new_signup", "timestamp": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"), "result": "starting"},
+        ]
+
+        actions = agent._check_unsigned_platforms()
+        assert actions == []
+
+    def test_no_approval_needed(self, agent, mock_engine):
+        """new_signup actions no longer require approval."""
+        rec = MagicMock()
+        rec.platform_id = "gumroad"
+        rec.platform_name = "Gumroad"
+        rec.priority = MagicMock()
+        rec.priority.value = "high"
+        rec.score = 85.0
+        mock_engine.prioritize.return_value = [rec]
+        mock_engine.codex.get_account.return_value = None
+        mock_engine.codex.get_action_history.return_value = []
+
+        actions = agent._check_unsigned_platforms()
+        assert len(actions) >= 1
+        assert actions[0].requires_approval is False
+
+    def test_skips_previously_succeeded(self, agent, mock_engine):
+        """Platforms with a successful signup in action_log are skipped."""
+        rec = MagicMock()
+        rec.platform_id = "gumroad"
+        rec.platform_name = "Gumroad"
+        rec.priority = MagicMock()
+        rec.priority.value = "high"
+        rec.score = 85.0
+        mock_engine.prioritize.return_value = [rec]
+        mock_engine.codex.get_account.return_value = None  # Account record missing
+        # But action_log shows a previous success
+        mock_engine.codex.get_action_history.return_value = [
+            {"action_type": "new_signup", "target": "gumroad", "result": "success",
+             "timestamp": "2026-03-08T17:00:00"},
+        ]
+
+        actions = agent._check_unsigned_platforms()
+        assert actions == []

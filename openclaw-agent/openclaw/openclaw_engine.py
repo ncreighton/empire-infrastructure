@@ -16,8 +16,10 @@ from openclaw.agents.planner_agent import PlannerAgent
 from openclaw.agents.verification_agent import VerificationAgent
 from openclaw.amplify.amplify_pipeline import AmplifyPipeline
 from openclaw.browser.browser_manager import BrowserManager
+from openclaw.browser.gologin_manager import GoLoginBrowserManager
 from openclaw.browser.captcha_handler import CaptchaHandler
 from openclaw.browser.proxy_manager import ProxyManager
+from openclaw.browser.step_router import StepRouter
 from openclaw.forge.market_oracle import MarketOracle
 from openclaw.forge.platform_codex import PlatformCodex
 from openclaw.forge.platform_scout import PlatformScout
@@ -38,6 +40,7 @@ from openclaw.automation.rate_limiter import RateLimiter
 from openclaw.automation.retry_engine import RetryEngine
 from openclaw.automation.profile_sync import ProfileSync
 from openclaw.automation.webhook_notifier import WebhookNotifier
+from openclaw.vibecoder import VibeCoderEngine
 
 logger = logging.getLogger(__name__)
 
@@ -56,9 +59,13 @@ class OpenClawEngine:
         # AMPLIFY
         self.amplify = AmplifyPipeline()
 
+        # VibeCoder — autonomous coding agent
+        self.vibecoder = VibeCoderEngine(db_path=db_path)
+
         # Browser + agents
         self.captcha = CaptchaHandler()
         self.proxy_manager = ProxyManager()
+        self.step_router = StepRouter(self.codex)
         self.headless = headless
 
         # Automation
@@ -98,6 +105,64 @@ class OpenClawEngine:
                 platform_name="Unknown",
                 success=False,
                 errors=[f"Unknown platform: {platform_id}"],
+            )
+
+        # Skip disabled platforms
+        if not getattr(platform, "enabled", True):
+            return OpenClawResult(
+                platform_id=platform_id,
+                platform_name=platform.name,
+                success=False,
+                errors=[f"Platform {platform_id} is disabled"],
+            )
+
+        # Guard: refuse to re-signup for already-completed platforms
+        existing = self.codex.get_account(platform_id)
+        if existing and existing.get("status") in (
+            AccountStatus.ACTIVE.value,
+            AccountStatus.PROFILE_COMPLETE.value,
+        ):
+            logger.info(
+                f"[{platform_id}] Already signed up (status={existing['status']}), skipping"
+            )
+            return OpenClawResult(
+                platform_id=platform_id,
+                platform_name=platform.name,
+                success=True,
+                status=AccountStatus(existing["status"]),
+                profile_url=existing.get("profile_url", ""),
+                username=existing.get("username", ""),
+            )
+
+        # Pre-flight: verify signup URL is reachable before burning API tokens
+        try:
+            import httpx
+            async with httpx.AsyncClient(
+                follow_redirects=True, timeout=10.0,
+                headers={"User-Agent": "Mozilla/5.0"},
+            ) as client:
+                resp = await client.head(platform.signup_url)
+                if resp.status_code in (403, 404, 502, 503):
+                    logger.warning(
+                        f"[{platform_id}] Signup URL returned {resp.status_code}: "
+                        f"{platform.signup_url}"
+                    )
+                    return OpenClawResult(
+                        platform_id=platform_id,
+                        platform_name=platform.name,
+                        success=False,
+                        errors=[
+                            f"Signup URL returned HTTP {resp.status_code} — "
+                            f"skipping to avoid wasting API tokens"
+                        ],
+                    )
+        except Exception as e:
+            logger.warning(f"[{platform_id}] Pre-flight URL check failed: {e}")
+            return OpenClawResult(
+                platform_id=platform_id,
+                platform_name=platform.name,
+                success=False,
+                errors=[f"Signup URL unreachable: {e}"],
             )
 
         # Rate limit check
@@ -168,15 +233,30 @@ class OpenClawEngine:
                 platform_id, platform.name, AccountStatus.SIGNUP_IN_PROGRESS
             )
 
-            browser = BrowserManager(
-                headless=self.headless,
-                proxy_manager=self.proxy_manager,
+            # Use GoLogin Orbita when configured and NOT in Docker
+            # GoLogin SDK spawns local Orbita browser which needs GUI — won't work in Docker
+            import os
+            use_gologin = (
+                os.environ.get("GOLOGIN_API_TOKEN")
+                and os.environ.get("GOLOGIN_PROFILE_ID")
+                and not os.path.exists("/.dockerenv")
+                and os.environ.get("OPENCLAW_BROWSER_MODE", "").lower() != "playwright"
             )
+            if use_gologin:
+                logger.info(f"[{platform_id}] Using GoLogin anti-detect browser")
+                browser = GoLoginBrowserManager(headless=self.headless)
+            else:
+                logger.info(f"[{platform_id}] Using Playwright stealth browser")
+                browser = BrowserManager(
+                    headless=self.headless,
+                    proxy_manager=self.proxy_manager,
+                )
             monitor = MonitorAgent()
             executor = ExecutorAgent(
                 browser_manager=browser,
                 captcha_handler=self.captcha,
                 monitor=monitor,
+                step_router=self.step_router,
             )
 
             async def _execute():
@@ -357,13 +437,20 @@ class OpenClawEngine:
     def prioritize(self) -> list[OracleRecommendation]:
         """Get prioritized list of platforms to sign up for."""
         completed = set()
+        disabled = set()
         for account in self.codex.get_all_accounts():
             if account.get("status") in (
                 AccountStatus.ACTIVE.value,
                 AccountStatus.PROFILE_COMPLETE.value,
             ):
                 completed.add(account["platform_id"])
-        return self.oracle.prioritize_platforms(completed=completed)
+        # Exclude disabled platforms
+        for pid in get_all_platform_ids():
+            platform = get_platform(pid)
+            if platform and not getattr(platform, "enabled", True):
+                disabled.add(pid)
+        recs = self.oracle.prioritize_platforms(completed=completed)
+        return [r for r in recs if r.platform_id not in disabled]
 
     def get_dashboard(self) -> DashboardStats:
         """Get aggregate dashboard statistics."""

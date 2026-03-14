@@ -172,6 +172,31 @@ CREATE INDEX IF NOT EXISTS idx_alerts_time ON alerts(created_at);
 CREATE INDEX IF NOT EXISTS idx_cron_next ON cron_jobs(next_run);
 CREATE INDEX IF NOT EXISTS idx_cron_history_job ON cron_history(job_id);
 CREATE INDEX IF NOT EXISTS idx_action_log_time ON action_log(timestamp);
+
+-- Step model routing tables (intelligent Haiku/Sonnet routing)
+
+CREATE TABLE IF NOT EXISTS step_model_promotions (
+    platform_id TEXT NOT NULL,
+    step_type TEXT NOT NULL,
+    promoted_at TEXT NOT NULL,
+    reason TEXT DEFAULT '',
+    PRIMARY KEY (platform_id, step_type)
+);
+
+CREATE TABLE IF NOT EXISTS step_cost_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    platform_id TEXT NOT NULL,
+    step_type TEXT NOT NULL,
+    model_id TEXT NOT NULL,
+    input_tokens INTEGER DEFAULT 0,
+    output_tokens INTEGER DEFAULT 0,
+    cost_usd REAL DEFAULT 0,
+    success INTEGER DEFAULT 0,
+    timestamp TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_step_cost_time ON step_cost_log(timestamp);
+CREATE INDEX IF NOT EXISTS idx_step_cost_platform ON step_cost_log(platform_id);
 """
 
 
@@ -1129,3 +1154,168 @@ class PlatformCodex:
                 (limit,),
             ).fetchall()
             return [dict(r) for r in rows]
+
+    # ================================================================== #
+    #  Step model routing (Haiku/Sonnet cost optimization)                 #
+    # ================================================================== #
+
+    def get_step_promotions(self, platform_id: str) -> dict[str, str]:
+        """Get all promoted (platform, step_type) pairs.
+
+        Returns dict of step_type -> promoted_at for the given platform.
+        Only returns non-expired promotions (< 7 days old).
+        """
+        from datetime import timedelta
+        cutoff = (datetime.now() - timedelta(days=7)).isoformat()
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT step_type, promoted_at FROM step_model_promotions "
+                "WHERE platform_id = ? AND promoted_at > ?",
+                (platform_id, cutoff),
+            ).fetchall()
+            return {r["step_type"]: r["promoted_at"] for r in rows}
+
+    def upsert_step_promotion(
+        self, platform_id: str, step_type: str, reason: str = ""
+    ) -> None:
+        """Record that a step should be promoted to Sonnet for this platform."""
+        now = datetime.now().isoformat()
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO step_model_promotions (platform_id, step_type, promoted_at, reason)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(platform_id, step_type) DO UPDATE SET
+                    promoted_at = excluded.promoted_at,
+                    reason = excluded.reason
+                """,
+                (platform_id, step_type, now, reason),
+            )
+
+    def log_step_cost(
+        self,
+        platform_id: str,
+        step_type: str,
+        model_id: str,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        cost_usd: float = 0.0,
+        success: bool = False,
+    ) -> None:
+        """Log a step execution for cost tracking."""
+        now = datetime.now().isoformat()
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO step_cost_log
+                    (platform_id, step_type, model_id, input_tokens, output_tokens,
+                     cost_usd, success, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    platform_id, step_type, model_id,
+                    input_tokens, output_tokens, cost_usd,
+                    1 if success else 0, now,
+                ),
+            )
+
+    def get_step_cost_report(self, days: int = 30) -> dict[str, Any]:
+        """Get cost savings report for step model routing.
+
+        Returns actual spend, counterfactual all-Sonnet spend, and savings.
+        """
+        from datetime import timedelta
+        cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+
+        # Pricing per 1M tokens
+        pricing = {
+            "claude-haiku-4-5-20251001": {"input": 0.80, "output": 4.00},
+            "claude-sonnet-4-20250514": {"input": 3.00, "output": 15.00},
+        }
+        sonnet_pricing = pricing["claude-sonnet-4-20250514"]
+
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT model_id, step_type, input_tokens, output_tokens, "
+                "cost_usd, success FROM step_cost_log WHERE timestamp > ?",
+                (cutoff,),
+            ).fetchall()
+
+        total_cost = 0.0
+        counterfactual_cost = 0.0
+        by_model: dict[str, dict[str, Any]] = {}
+        by_step: dict[str, dict[str, Any]] = {}
+        total_steps = 0
+        successful_steps = 0
+
+        for row in rows:
+            r = dict(row)
+            model = r["model_id"]
+            step = r["step_type"]
+            in_tok = r["input_tokens"]
+            out_tok = r["output_tokens"]
+            cost = r["cost_usd"]
+            ok = r["success"]
+
+            total_steps += 1
+            if ok:
+                successful_steps += 1
+            total_cost += cost
+
+            # Counterfactual: what if everything used Sonnet?
+            cf_cost = (
+                in_tok * sonnet_pricing["input"] / 1_000_000
+                + out_tok * sonnet_pricing["output"] / 1_000_000
+            )
+            counterfactual_cost += cf_cost
+
+            # By model
+            if model not in by_model:
+                by_model[model] = {"steps": 0, "cost": 0.0, "successes": 0}
+            by_model[model]["steps"] += 1
+            by_model[model]["cost"] += cost
+            if ok:
+                by_model[model]["successes"] += 1
+
+            # By step type
+            if step not in by_step:
+                by_step[step] = {"steps": 0, "cost": 0.0, "haiku": 0, "sonnet": 0}
+            by_step[step]["steps"] += 1
+            by_step[step]["cost"] += cost
+            if "haiku" in model:
+                by_step[step]["haiku"] += 1
+            else:
+                by_step[step]["sonnet"] += 1
+
+        savings = counterfactual_cost - total_cost
+        savings_pct = (savings / counterfactual_cost * 100) if counterfactual_cost > 0 else 0
+
+        return {
+            "period_days": days,
+            "total_steps": total_steps,
+            "successful_steps": successful_steps,
+            "total_cost_usd": round(total_cost, 6),
+            "counterfactual_cost_usd": round(counterfactual_cost, 6),
+            "savings_usd": round(savings, 6),
+            "savings_pct": round(savings_pct, 1),
+            "by_model": {
+                m: {
+                    "steps": v["steps"],
+                    "cost_usd": round(v["cost"], 6),
+                    "success_rate": round(v["successes"] / v["steps"] * 100, 1) if v["steps"] else 0,
+                }
+                for m, v in by_model.items()
+            },
+            "by_step_type": by_step,
+        }
+
+    def expire_old_promotions(self, days: int = 7) -> int:
+        """Remove promotions older than N days. Returns count removed."""
+        from datetime import timedelta
+        cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "DELETE FROM step_model_promotions WHERE promoted_at < ?",
+                (cutoff,),
+            )
+            return cursor.rowcount

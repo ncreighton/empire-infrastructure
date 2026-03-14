@@ -6,7 +6,12 @@ from pathlib import Path
 from datetime import datetime, timedelta
 import os
 
-from openclaw.daemon.self_healer import SelfHealer, _SERVICE_RESTART_COMMANDS
+from openclaw.daemon.self_healer import (
+    SelfHealer,
+    _get_restart_commands,
+    _SERVICE_RESTART_COMMANDS_WINDOWS,
+    _SERVICE_RESTART_COMMANDS_LINUX,
+)
 from openclaw.daemon.alert_router import AlertRouter
 from openclaw.forge.platform_codex import PlatformCodex
 from openclaw.models import (
@@ -95,7 +100,10 @@ class TestRestartService:
 
     @pytest.mark.asyncio
     async def test_restart_success(self, healer, codex):
-        check = _make_check(name="service:screenpipe", result=CheckResult.DOWN)
+        # Use a service name that exists in the platform's command dict
+        cmds = _get_restart_commands()
+        svc_name = next(iter(cmds))  # First available service
+        check = _make_check(name=f"service:{svc_name}", result=CheckResult.DOWN)
 
         # Mock the subprocess to succeed
         with patch("asyncio.create_subprocess_shell") as mock_proc:
@@ -112,7 +120,9 @@ class TestRestartService:
 
     @pytest.mark.asyncio
     async def test_restart_failure_alerts(self, healer, alert_router):
-        check = _make_check(name="service:screenpipe", result=CheckResult.DOWN)
+        cmds = _get_restart_commands()
+        svc_name = next(iter(cmds))
+        check = _make_check(name=f"service:{svc_name}", result=CheckResult.DOWN)
 
         with patch("asyncio.create_subprocess_shell") as mock_proc:
             proc = AsyncMock()
@@ -128,7 +138,9 @@ class TestRestartService:
     @pytest.mark.asyncio
     async def test_restart_timeout(self, healer):
         import asyncio
-        check = _make_check(name="service:screenpipe", result=CheckResult.DOWN)
+        cmds = _get_restart_commands()
+        svc_name = next(iter(cmds))
+        check = _make_check(name=f"service:{svc_name}", result=CheckResult.DOWN)
 
         with patch("asyncio.create_subprocess_shell") as mock_proc:
             proc = AsyncMock()
@@ -192,12 +204,23 @@ class TestClearExpiredSessions:
 
 
 class TestServiceRestartCommands:
-    def test_known_services_have_commands(self):
-        assert "screenpipe" in _SERVICE_RESTART_COMMANDS
-        assert "empire-dashboard" in _SERVICE_RESTART_COMMANDS
-        assert "brain-mcp" in _SERVICE_RESTART_COMMANDS
+    def test_windows_commands_have_known_services(self):
+        assert "screenpipe" in _SERVICE_RESTART_COMMANDS_WINDOWS
+        assert "empire-dashboard" in _SERVICE_RESTART_COMMANDS_WINDOWS
+        assert "brain-mcp" in _SERVICE_RESTART_COMMANDS_WINDOWS
 
-    def test_commands_are_strings(self):
-        for name, cmd in _SERVICE_RESTART_COMMANDS.items():
+    def test_linux_commands_have_docker_services(self):
+        assert "n8n" in _SERVICE_RESTART_COMMANDS_LINUX
+        assert "empire-dashboard" in _SERVICE_RESTART_COMMANDS_LINUX
+        assert "article-audit" in _SERVICE_RESTART_COMMANDS_LINUX
+
+    def test_linux_commands_use_docker(self):
+        for name, cmd in _SERVICE_RESTART_COMMANDS_LINUX.items():
+            assert cmd.startswith("docker restart")
+
+    def test_get_restart_commands_returns_dict(self):
+        cmds = _get_restart_commands()
+        assert isinstance(cmds, dict)
+        for name, cmd in cmds.items():
             assert isinstance(cmd, str)
             assert len(cmd) > 0

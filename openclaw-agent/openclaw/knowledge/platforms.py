@@ -44,10 +44,17 @@ def get_platforms_by_complexity(
     return [p for p in PLATFORMS.values() if p.complexity == complexity]
 
 
+def get_enabled_platform_ids() -> list[str]:
+    """Return platform IDs for enabled platforms only."""
+    return [pid for pid, p in PLATFORMS.items() if getattr(p, "enabled", True)]
+
+
 def get_easy_wins() -> list[PlatformConfig]:
-    """Return platforms sorted by effort-to-value ratio (best first)."""
+    """Return enabled platforms sorted by effort-to-value ratio (best first)."""
     scored = []
     for p in PLATFORMS.values():
+        if not getattr(p, "enabled", True):
+            continue
         effort = p.estimated_signup_minutes
         value = p.monetization_potential + p.audience_size + p.seo_value
         ratio = value / max(effort, 1)
@@ -96,6 +103,7 @@ _register(PlatformConfig(
         "Revenue sharing program requires separate application",
     ],
     notes="Largest AI marketplace. GPTs are published through the builder UI after account creation.",
+    enabled=False,  # Signup URL redirects to chatgpt.com and returns 403
 ))
 
 _register(PlatformConfig(
@@ -131,6 +139,7 @@ _register(PlatformConfig(
         "Supports markdown in descriptions",
     ],
     notes="Emerging AI agent marketplace with simple onboarding.",
+    enabled=False,  # Redirects to clawhub.ai, /signup returns 404, GitHub OAuth only
 ))
 
 _register(PlatformConfig(
@@ -165,6 +174,7 @@ _register(PlatformConfig(
         "Username cannot be changed after signup",
     ],
     notes="Small indie AI tool marketplace.",
+    enabled=False,  # /register returns 404
 ))
 
 _register(PlatformConfig(
@@ -200,6 +210,7 @@ _register(PlatformConfig(
         "Supports custom storefront themes",
     ],
     notes="AI skills and agent marketplace with seller storefronts.",
+    enabled=False,  # /signup returns 403 in browser
 ))
 
 _register(PlatformConfig(
@@ -234,6 +245,7 @@ _register(PlatformConfig(
         "Focused on LLM-specific skills and plugins",
     ],
     notes="Developer-focused LLM skill sharing platform.",
+    enabled=False,  # Domain skills.llm.dev does not resolve
 ))
 
 _register(PlatformConfig(
@@ -270,6 +282,7 @@ _register(PlatformConfig(
         "Open-source project with strong developer community",
     ],
     notes="Open-source AI assistant framework with plugin and agent marketplace.",
+    enabled=False,  # /auth/signin returns 404
 ))
 
 _register(PlatformConfig(
@@ -304,6 +317,7 @@ _register(PlatformConfig(
         "Free tier allows up to 3 published playbooks",
     ],
     notes="Platform for sharing and selling AI workflow playbooks.",
+    enabled=False,  # /signup redirects to empty /lander stub page
 ))
 
 _register(PlatformConfig(
@@ -377,6 +391,7 @@ _register(PlatformConfig(
         "Supports free and paid skill listings",
     ],
     notes="Lightweight AI skill listing platform.",
+    enabled=False,  # Domain skillmarket.io does not resolve
 ))
 
 _register(PlatformConfig(
@@ -415,6 +430,7 @@ _register(PlatformConfig(
         "Growing rapidly alongside Cursor IDE adoption",
     ],
     notes="Extension marketplace for the Cursor AI code editor.",
+    enabled=False,  # marketplace.cursor.com domain doesn't resolve (DNS failure)
 ))
 
 _register(PlatformConfig(
@@ -488,6 +504,7 @@ _register(PlatformConfig(
         "Profile is editable after creation",
     ],
     notes="Newer AI agent sharing platform.",
+    enabled=False,  # /signup redirects to empty /lander stub page
 ))
 
 
@@ -566,6 +583,7 @@ _register(PlatformConfig(
         "Simpler seller requirements than official hub",
     ],
     notes="Independent n8n workflow marketplace with easy seller onboarding.",
+    enabled=False,  # Domain n8nmarket.com does not resolve
 ))
 
 _register(PlatformConfig(
@@ -600,6 +618,7 @@ _register(PlatformConfig(
         "Author profiles are auto-generated from display name",
     ],
     notes="Multi-platform workflow marketplace.",
+    enabled=False,  # /signup returns 404
 ))
 
 _register(PlatformConfig(
@@ -910,6 +929,7 @@ _register(PlatformConfig(
         "Built-in EU VAT handling",
     ],
     notes="Simple digital product store with generous free tier.",
+    enabled=False,  # Cloudflare blocks headless browser on /auth/register
 ))
 
 _register(PlatformConfig(
@@ -1026,6 +1046,7 @@ _register(PlatformConfig(
         "No marketplace listing — you drive your own traffic",
     ],
     notes="Course hosting platform. Great for AI/automation courses.",
+    enabled=False,  # Cloudflare 403 blocks signup
 ))
 
 _register(PlatformConfig(
@@ -1065,6 +1086,7 @@ _register(PlatformConfig(
         "Thinkific Marketplace (new) is separate opt-in",
     ],
     notes="Course hosting platform with emerging marketplace feature.",
+    enabled=False,  # Cloudflare 403 blocks /begin/
 ))
 
 _register(PlatformConfig(
@@ -1189,6 +1211,7 @@ _register(PlatformConfig(
         "Supports GPT, DALL-E, Midjourney, Stable Diffusion prompts",
     ],
     notes="Largest prompt marketplace. Good for AI prompt and config sales.",
+    enabled=False,  # Cloudflare 403 blocks headless browser
 ))
 
 _register(PlatformConfig(
@@ -1224,15 +1247,16 @@ _register(PlatformConfig(
         "Smaller but targeted audience",
     ],
     notes="GPT monetization platform for ChatGPT creators.",
+    enabled=False,  # /register returns 404
 ))
 
 _register(PlatformConfig(
     platform_id="calstudio",
     name="Cal Studio",
     category=PlatformCategory.PROMPT_MARKETPLACE,
-    signup_url="https://calstudio.ai/signup",
-    login_url="https://calstudio.ai/login",
-    profile_url_template="https://calstudio.ai/creators/{username}",
+    signup_url="https://calstudio.com/signup",
+    login_url="https://calstudio.com/login",
+    profile_url_template="https://calstudio.com/creators/{username}",
     fields=[
         FieldConfig(name="email", selector='input[name="email"]', required=True),
         FieldConfig(name="password", selector='input[name="password"]', required=True, field_type="password"),
@@ -1293,6 +1317,7 @@ _register(PlatformConfig(
         "Free tier includes basic bot creation",
     ],
     notes="Chatbot creation and sharing platform.",
+    enabled=False,  # /signup connection timeout
 ))
 
 
@@ -1386,6 +1411,7 @@ _register(PlatformConfig(
         "Organization creation is separate from personal account",
     ],
     notes="Largest AI/ML model hub. Essential for AI tool distribution.",
+    enabled=False,  # Signup URL returns 403 (bot protection)
 ))
 
 _register(PlatformConfig(
@@ -1423,6 +1449,7 @@ _register(PlatformConfig(
         "GitHub OAuth recommended",
     ],
     notes="Code-first platform with AI integration. Good for selling templates and tools.",
+    enabled=False,  # Cloudflare 403 blocks /signup
 ))
 
 _register(PlatformConfig(
@@ -1436,7 +1463,7 @@ _register(PlatformConfig(
         FieldConfig(name="email", selector='input[name="email"]', required=True),
         FieldConfig(name="name", selector='input[name="name"]', required=False, max_length=64),
     ],
-    captcha_type=CaptchaType.NONE,
+    captcha_type=CaptchaType.TURNSTILE,
     requires_email_verification=True,
     has_oauth=True,
     oauth_providers=["github", "gitlab", "bitbucket"],
@@ -1448,14 +1475,15 @@ _register(PlatformConfig(
     allows_banner=False,
     allows_links=False,
     max_links=0,
-    complexity=SignupComplexity.SIMPLE,
+    complexity=SignupComplexity.MODERATE,
     monetization_potential=4,
     audience_size=8,
     seo_value=8,
-    estimated_signup_minutes=2,
+    estimated_signup_minutes=3,
     known_quirks=[
         "Primarily GitHub OAuth signup",
         "Profile is minimal — mainly for template marketplace",
+        "Turnstile CAPTCHA on email signup",
     ],
     notes="Deploy platform. Templates marketplace is growing.",
 ))
@@ -1471,7 +1499,7 @@ _register(PlatformConfig(
         FieldConfig(name="email", selector='input[name="email"]', required=True),
         FieldConfig(name="password", selector='input[name="password"]', required=True, field_type="password"),
     ],
-    captcha_type=CaptchaType.NONE,
+    captcha_type=CaptchaType.HCAPTCHA,
     requires_email_verification=True,
     has_oauth=True,
     oauth_providers=["github"],
@@ -1483,12 +1511,15 @@ _register(PlatformConfig(
     allows_banner=False,
     allows_links=False,
     max_links=0,
-    complexity=SignupComplexity.SIMPLE,
+    complexity=SignupComplexity.MODERATE,
     monetization_potential=3,
     audience_size=7,
     seo_value=5,
-    estimated_signup_minutes=2,
-    known_quirks=["Minimal profile — mainly for hosting open-source projects"],
+    estimated_signup_minutes=3,
+    known_quirks=[
+        "Minimal profile — mainly for hosting open-source projects",
+        "hCaptcha on signup form",
+    ],
     notes="Backend-as-a-service. Presence for open-source credibility.",
 ))
 
@@ -1563,6 +1594,7 @@ _register(PlatformConfig(
         "High DA backlink from profile",
     ],
     notes="Essential for product launches. Very high SEO value from profile backlinks.",
+    enabled=False,  # Homepage 403 behind Cloudflare
 ))
 
 _register(PlatformConfig(
@@ -1612,7 +1644,7 @@ _register(PlatformConfig(
         FieldConfig(name="username", selector='input[name="username"]', required=True, max_length=30),
         FieldConfig(name="bio", selector='textarea[name="bio"]', required=False, field_type="textarea", max_length=500),
     ],
-    captcha_type=CaptchaType.NONE,
+    captcha_type=CaptchaType.RECAPTCHA_V2,
     requires_email_verification=True,
     has_oauth=True,
     oauth_providers=["google", "apple"],
@@ -1624,15 +1656,16 @@ _register(PlatformConfig(
     allows_banner=True,
     allows_links=True,
     max_links=5,
-    complexity=SignupComplexity.SIMPLE,
+    complexity=SignupComplexity.MODERATE,
     monetization_potential=7,
     audience_size=8,
     seo_value=7,
-    estimated_signup_minutes=3,
+    estimated_signup_minutes=5,
     known_quirks=[
         "Three monetization types: tips, memberships, shop",
         "PayPal or Stripe required for payouts",
         "Custom page URL is the username",
+        "reCAPTCHA v2 on signup form",
     ],
     notes="Creator monetization platform. Good for community support and digital products.",
 ))
@@ -1650,7 +1683,7 @@ _register(PlatformConfig(
         FieldConfig(name="password", selector='input[name="Password"]', required=True, field_type="password"),
         FieldConfig(name="bio", selector='textarea[name="bio"]', required=False, field_type="textarea", max_length=500),
     ],
-    captcha_type=CaptchaType.RECAPTCHA_V2,
+    captcha_type=CaptchaType.TURNSTILE,
     requires_email_verification=True,
     has_oauth=True,
     oauth_providers=["google"],
@@ -1668,11 +1701,12 @@ _register(PlatformConfig(
     seo_value=6,
     estimated_signup_minutes=5,
     known_quirks=[
-        "reCAPTCHA on signup",
+        "Cloudflare Turnstile on signup — requires GoLogin Orbita to bypass",
         "Ko-fi Gold unlocks additional features",
         "Shop, commissions, and memberships available",
     ],
-    notes="Alternative to BMC. Good for creators selling digital products.",
+    notes="Alternative to BMC. Good for creators selling digital products. Requires GoLogin for Cloudflare bypass.",
+    enabled=False,  # Cloudflare 403 + Turnstile captcha
 ))
 
 _register(PlatformConfig(

@@ -159,6 +159,7 @@ class PlatformConfig:
     estimated_signup_minutes: int = 5
     known_quirks: list[str] = field(default_factory=list)
     notes: str = ""
+    enabled: bool = True  # False = skip during autonomous signups
 
 
 # ─── Signup Steps & Plans ─────────────────────────────────────────────────────

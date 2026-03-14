@@ -24,7 +24,10 @@ _KNOWN_WORKFLOWS = {
     "bkUxMuGgcqxRWHKQ": "Init Schema",
 }
 
-_N8N_BASE = "http://localhost:5679"
+_N8N_BASE = os.environ.get(
+    "N8N_BASE_URL",
+    "http://empire-n8n:5678" if os.path.exists("/.dockerenv") else "http://localhost:5678",
+)
 _TIMEOUT = 10.0
 
 

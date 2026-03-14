@@ -57,8 +57,18 @@ class PlannerAgent:
             max_retries=0,
         ))
 
-        # Phase 3: OAuth or manual signup
-        if platform.has_oauth and "google" in platform.oauth_providers:
+        # Phase 3: Fill form fields or OAuth
+        # Prefer direct form fill when the platform has required fields — OAuth
+        # requires Google credentials + 2FA and is unreliable for automation.
+        # Only use OAuth when no required form fields exist.
+        required_fields = [f for f in platform.fields if f.required]
+        use_oauth = (
+            platform.has_oauth
+            and "google" in platform.oauth_providers
+            and not required_fields
+        )
+
+        if use_oauth:
             step_num += 1
             steps.append(SignupStep(
                 step_number=step_num,
@@ -70,9 +80,7 @@ class PlannerAgent:
             ))
         else:
             # Fill required fields
-            for f in platform.fields:
-                if not f.required:
-                    continue
+            for f in required_fields:
                 step_num += 1
                 value = self._resolve_field_value(f, profile_content)
                 steps.append(SignupStep(
@@ -83,6 +91,7 @@ class PlannerAgent:
                     value=value,
                     is_sensitive=f.name in ("password", "email"),
                 ))
+
 
         # Phase 4: Accept terms
         step_num += 1
@@ -95,7 +104,13 @@ class PlannerAgent:
         ))
 
         # Phase 5: CAPTCHA
-        if platform.captcha_type != CaptchaType.NONE:
+        # Skip Turnstile CAPTCHA when GoLogin is configured — Orbita bypasses it
+        import os
+        skip_turnstile = (
+            platform.captcha_type == CaptchaType.TURNSTILE
+            and os.environ.get("GOLOGIN_API_TOKEN")
+        )
+        if platform.captcha_type != CaptchaType.NONE and not skip_turnstile:
             step_num += 1
             steps.append(SignupStep(
                 step_number=step_num,

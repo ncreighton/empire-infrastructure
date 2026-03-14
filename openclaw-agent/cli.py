@@ -1562,6 +1562,380 @@ def cmd_empire_health(engine: OpenClawEngine, args: argparse.Namespace) -> None:
 
 
 # ---------------------------------------------------------------------------
+# VibeCoder commands
+# ---------------------------------------------------------------------------
+
+
+def cmd_vibe(engine: OpenClawEngine, args: argparse.Namespace) -> None:
+    """VibeCoder autonomous coding agent commands."""
+    action = getattr(args, "vibe_action", None)
+    if not action:
+        print("Usage: python cli.py vibe {submit|run|list|show|cancel|retry|projects|register|scout|estimate|dashboard}")
+        return
+
+    vc = engine.vibecoder
+
+    if action == "submit":
+        mission = vc.submit_mission(
+            project_id=args.project,
+            title=args.title,
+            description=args.description,
+            priority=args.priority,
+            auto_deploy=args.auto_deploy,
+        )
+        _header("Mission Queued")
+        _kv("Mission ID", mission.mission_id)
+        _kv("Project", mission.project_id)
+        _kv("Scope", mission.scope.value)
+        _kv("Status", mission.status.value)
+        print()
+
+    elif action == "run":
+        _header("VibeCoder: Run Mission")
+        _kv("Project", args.project)
+        _kv("Title", args.title)
+        print()
+        print("  Executing...")
+
+        mission = asyncio.run(vc.run_mission(
+            project_id=args.project,
+            title=args.title,
+            description=args.description,
+            priority=args.priority,
+            auto_deploy=args.auto_deploy,
+            immediate=True,
+        ))
+
+        _subheader("Result")
+        _kv("Mission ID", mission.mission_id)
+        _kv("Status", mission.status.value)
+        _kv("Scope", mission.scope.value)
+        _kv("Steps", f"{len(mission.steps)}")
+        _kv("Duration", f"{mission.duration_seconds:.1f}s")
+        _kv("Cost", f"${mission.total_cost_usd:.4f}")
+        _kv("Tokens", str(mission.total_tokens))
+        if mission.branch_name:
+            _kv("Branch", mission.branch_name)
+        if mission.commit_hash:
+            _kv("Commit", mission.commit_hash)
+        if mission.pr_url:
+            _kv("PR", mission.pr_url)
+        if mission.errors:
+            _subheader("Errors")
+            for err in mission.errors:
+                print(f"    - {err}")
+        if mission.warnings:
+            _subheader("Warnings")
+            for warn in mission.warnings:
+                print(f"    - {warn}")
+        print()
+
+    elif action == "list":
+        missions = vc.list_missions(
+            status=getattr(args, "status", None),
+            project_id=getattr(args, "project", None),
+            limit=getattr(args, "limit", 20),
+        )
+        _header(f"Missions ({len(missions)})")
+        if not missions:
+            print("  (no missions)")
+            return
+        headers = ["ID", "Project", "Title", "Scope", "Status", "Cost"]
+        rows = []
+        for m in missions:
+            rows.append([
+                m["mission_id"][:8],
+                m["project_id"][:15],
+                m["title"][:25],
+                m.get("scope", "?"),
+                m.get("status", "?"),
+                f"${m.get('total_cost_usd', 0):.3f}",
+            ])
+        _table(headers, rows, [8, 15, 25, 10, 12, 8])
+        print()
+
+    elif action == "show":
+        result = vc.get_mission(args.mission_id)
+        if not result:
+            print(f"  Mission not found: {args.mission_id}")
+            return
+        _header(f"Mission: {result['mission_id']}")
+        _kv("Project", result["project_id"])
+        _kv("Title", result["title"])
+        _kv("Scope", result.get("scope", "?"))
+        _kv("Status", result.get("status", "?"))
+        _kv("Priority", result.get("priority", "?"))
+        _kv("Cost", f"${result.get('total_cost_usd', 0):.4f}")
+        _kv("Duration", f"{result.get('duration_seconds', 0):.1f}s")
+        if result.get("branch_name"):
+            _kv("Branch", result["branch_name"])
+        if result.get("commit_hash"):
+            _kv("Commit", result["commit_hash"])
+        steps = result.get("steps", [])
+        if steps:
+            _subheader(f"Steps ({len(steps)})")
+            for s in steps:
+                status_icon = {"completed": "OK", "failed": "FAIL", "pending": ".."}.get(
+                    s.get("status", ""), "??"
+                )
+                print(f"    [{status_icon}] {s.get('step_number', '?')}. "
+                      f"{s.get('description', '')} ({s.get('engine', '')})")
+        print()
+
+    elif action == "cancel":
+        ok = vc.cancel_mission(args.mission_id)
+        if ok:
+            print(f"  Cancelled: {args.mission_id}")
+        else:
+            print(f"  Cannot cancel — mission not in queued/paused state")
+
+    elif action == "retry":
+        print(f"  Retrying mission {args.mission_id}...")
+        mission = asyncio.run(vc.retry_mission(args.mission_id))
+        _kv("Status", mission.status.value)
+        if mission.errors:
+            for err in mission.errors:
+                print(f"    - {err}")
+
+    elif action == "projects":
+        projects = vc.list_projects()
+        _header(f"Registered Projects ({len(projects)})")
+        if not projects:
+            print("  (no projects registered)")
+            print("  Register with: python cli.py vibe register --project ID --path /path")
+            return
+        headers = ["ID", "Language", "Framework", "Files", "Lines", "Deploy"]
+        rows = []
+        for p in projects:
+            rows.append([
+                p["project_id"][:20],
+                p.get("language", "?"),
+                p.get("framework", "-"),
+                str(p.get("total_files", 0)),
+                str(p.get("total_lines", 0)),
+                p.get("deploy_target", "none"),
+            ])
+        _table(headers, rows, [20, 12, 12, 6, 8, 12])
+        print()
+
+    elif action == "register":
+        info = vc.register_project(args.project, args.path)
+        _header("Project Registered")
+        _kv("ID", info.project_id)
+        _kv("Path", info.root_path)
+        _kv("Language", info.language)
+        _kv("Framework", info.framework or "(none)")
+        _kv("Files", info.total_files)
+        _kv("Lines", info.total_lines)
+        _kv("Has Tests", info.has_tests)
+        _kv("Has Docker", info.has_docker)
+        _kv("Deploy Target", info.deploy_target.value)
+        print()
+
+    elif action == "scout":
+        info = vc.scout_project(args.project_id)
+        if not info:
+            print(f"  Project not found: {args.project_id}")
+            return
+        _header(f"Scout: {info.project_id}")
+        _kv("Language", info.language)
+        _kv("Framework", info.framework or "(none)")
+        _kv("Package Manager", info.package_manager or "(none)")
+        _kv("Files", info.total_files)
+        _kv("Lines", info.total_lines)
+        _kv("Has Git", info.has_git)
+        _kv("Has Tests", info.has_tests)
+        _kv("Has CI", info.has_ci)
+        _kv("Has Docker", info.has_docker)
+        _kv("Deploy Target", info.deploy_target.value)
+        if info.entry_points:
+            _kv("Entry Points", ", ".join(info.entry_points))
+        if info.dependencies:
+            _subheader(f"Dependencies ({len(info.dependencies)})")
+            for dep in info.dependencies[:20]:
+                print(f"    - {dep}")
+            if len(info.dependencies) > 20:
+                print(f"    ... and {len(info.dependencies) - 20} more")
+        print()
+
+    elif action == "estimate":
+        est = vc.estimate(args.project, args.title, args.description)
+        _header("Cost Estimate")
+        _kv("Engine", est.engine.value)
+        _kv("Est. Tokens", str(est.estimated_tokens))
+        _kv("Est. Cost", f"${est.estimated_cost_usd:.4f}")
+        _kv("Est. Time", f"{est.estimated_minutes:.0f} min")
+        _kv("Confidence", f"{est.confidence:.0%}")
+        _kv("Reasoning", est.reasoning)
+        print()
+
+    elif action == "pause":
+        ok = vc.pause_mission(args.mission_id)
+        if ok:
+            print(f"  Mission {args.mission_id} paused")
+        else:
+            print(f"  Cannot pause — mission not in pausable state")
+
+    elif action == "resume":
+        ok = vc.resume_mission(args.mission_id)
+        if ok:
+            print(f"  Mission {args.mission_id} resumed -> queued")
+        else:
+            print(f"  Cannot resume — mission not paused")
+
+    elif action == "approve":
+        ok = vc.approve_mission(args.mission_id)
+        if ok:
+            print(f"  Mission {args.mission_id} approved -> queued")
+        else:
+            print(f"  Cannot approve — mission not awaiting approval")
+
+    elif action == "deploy":
+        result = asyncio.run(vc.deploy_mission(args.mission_id))
+        print(f"  Deploy result: {result}")
+
+    elif action == "dashboard":
+        dash = vc.get_dashboard()
+        _header("VibeCoder Dashboard")
+        _kv("Total Missions", dash.total_missions)
+        _kv("Completed", dash.completed_missions)
+        _kv("Failed", dash.failed_missions)
+        _kv("Queued", dash.queued_missions)
+        _kv("Registered Projects", dash.registered_projects)
+        _kv("Total Tokens", dash.total_tokens_used)
+        _kv("Total Cost", f"${dash.total_cost_usd:.4f}")
+        _kv("Avg Duration", f"{dash.avg_duration_seconds:.1f}s")
+        if dash.missions_by_scope:
+            _subheader("By Scope")
+            for scope, count in sorted(dash.missions_by_scope.items()):
+                _kv(scope, count, indent=4)
+        if dash.recent_missions:
+            _subheader("Recent Missions")
+            for m in dash.recent_missions[:5]:
+                print(f"    [{m.get('status', '?')}] {m.get('title', '?')} "
+                      f"(${m.get('total_cost_usd', 0):.3f})")
+        print()
+
+    elif action == "route":
+        router = vc.model_router
+        decision = router.route(
+            task_description=args.task,
+            system_prompt=getattr(args, "system", ""),
+            input_text=getattr(args, "input", ""),
+        )
+        _header("Model Route Decision")
+        _kv("Model", decision.model_spec.model_id)
+        _kv("Tier", decision.model_spec.tier.value.upper())
+        _kv("Max Tokens", decision.max_tokens)
+        _kv("Use Cache", decision.use_cache)
+        _kv("Category", decision.complexity_profile.category.value)
+        _kv("Complexity", f"{decision.complexity_profile.complexity_score:.2f}")
+        _kv("Est. Cost", f"${decision.estimated_cost:.6f}")
+        _kv("Savings vs Opus", f"${decision.savings_vs_opus:.6f}")
+        _kv("Confidence", f"{decision.confidence:.0%}")
+        _kv("Reasoning", decision.reasoning)
+        print()
+
+    elif action == "spend":
+        router = vc.model_router
+        days = getattr(args, "days", 30)
+        report = router.get_spend_report(days)
+        _header(f"Model Spend Report ({days} days)")
+        _kv("Total Requests", report.total_requests)
+        _kv("Total Input Tokens", f"{report.total_input_tokens:,}")
+        _kv("Total Output Tokens", f"{report.total_output_tokens:,}")
+        _kv("Total Cost", f"${report.total_cost:.4f}")
+        _kv("Savings vs Opus", f"${report.savings_vs_opus:.4f}")
+        _kv("Avg Quality", f"{report.avg_quality_score:.2f}")
+        _kv("Downgrade Failures", report.downgrade_failures)
+        if report.cost_by_tier:
+            _subheader("Cost by Tier")
+            for tier, cost in sorted(report.cost_by_tier.items()):
+                reqs = report.requests_by_tier.get(tier, 0)
+                _kv(f"  {tier.upper()}", f"${cost:.4f} ({reqs} reqs)")
+        if report.cost_by_category:
+            _subheader("Cost by Category")
+            for cat, cost in sorted(report.cost_by_category.items(), key=lambda x: -x[1]):
+                _kv(f"  {cat}", f"${cost:.4f}")
+        print()
+
+    elif action == "optimize":
+        router = vc.model_router
+        tips = router.get_optimization_tips()
+        _header("Cost Optimization Tips")
+        for i, tip in enumerate(tips, 1):
+            print(f"  {i}. {tip}")
+        print()
+
+    elif action == "budget":
+        router = vc.model_router
+        report = router.get_spend_report(30)
+        _header("Budget Status")
+        _kv("Monthly Budget", f"${router._monthly_budget:.2f}")
+        _kv("Spent This Month", f"${router._get_month_spend():.4f}")
+        _kv("Budget Remaining", f"${report.budget_remaining:.2f}")
+        pressure = router._get_budget_pressure()
+        pressure_label = "LOW" if pressure < 0.5 else "MEDIUM" if pressure < 0.8 else "HIGH" if pressure < 0.95 else "CRITICAL"
+        _kv("Budget Pressure", f"{pressure:.1%} ({pressure_label})")
+        _kv("Burn Rate", f"${report.burn_rate_per_day:.4f}/day")
+        if report.days_until_budget_exhausted > 0:
+            _kv("Days Until Exhausted", f"{report.days_until_budget_exhausted:.0f}")
+        _kv("Total Savings vs Opus", f"${report.savings_vs_opus:.4f}")
+        print()
+
+    else:
+        print(f"  Unknown vibe action: {action}")
+
+
+# ---------------------------------------------------------------------------
+# Model cost report
+# ---------------------------------------------------------------------------
+
+
+def cmd_model_costs(engine: OpenClawEngine, args: argparse.Namespace) -> None:
+    """Show browser step model cost savings report."""
+    days = getattr(args, "days", 30)
+    report = engine.step_router.get_cost_report(days)
+
+    print(f"\n{'=' * 60}")
+    print(f"  Browser Step Model Costs — Last {report['period_days']} Days")
+    print(f"{'=' * 60}\n")
+
+    print(f"  Total steps:           {report['total_steps']}")
+    print(f"  Successful:            {report['successful_steps']}")
+    print(f"  Actual cost:           ${report['total_cost_usd']:.4f}")
+    print(f"  All-Sonnet cost:       ${report['counterfactual_cost_usd']:.4f}")
+    print(f"  Savings:               ${report['savings_usd']:.4f} ({report['savings_pct']:.1f}%)")
+
+    if report["by_model"]:
+        print(f"\n  By Model:")
+        for model, stats in report["by_model"].items():
+            tier = "Haiku" if "haiku" in model else "Sonnet"
+            print(
+                f"    {tier:8s}  {stats['steps']:3d} steps  "
+                f"${stats['cost_usd']:.4f}  "
+                f"{stats['success_rate']:.0f}% success"
+            )
+
+    if report["by_step_type"]:
+        print(f"\n  By Step Type:")
+        for step_type, stats in sorted(report["by_step_type"].items()):
+            print(
+                f"    {step_type:20s}  {stats['steps']:3d} steps  "
+                f"H:{stats.get('haiku', 0)} S:{stats.get('sonnet', 0)}  "
+                f"${stats['cost']:.4f}"
+            )
+
+    # Show routing map
+    routing = engine.step_router.get_routing_summary()
+    print(f"\n  Current Routing Map:")
+    for step_type, tier in sorted(routing.items()):
+        print(f"    {step_type:24s} → {tier}")
+
+    print(f"\n{'=' * 60}\n")
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -1743,6 +2117,78 @@ def main() -> None:
     eh_parser = subparsers.add_parser("empire-health", help="Empire-wide health status")
     eh_parser.add_argument("--tier", choices=["pulse", "scan", "intel", "daily"])
 
+    # -- vibe --
+    vibe_parser = subparsers.add_parser("vibe", help="VibeCoder autonomous coding agent")
+    vibe_sub = vibe_parser.add_subparsers(dest="vibe_action")
+    # vibe submit
+    vs = vibe_sub.add_parser("submit", help="Submit mission to queue")
+    vs.add_argument("--project", required=True, help="Project ID")
+    vs.add_argument("--title", required=True, help="Mission title")
+    vs.add_argument("--description", "-d", required=True, help="What to do")
+    vs.add_argument("--priority", type=int, default=5, help="Priority 1-10")
+    vs.add_argument("--auto-deploy", action="store_true", help="Auto-deploy on success")
+    # vibe run
+    vr = vibe_sub.add_parser("run", help="Submit + execute immediately")
+    vr.add_argument("--project", required=True, help="Project ID")
+    vr.add_argument("--title", required=True, help="Mission title")
+    vr.add_argument("--description", "-d", required=True, help="What to do")
+    vr.add_argument("--priority", type=int, default=5)
+    vr.add_argument("--auto-deploy", action="store_true")
+    # vibe list
+    vl = vibe_sub.add_parser("list", help="List missions")
+    vl.add_argument("--status", help="Filter by status")
+    vl.add_argument("--project", help="Filter by project")
+    vl.add_argument("--limit", type=int, default=20)
+    # vibe show
+    vsh = vibe_sub.add_parser("show", help="Mission details")
+    vsh.add_argument("mission_id", help="Mission ID")
+    # vibe cancel
+    vc = vibe_sub.add_parser("cancel", help="Cancel queued mission")
+    vc.add_argument("mission_id", help="Mission ID")
+    # vibe retry
+    vrt = vibe_sub.add_parser("retry", help="Retry failed mission")
+    vrt.add_argument("mission_id", help="Mission ID")
+    # vibe projects
+    vp = vibe_sub.add_parser("pause", help="Pause a running mission")
+    vp.add_argument("mission_id", help="Mission ID to pause")
+    vre = vibe_sub.add_parser("resume", help="Resume a paused mission")
+    vre.add_argument("mission_id", help="Mission ID to resume")
+    vap = vibe_sub.add_parser("approve", help="Approve mission awaiting approval")
+    vap.add_argument("mission_id", help="Mission ID to approve")
+    vdp = vibe_sub.add_parser("deploy", help="Manually deploy a completed mission")
+    vdp.add_argument("mission_id", help="Mission ID to deploy")
+    vibe_sub.add_parser("projects", help="List registered projects")
+    # vibe register
+    vreg = vibe_sub.add_parser("register", help="Register a project")
+    vreg.add_argument("--project", required=True, help="Project ID")
+    vreg.add_argument("--path", required=True, help="Root path")
+    # vibe scout
+    vsc = vibe_sub.add_parser("scout", help="Analyze project codebase")
+    vsc.add_argument("project_id", help="Project ID")
+    # vibe estimate
+    vest = vibe_sub.add_parser("estimate", help="Cost estimate")
+    vest.add_argument("--project", required=True, help="Project ID")
+    vest.add_argument("--title", required=True, help="Mission title")
+    vest.add_argument("--description", "-d", required=True, help="What to do")
+    # vibe dashboard
+    vibe_sub.add_parser("dashboard", help="Aggregate stats")
+    # vibe route
+    vr = vibe_sub.add_parser("route", help="Get model routing recommendation")
+    vr.add_argument("--task", required=True, help="Task description")
+    vr.add_argument("--system", default="", help="System prompt (optional)")
+    vr.add_argument("--input", default="", help="Input text (optional)")
+    # vibe spend
+    vs = vibe_sub.add_parser("spend", help="Model spend report")
+    vs.add_argument("--days", type=int, default=30, help="Days to report")
+    # vibe optimize
+    vibe_sub.add_parser("optimize", help="Get cost optimization tips")
+    # vibe budget
+    vibe_sub.add_parser("budget", help="Current budget status")
+
+    # -- model-costs --
+    mc_parser = subparsers.add_parser("model-costs", help="Browser step model cost report")
+    mc_parser.add_argument("--days", type=int, default=30, help="Days to report (default: 30)")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -1781,6 +2227,8 @@ def main() -> None:
         "cron": cmd_cron,
         "alerts": cmd_alerts,
         "empire-health": cmd_empire_health,
+        "vibe": cmd_vibe,
+        "model-costs": cmd_model_costs,
     }
 
     handler = commands.get(args.command)

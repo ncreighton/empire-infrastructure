@@ -12,22 +12,35 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
+# Install uv (provides uvx, required by browser-use for extensions)
+RUN pip install --no-cache-dir uv
+
 # Install Python deps
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Playwright Chromium
-RUN playwright install chromium
+# Install Playwright system deps first (needs root)
 RUN playwright install-deps chromium
+
+# Create non-root user
+RUN useradd -m -u 1000 openclaw
+
+# Set Playwright browsers path to user-accessible location
+ENV PLAYWRIGHT_BROWSERS_PATH=/app/.playwright-browsers
+
+# Install Playwright Chromium to the shared path
+RUN mkdir -p /app/.playwright-browsers && \
+    playwright install chromium && \
+    chown -R openclaw:openclaw /app/.playwright-browsers
 
 # Copy application
 COPY . .
 
-# Create data directories
-RUN mkdir -p /app/data/screenshots /app/data/sessions /app/logs
+# Create data directories + GoLogin browser/profile dirs
+RUN mkdir -p /app/data/screenshots /app/data/sessions /app/logs \
+    /home/openclaw/.gologin/browser /home/openclaw/.gologin/profiles && \
+    chown -R openclaw:openclaw /app /home/openclaw/.gologin
 
-# Create non-root user
-RUN useradd -m -u 1000 openclaw && chown -R openclaw:openclaw /app
 USER openclaw
 
 # Expose port

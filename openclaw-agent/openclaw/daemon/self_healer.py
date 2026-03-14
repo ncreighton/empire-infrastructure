@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import platform
 from pathlib import Path
 from typing import Any
 
@@ -23,14 +24,36 @@ from openclaw.models import (
 
 logger = logging.getLogger(__name__)
 
-# Service restart commands (Windows)
-_SERVICE_RESTART_COMMANDS: dict[str, str] = {
+# Service restart commands — Windows (local dev)
+_SERVICE_RESTART_COMMANDS_WINDOWS: dict[str, str] = {
     "screenpipe": 'powershell -Command "& {Stop-Process -Name screenpipe -Force -ErrorAction SilentlyContinue; Start-Sleep 2; Start-Process screenpipe}"',
     "empire-dashboard": 'powershell -File "D:/Claude Code Projects/scripts/restart-dashboard.ps1"',
     "grimoire-api": 'powershell -Command "& {cd grimoire-intelligence; Start-Process python -ArgumentList \'-m\',\'uvicorn\',\'api.app:app\',\'--port\',\'8080\'}"',
     "videoforge-api": 'powershell -Command "& {cd videoforge-engine; Start-Process python -ArgumentList \'-m\',\'uvicorn\',\'api.app:app\',\'--port\',\'8090\'}"',
     "brain-mcp": 'powershell -Command "& {cd EMPIRE-BRAIN; Start-Process python -ArgumentList \'brain-mcp-server.py\'}"',
 }
+
+# Service restart commands — Linux/Docker (VPS)
+_SERVICE_RESTART_COMMANDS_LINUX: dict[str, str] = {
+    "n8n": "docker restart empire-n8n",
+    "empire-dashboard": "docker restart empire-dashboard",
+    "article-audit": "docker restart empire-article-audit",
+    "toolbox": "docker restart empire-toolbox",
+}
+
+
+def _get_restart_commands() -> dict[str, str]:
+    """Return platform-appropriate restart commands.
+
+    Returns empty dict inside Docker containers since Docker CLI
+    isn't available — the daemon can only alert, not restart peers.
+    """
+    import os
+    if os.path.exists("/.dockerenv"):
+        return {}  # Can't run docker commands from inside a container
+    if platform.system() == "Windows":
+        return _SERVICE_RESTART_COMMANDS_WINDOWS
+    return _SERVICE_RESTART_COMMANDS_LINUX
 
 
 class SelfHealer:
@@ -76,7 +99,7 @@ class SelfHealer:
     async def _restart_service(self, check: HealthCheck) -> bool:
         """Attempt to restart a local empire service."""
         service_name = check.name.replace("service:", "")
-        restart_cmd = _SERVICE_RESTART_COMMANDS.get(service_name)
+        restart_cmd = _get_restart_commands().get(service_name)
 
         if not restart_cmd:
             logger.warning(f"No restart command for service: {service_name}")
