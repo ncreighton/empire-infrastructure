@@ -98,12 +98,25 @@ class OrderManager:
             signal.take_profit,
         )
 
-        entry_result = self.client.place_market_order(
-            product_id=signal.product_id,
-            side=signal.side,
-            quote_size=position_size_usd if signal.side == OrderSide.BUY else None,
-            base_size=None,
-        )
+        # BUY entries use quote_size (USD to spend).
+        # SELL entries need base_size (quantity to sell short).
+        if signal.side == OrderSide.BUY:
+            entry_result = self.client.place_market_order(
+                product_id=signal.product_id,
+                side=signal.side,
+                quote_size=position_size_usd,
+            )
+        else:
+            # Calculate base quantity from USD amount and entry price
+            ref_price = signal.entry_price
+            if ref_price <= 0:
+                ref_price = self.client.get_current_price(signal.product_id)
+            base_qty = position_size_usd / ref_price if ref_price > 0 else 0.0
+            entry_result = self.client.place_market_order(
+                product_id=signal.product_id,
+                side=signal.side,
+                base_size=base_qty,
+            )
 
         if entry_result.get("status") != "FILLED":
             logger.error(

@@ -164,6 +164,12 @@ class TradingEngine:
         except Exception:
             logger.warning("Intelligence brain init failed", exc_info=True)
 
+        # -- Hydrate paper broker from persisted positions ------------------
+        # On restart, portfolio_manager restores positions from DB but the
+        # paper broker starts with a clean balance sheet.  Sync them.
+        if config.coinbase.paper_trade:
+            self._sync_paper_balances()
+
         # -- Engine state -----------------------------------------------
         self._running = False
         self._tick_count = 0
@@ -457,9 +463,6 @@ class TradingEngine:
 
             weighted_signals.append((signal, weighted_confidence))
 
-            # Log all signals to DB (even those not acted on)
-            self.db.save_signal(signal, acted_on=False)
-
         # Intelligence layer: apply skill adjustments to weighted confidence
         if self._intel_brain and weighted_signals:
             for i, (signal, wconf) in enumerate(weighted_signals):
@@ -486,6 +489,12 @@ class TradingEngine:
             regime.value,
         )
 
+        # Paper mode: reject short entries (no negative balance support)
+        if self.config.coinbase.paper_trade and best_signal.side == OrderSide.SELL:
+            for sig, _ in weighted_signals:
+                self.db.save_signal(sig, acted_on=False)
+            return
+
         # f) Risk filter — validate through risk manager
         open_positions = self.portfolio_manager.get_all_positions()
         approved, reason = self.risk_manager.validate_signal(
@@ -497,8 +506,11 @@ class TradingEngine:
 
         if not approved:
             logger.info(
-                "Signal rejected for %s: %s", product_id, reason,
+                "Signal REJECTED [%s]: %s", product_id, reason,
             )
+            # Save all signals as not acted on
+            for sig, _ in weighted_signals:
+                self.db.save_signal(sig, acted_on=False)
             return
 
         # g) Calculate position size
@@ -512,6 +524,8 @@ class TradingEngine:
             logger.info(
                 "Position size is zero for %s — skipping", product_id,
             )
+            for sig, _ in weighted_signals:
+                self.db.save_signal(sig, acted_on=False)
             return
 
         # h) Execute the order (with mandatory bracket: SL + TP)
@@ -523,6 +537,8 @@ class TradingEngine:
             logger.warning(
                 "Order execution failed for %s", product_id,
             )
+            for sig, _ in weighted_signals:
+                self.db.save_signal(sig, acted_on=False)
             return
 
         # i) Open position in portfolio manager
@@ -534,6 +550,8 @@ class TradingEngine:
                 "Invalid fill for %s: price=%.4f qty=%.8f — not opening position",
                 product_id, fill_price, quantity,
             )
+            for sig, _ in weighted_signals:
+                self.db.save_signal(sig, acted_on=False)
             return
 
         self.portfolio_manager.open_position(
@@ -546,8 +564,9 @@ class TradingEngine:
             strategy=best_signal.strategy,
         )
 
-        # j) Log signal as acted upon and record trade to DB
-        self.db.save_signal(best_signal, acted_on=True)
+        # j) Log all signals: best as acted_on=True, others as acted_on=False
+        for sig, _ in weighted_signals:
+            self.db.save_signal(sig, acted_on=(sig is best_signal))
 
         logger.info(
             "TRADE OPENED: %s %s  qty=%.8f @ $%.4f  "
@@ -752,6 +771,38 @@ class TradingEngine:
             "intelligence": intelligence_status,
             "open_positions": self.portfolio_manager.get_open_position_count(),
         }
+
+    def _sync_paper_balances(self) -> None:
+        """Sync paper broker balances from persisted portfolio positions.
+
+        After a restart the portfolio manager restores open positions from
+        SQLite, but the paper broker in ``CoinbaseClient`` starts fresh
+        (USD-only).  This method credits the broker with the asset
+        quantities held in open positions and sets its USD to the
+        portfolio manager's persisted cash balance.
+        """
+        positions = self.portfolio_manager.get_all_positions()
+        if not positions:
+            return
+
+        # Set USD from persisted cash balance
+        self.client._paper_balance["USD"] = self.portfolio_manager.cash_balance
+
+        # Credit base-currency balances for each open position
+        for pos in positions:
+            base_currency = pos.product_id.split("-")[0]
+            if pos.side == OrderSide.BUY:
+                self.client._paper_balance[base_currency] = (
+                    self.client._paper_balance.get(base_currency, 0.0)
+                    + pos.quantity
+                )
+
+        logger.info(
+            "Paper broker synced from %d persisted positions — "
+            "balances: %s",
+            len(positions),
+            {k: f"{v:.8f}" for k, v in self.client._paper_balance.items()},
+        )
 
     def pause(self) -> None:
         """Manually pause all trading. Requires explicit :meth:`resume`."""
