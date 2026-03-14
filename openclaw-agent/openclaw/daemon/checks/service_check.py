@@ -49,25 +49,30 @@ async def _check_single_service(
         check.details = details
         return check
 
-    # HTTP /health check
+    # HTTP health check — try / first, then /health
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-            resp = await client.get(f"http://{host}:{port}/health")
-            details["health_status"] = resp.status_code
+            resp = await client.get(f"http://{host}:{port}/")
             if resp.status_code == 200:
                 check.result = CheckResult.HEALTHY
                 check.message = f"OK (port {port})"
-            elif resp.status_code == 404:
-                # No /health endpoint — service is up (TCP connected), treat as healthy
-                check.result = CheckResult.HEALTHY
-                check.message = f"TCP OK (port {port}, no /health endpoint)"
+                details["health_status"] = 200
+                details["health_path"] = "/"
             else:
-                check.result = CheckResult.DEGRADED
-                check.message = f"Health endpoint returned {resp.status_code}"
+                # Root didn't work, try /health
+                resp = await client.get(f"http://{host}:{port}/health")
+                details["health_status"] = resp.status_code
+                details["health_path"] = "/health"
+                if resp.status_code == 200:
+                    check.result = CheckResult.HEALTHY
+                    check.message = f"OK (port {port})"
+                else:
+                    check.result = CheckResult.DEGRADED
+                    check.message = f"Health endpoint returned {resp.status_code}"
     except Exception:
-        # Service is up (TCP connected) but no /health endpoint — still healthy
+        # Service is up (TCP connected) but HTTP failed — still healthy
         check.result = CheckResult.HEALTHY
-        check.message = f"TCP OK (port {port}, no /health endpoint)"
+        check.message = f"TCP OK (port {port}, no health endpoint)"
 
     check.duration_ms = (time.monotonic() - start) * 1000
     check.details = details
