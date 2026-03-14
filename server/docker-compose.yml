@@ -199,14 +199,12 @@ services:
       dockerfile: Dockerfile
     container_name: empire-bot
     restart: unless-stopped
+    network_mode: host
     env_file:
       - ./empire-bot/.env
     volumes:
       - ./config:/app/config:ro
       - /var/run/docker.sock:/var/run/docker.sock
-    networks:
-      - empire
-      - empire_empire
     deploy:
       resources:
         limits:
@@ -215,33 +213,23 @@ services:
 
   # -------------------------------------------------------------------------
   # LiteLLM Proxy — AI Model Router for BookForge + Empire Services
-  # Routes claude-haiku, claude-sonnet, claude-opus, gemini-2.0-flash
+  # DISABLED: config dir missing, BookForge uses direct Anthropic API fallback.
+  # To re-enable: create server/litellm/config.yaml and uncomment below.
   # -------------------------------------------------------------------------
-  arsenal-litellm:
-    image: ghcr.io/berriai/litellm:main-latest
-    container_name: arsenal-litellm
-    restart: unless-stopped
-    ports:
-      - "4000:4000"
-    environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-    volumes:
-      - ./litellm/config.yaml:/app/config.yaml
-    command: ["--config", "/app/config.yaml", "--port", "4000"]
-    networks:
-      - empire
-      - empire_empire
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: '0.5'
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
-      interval: 60s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+  # arsenal-litellm:
+  #   image: ghcr.io/berriai/litellm:main-latest
+  #   container_name: arsenal-litellm
+  #   restart: unless-stopped
+  #   ports:
+  #     - "4000:4000"
+  #   environment:
+  #     - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+  #   volumes:
+  #     - ./litellm/config.yaml:/app/config.yaml
+  #   command: ["--config", "/app/config.yaml", "--port", "4000"]
+  #   networks:
+  #     - empire
+  #     - empire_empire
 
 volumes:
   n8n-data:

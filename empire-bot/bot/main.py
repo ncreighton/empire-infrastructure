@@ -159,6 +159,17 @@ def build_app() -> Application:
         name="weekly_report",
     )
 
+    # Global error handler
+    async def error_handler(update, context):
+        logger.error("Unhandled exception: %s", context.error, exc_info=context.error)
+        if update and update.effective_message:
+            try:
+                await update.effective_message.reply_text(f"Error: {context.error}")
+            except Exception:
+                pass
+
+    app.add_error_handler(error_handler)
+
     logger.info("Bot configured: %d commands, 5 scheduled jobs", len(commands))
     return app
 

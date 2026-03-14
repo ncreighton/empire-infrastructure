@@ -60,13 +60,20 @@ HELP_TEXT = """
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /start command — show main menu."""
     name = update.effective_user.first_name if update.effective_user else "Commander"
-    await update.message.reply_text(
-        f"Welcome back, *{escape_md(name)}*\\! \\🧠\n\n"
-        "Empire Brain Commander at your service\\.\n"
-        "Choose a category:",
-        parse_mode=ParseMode.MARKDOWN_V2,
-        reply_markup=main_menu(),
-    )
+    try:
+        await update.message.reply_text(
+            f"Welcome back, *{escape_md(name)}*\\! 🧠\n\n"
+            "Empire Brain Commander at your service\\.\n"
+            "Choose a category:",
+            parse_mode=ParseMode.MARKDOWN_V2,
+            reply_markup=main_menu(),
+        )
+    except Exception as e:
+        logger.error("cmd_start send failed: %s", e)
+        await update.message.reply_text(
+            f"Welcome back, {name}! 🧠\n\nEmpire Brain Commander at your service.\nChoose a category:",
+            reply_markup=main_menu(),
+        )
 
 
 @admin_only

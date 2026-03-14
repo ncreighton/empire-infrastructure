@@ -40,27 +40,50 @@ async def _safe_send(target, text: str, reply_markup=None):
 async def cmd_health(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /health — overview of all service health."""
     await update.message.chat.send_action("typing")
-    lines = ["*Service Health* 💚\n"]
+    lines = ["Service Health\n"]
 
-    # Brain
+    # Brain (short timeout — it's cross-network)
     try:
-        bh = await brain.health()
-        lines.append(f"{status_icon(bh.get('status', 'unknown'))} Brain MCP: {escape_md(bh.get('status', '?'))}")
+        import httpx as _httpx
+        async with _httpx.AsyncClient(timeout=5) as c:
+            r = await c.get(f"{brain.base_url}/health")
+            r.raise_for_status()
+            bh = r.json()
+        lines.append(f"🟢 Brain MCP: {bh.get('status', 'ok')}")
     except Exception:
-        lines.append(f"{status_icon('down')} Brain MCP: unreachable")
+        lines.append("🔴 Brain MCP: unreachable")
 
     # Dashboard services
     try:
         svc_data = await dashboard.services()
-        services = svc_data if isinstance(svc_data, list) else svc_data.get("services", [])
-        for svc in services:
-            name = svc.get("name", svc.get("service", "?"))
-            status = svc.get("status", "unknown")
-            lines.append(f"{status_icon(status)} {escape_md(name)}: {escape_md(status)}")
-    except Exception:
-        lines.append(f"{status_icon('down')} Dashboard: unreachable")
+        services_dict = svc_data.get("services", {}) if isinstance(svc_data, dict) else {}
+        if isinstance(services_dict, dict):
+            for name, info in services_dict.items():
+                if isinstance(info, dict):
+                    status = info.get("status", "unknown")
+                else:
+                    status = str(info)
+                icon = "🟢" if status in ("healthy", "up", "running", "ok") else "🔴" if status in ("down", "error") else "⚪"
+                lines.append(f"{icon} {name}: {status}")
+        elif isinstance(svc_data, list):
+            for svc in svc_data:
+                name = svc.get("name", svc.get("service", "?"))
+                status = svc.get("status", "unknown")
+                icon = "🟢" if status in ("healthy", "up", "running", "ok") else "🔴"
+                lines.append(f"{icon} {name}: {status}")
+        # Also show overall
+        overall = svc_data.get("overall", "") if isinstance(svc_data, dict) else ""
+        if overall:
+            lines.insert(1, f"Overall: {overall}")
+    except Exception as e:
+        lines.append(f"🔴 Dashboard: {e}")
 
-    await _safe_send(update, "\n".join(lines), reply_markup=health_menu())
+    # Send as plain text (no markdown issues)
+    try:
+        await update.message.reply_text("\n".join(lines), reply_markup=health_menu())
+    except Exception as e:
+        logger.error("cmd_health send failed: %s", e)
+        await update.message.reply_text(f"Health check error: {e}")
 
 
 @admin_only
