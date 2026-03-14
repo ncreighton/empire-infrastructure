@@ -1,6 +1,8 @@
 services:
   openclaw-agent:
     build: .
+    env_file:
+      - /opt/empire/.env
     container_name: openclaw-agent
     ports:
       - "8100:8100"

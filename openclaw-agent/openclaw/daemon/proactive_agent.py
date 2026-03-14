@@ -331,7 +331,7 @@ class ProactiveAgent:
                     target=profile["platform_id"],
                     description=f"Enhance low-quality profile (grade {grade}, score {score:.0f})",
                     requires_browser=False,
-                    requires_approval=True,
+                    requires_approval=False,
                     params={"current_score": score, "grade": grade},
                 ))
         return actions

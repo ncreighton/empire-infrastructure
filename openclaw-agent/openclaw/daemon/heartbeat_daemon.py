@@ -533,6 +533,38 @@ class HeartbeatDaemon:
                 )
                 return True  # Error during real attempt = still counts
 
+        elif action.action_type == "enhance_profile":
+            try:
+                # Regenerate profile content and re-score
+                content = self.engine.generate_profile(action.target)
+                score = self.engine.score_profile(action.target)
+                if score:
+                    score.calculate()
+                    new_grade = score.grade.value
+                    new_score = score.total_score
+                else:
+                    # Build a fresh score from the sentinel
+                    score = self.engine.sentinel.score(content)
+                    new_grade = score.grade.value
+                    new_score = score.total_score
+                # Persist via codex
+                self.codex.store_profile(content, score)
+                self.codex.log_action(
+                    "enhance_profile", action.target,
+                    f"{action.description} -> grade {new_grade}, score {new_score:.0f}",
+                    "success",
+                )
+                logger.info(
+                    f"[PROACTIVE] Enhanced profile: {action.target} "
+                    f"-> grade {new_grade}, score {new_score:.0f}"
+                )
+            except Exception as e:
+                logger.error(f"[PROACTIVE] Enhance failed for {action.target}: {e}")
+                self.codex.log_action(
+                    "enhance_profile", action.target,
+                    action.description, f"error: {str(e)[:200]}",
+                )
+
         elif action.action_type == "session_cleanup":
             cleared = await self.healer.clear_expired_sessions()
             self.codex.log_action(

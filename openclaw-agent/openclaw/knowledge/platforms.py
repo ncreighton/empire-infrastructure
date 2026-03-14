@@ -738,6 +738,7 @@ _register(PlatformConfig(
         "Developer-friendly API for integrations",
     ],
     notes="Modern Gumroad alternative with better developer tools.",
+    enabled=False,
 ))
 
 _register(PlatformConfig(
@@ -815,6 +816,7 @@ _register(PlatformConfig(
         "Shop name becomes permanent URL slug",
     ],
     notes="Largest marketplace for handmade/digital goods. Complex setup but massive audience.",
+    enabled=False,
 ))
 
 _register(PlatformConfig(
