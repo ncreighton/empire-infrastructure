@@ -87,13 +87,15 @@ class Orchestrator:
         Requires 3 consecutive idle polls to avoid false detection when
         ZimmWriter title briefly flashes 'Menu' during window transitions.
 
-        Tracks connection errors separately from idle state to avoid infinite
-        loops when stale window handles cause repeated exceptions. After 10+
-        consecutive connection errors, forces a fresh Application reconnect.
+        Connection error handling:
+        - After 10 consecutive errors: try fresh reconnect with new PID
+        - After 30 consecutive errors (~5 min): warn about persistent failures
+        - After 60 consecutive errors (~10 min): give up (ZimmWriter is dead)
         """
         consecutive_idle = 0
         consecutive_errors = 0
         REQUIRED_IDLE_POLLS = 3
+        MAX_CONSECUTIVE_ERRORS = 60  # ~10 minutes of nothing but errors
 
         for _ in range(timeout // 10):
             try:
@@ -146,21 +148,42 @@ class Orchestrator:
                         pass
                 else:
                     logger.info(f"Waiting for ready (currently: '{title}')...")
-            except Exception:
+            except Exception as exc:
                 consecutive_errors += 1
                 # Don't reset consecutive_idle on connection errors — the idle
                 # state may still be valid, we just can't read the title
-                if consecutive_errors >= 10:
-                    logger.warning(f"10+ consecutive connection errors, forcing fresh reconnect...")
+
+                if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                    logger.error(f"{MAX_CONSECUTIVE_ERRORS} consecutive connection errors "
+                                 f"(~{MAX_CONSECUTIVE_ERRORS * 10 // 60} min). "
+                                 f"ZimmWriter appears dead. Last error: {exc}")
+                    raise RuntimeError(
+                        f"ZimmWriter unreachable after {MAX_CONSECUTIVE_ERRORS} "
+                        f"consecutive connection errors (~{MAX_CONSECUTIVE_ERRORS * 10 // 60} min)")
+
+                if consecutive_errors % 10 == 0:
+                    # Every 10 errors (~100s), try a full fresh reconnect
+                    logger.warning(f"{consecutive_errors} consecutive connection errors, "
+                                   f"forcing fresh reconnect...")
                     try:
                         pid = self.controller._find_zimmwriter_pid()
                         if pid:
+                            old_pid = getattr(self.controller, '_pid', None)
                             from pywinauto import Application
-                            self.controller.app = Application(backend=self.controller.backend).connect(process=pid)
-                            consecutive_errors = 0
-                            logger.info(f"Fresh reconnect to PID {pid} succeeded")
-                    except Exception:
-                        pass
+                            self.controller.app = Application(
+                                backend=self.controller.backend
+                            ).connect(process=pid)
+                            self.controller._connected = False
+                            self.controller._control_cache.clear()
+                            if pid != old_pid:
+                                logger.info(f"PID changed: {old_pid} -> {pid}")
+                            # Don't reset consecutive_errors here — only reset
+                            # when connect() + get_window_title() succeeds above
+                        else:
+                            logger.warning("No ZimmWriter process found "
+                                           f"(error #{consecutive_errors})")
+                    except Exception as reconnect_err:
+                        logger.warning(f"Fresh reconnect failed: {reconnect_err}")
             time.sleep(10)
         raise RuntimeError("Timed out waiting for ZimmWriter to become ready")
 
@@ -296,10 +319,14 @@ class Orchestrator:
         return self.results
 
     def _run_single(self, job: JobSpec, index: int, total: int) -> Dict:
-        """Run a single job with inline model update.
+        """Run a single job with full per-site profile optimization.
 
-        Steps: wait for ready -> navigate -> load profile -> set AI model
-        from A/B assignment -> update profile -> set titles -> start -> wait.
+        Steps: wait for ready -> optimize profile (all settings, O/P buttons,
+        features) -> set AI model -> load CSV -> start -> wait.
+
+        This does a complete profile optimization for each site right before
+        running its articles, ensuring all settings (dropdowns, checkboxes,
+        image prompts, WordPress, SERP, Link Pack, etc.) are correct.
         """
         start = time.time()
         result = {
@@ -310,41 +337,150 @@ class Orchestrator:
         }
 
         try:
-            # Wait for any active generation to finish first
-            self._wait_until_ready()
+            # Wait for any active generation to finish first.
+            # Retry once on failure (ZimmWriter may need a restart).
+            for ready_attempt in range(2):
+                try:
+                    self._wait_until_ready()
+                    break
+                except RuntimeError as e:
+                    if ready_attempt == 0 and "unreachable" in str(e):
+                        logger.warning("ZimmWriter unreachable, waiting 30s for recovery...")
+                        time.sleep(30)
+                        # Force fresh PID discovery
+                        try:
+                            self.controller.connect()
+                        except Exception:
+                            pass
+                        continue
+                    raise
 
-            # Run the job with inline model override (retry on stale handles
-            # and False returns from navigation/CSV failures)
-            profile = job.profile_name or job.domain
-            model = MODEL_ASSIGNMENTS.get(job.domain)
+            # ── Per-site profile optimization ──
+            logger.info("Optimizing profile for %s...", job.domain)
 
+            # Force fresh connection before optimization to avoid stale handles
+            self.controller._connected = False
+            self.controller._control_cache.clear()
+            self.controller.connect()
+
+            opt_result = self._optimize_site(job)
+            if opt_result.get("status") == "FAILED":
+                logger.error("Profile optimization failed for %s: %s",
+                             job.domain, opt_result.get("errors"))
+                # Continue anyway — the profile may still work with cached settings
+
+            # ── Close any leftover config windows after optimization ──
+            # Config windows (especially WordPress Uploads) left open from
+            # profile optimization block other config windows from opening
+            # (AutoIt only allows one config window at a time).
+            logger.info("Closing leftover config windows...")
+            try:
+                self.controller.connect()
+                self.controller._close_stale_config_windows()
+                self.controller._dismiss_dialog(timeout=1)
+                time.sleep(0.5)
+                self.controller._connected = False
+                self.controller._control_cache.clear()
+                self.controller.connect()
+                logger.info("Config windows closed (now: '%s')",
+                            self.controller.get_window_title())
+            except Exception as e:
+                logger.warning("Cleanup after optimization failed: %s", e)
+
+            # ── Load CSV and start generation ──
             started = False
             last_err = None
             for attempt in range(3):
                 try:
+                    # Force complete reconnect with cache clear on every attempt
+                    # to avoid stale main_window handles from profile optimization
+                    self.controller._connected = False
+                    self.controller._control_cache.clear()
                     self.controller.connect()
-                    started = self.controller.run_job(
-                        titles=job.titles,
-                        csv_path=job.csv_path,
-                        profile_name=profile,
-                        ai_model_override=model,
-                        wait=False,
-                    )
-                    if started:
+                    title = self.controller.get_window_title()
+
+                    # Ensure we're on Bulk Writer — force navigation with
+                    # full cache clear after each transition
+                    if "Bulk" not in title:
+                        logger.info("Not on Bulk Writer ('%s'), navigating...", title)
+                        if "Menu" in title:
+                            self.controller.open_bulk_writer()
+                        elif "Output" in title:
+                            self._close_output_window()
+                            time.sleep(2)
+                            self.controller._connected = False
+                            self.controller._control_cache.clear()
+                            self.controller.connect()
+                            title = self.controller.get_window_title()
+                            if "Menu" in title:
+                                self.controller.open_bulk_writer()
+                            elif "Bulk" not in title:
+                                self.controller.back_to_menu()
+                                time.sleep(2)
+                                self.controller._connected = False
+                                self.controller.connect()
+                                self.controller.open_bulk_writer()
+                        else:
+                            self.controller.back_to_menu()
+                            time.sleep(2)
+                            self.controller._connected = False
+                            self.controller._control_cache.clear()
+                            self.controller.connect()
+                            self.controller.open_bulk_writer()
+                        time.sleep(2)
+                        # Critical: full reconnect after navigation so main_window
+                        # points to the Bulk Writer window, not Menu
+                        self.controller._connected = False
+                        self.controller._control_cache.clear()
+                        self.controller.connect()
+                        title = self.controller.get_window_title()
+                        logger.info("After navigation: '%s'", title)
+
+                    # Load CSV
+                    if job.csv_path:
+                        csv_ok = self.controller.load_seo_csv(job.csv_path)
+                        if not csv_ok:
+                            if attempt < 2:
+                                logger.warning("CSV load failed (attempt %d), "
+                                               "doing Menu→Bulk Writer roundtrip...",
+                                               attempt + 1)
+                                try:
+                                    self.controller.back_to_menu()
+                                    time.sleep(3)
+                                    self.controller._connected = False
+                                    self.controller._control_cache.clear()
+                                    self.controller.connect()
+                                    self.controller.open_bulk_writer()
+                                    time.sleep(2)
+                                    self.controller._connected = False
+                                    self.controller._control_cache.clear()
+                                    self.controller.connect()
+                                except Exception:
+                                    pass
+                                continue
+                            last_err = RuntimeError(f"CSV load failed: {job.csv_path}")
+                            break
+                    elif job.titles:
+                        self.controller.set_bulk_titles(job.titles)
+                    else:
+                        last_err = RuntimeError("No titles or CSV provided")
                         break
-                    # run_job returned False — retry after settling
-                    if attempt < 2:
-                        logger.warning(f"run_job returned False (attempt {attempt+1}), retrying...")
-                        time.sleep(10)
-                        self._wait_until_ready(timeout=120)
+
+                    time.sleep(1)
+
+                    # Start generation
+                    self.controller.start_bulk_writer()
+                    started = True
+                    break
+
                 except Exception as e:
                     last_err = e
-                    logger.warning(f"run_job attempt {attempt + 1} failed: {e}")
+                    logger.warning("Start attempt %d failed: %s", attempt + 1, e)
                     time.sleep(5)
 
             if not started:
                 result["status"] = "failed"
-                result["error"] = str(last_err) if last_err else "run_job returned False"
+                result["error"] = str(last_err) if last_err else "Could not start generation"
                 return result
 
             result["source"] = f"{len(job.titles or [])} titles" if job.titles else f"CSV: {job.csv_path}"
@@ -374,6 +510,202 @@ class Orchestrator:
         )
 
         return result
+
+    def _optimize_site(self, job: JobSpec) -> Dict:
+        """Full profile optimization for a single site before running.
+
+        1. Navigate to Bulk Writer
+        2. Configure O button options for this site's specific image models
+        3. Run update_profile_for_site (loads profile, sets all dropdowns,
+           checkboxes, P buttons, features, clicks Update Profile)
+        4. Re-set non-persistent dropdowns
+        5. Set AI model override from A/B assignments
+        """
+        import sys
+        from pathlib import Path
+        scripts_dir = Path(__file__).parent.parent / "scripts"
+        if str(scripts_dir) not in sys.path:
+            sys.path.insert(0, str(scripts_dir))
+
+        from scripts.save_all_profiles import update_profile_for_site, DROPDOWN_MAP
+        from .image_options import IMAGE_MODEL_OPTIONS
+
+        preset = get_preset(job.domain)
+        if not preset:
+            return {"domain": job.domain, "status": "FAILED",
+                    "errors": [f"No preset for {job.domain}"]}
+
+        # Ensure on Bulk Writer
+        self.controller.connect()
+        title = self.controller.get_window_title()
+        if "Bulk" not in title:
+            if "Menu" in title:
+                self.controller.open_bulk_writer()
+            else:
+                self.controller.back_to_menu()
+                time.sleep(2)
+                self.controller.connect()
+                self.controller.open_bulk_writer()
+            time.sleep(2)
+            self.controller.connect()
+
+        # Configure O button options for this site's specific models
+        self._configure_site_image_options(job.domain, preset)
+
+        # O button config commonly triggers stale handles (AutoIt destroys/recreates
+        # windows). Force a clean reconnect before the main profile optimization.
+        self.controller._connected = False
+        self.controller._control_cache.clear()
+        time.sleep(1)
+        self.controller.connect()
+
+        # Full profile optimization (loads profile, sets all dropdowns/checkboxes,
+        # P buttons for image prompts, feature toggles, clicks Update Profile)
+        opt_result = update_profile_for_site(self.controller, job.domain, preset)
+        logger.info("Profile optimization for %s: %s (errors: %s)",
+                     job.domain, opt_result.get("status"), opt_result.get("errors", []))
+
+        # Close any config windows left open by profile optimization
+        # (especially WordPress Uploads, which blocks other config windows)
+        self.controller._close_stale_config_windows()
+        self.controller._dismiss_dialog(timeout=1)
+
+        # Fresh reconnect before setting non-persistent dropdowns
+        self.controller._connected = False
+        self.controller._control_cache.clear()
+        self.controller.connect()
+
+        # Re-set non-persistent dropdowns (may have been reset by Update Profile
+        # or profile load). These don't survive profile save/load.
+        non_persistent = {
+            "featured_image": preset.get("featured_image"),
+            "section_length": preset.get("section_length"),
+            "subheading_images_model": preset.get("subheading_images_model"),
+        }
+        for dd_key, value in non_persistent.items():
+            if value and value != "None":
+                try:
+                    auto_id = DROPDOWN_MAP[dd_key]
+                    self.controller.set_dropdown(auto_id=auto_id, value=value)
+                    time.sleep(0.3)
+                except Exception as e:
+                    # Stale handle — try one more time with fresh connection
+                    try:
+                        self.controller._connected = False
+                        self.controller.connect()
+                        self.controller.set_dropdown(auto_id=auto_id, value=value)
+                        time.sleep(0.3)
+                    except Exception:
+                        logger.warning("Could not re-set %s=%s: %s", dd_key, value, e)
+
+        # Set AI model override from A/B assignments
+        model = MODEL_ASSIGNMENTS.get(job.domain)
+        if model:
+            try:
+                self.controller.set_dropdown(
+                    auto_id=self.controller.DROPDOWN_IDS["ai_model"][0],
+                    value=model,
+                )
+                logger.info("AI model set to: %s", model)
+                self.controller.update_profile()
+                logger.info("Profile updated with AI model override")
+            except Exception as e:
+                # Retry with fresh connection
+                try:
+                    self.controller._connected = False
+                    self.controller._control_cache.clear()
+                    self.controller.connect()
+                    self.controller.set_dropdown(
+                        auto_id=self.controller.DROPDOWN_IDS["ai_model"][0],
+                        value=model,
+                    )
+                    logger.info("AI model set to: %s (retry)", model)
+                    self.controller.update_profile()
+                    logger.info("Profile updated with AI model override (retry)")
+                except Exception as e2:
+                    logger.warning("Could not set AI model override: %s", e2)
+
+        # Reconnect and ensure we're on Bulk Writer after all config changes.
+        # Profile optimization can leave ZimmWriter on Menu or other screens.
+        try:
+            self.controller._connected = False
+            self.controller._control_cache.clear()
+            self.controller.connect()
+            title = self.controller.get_window_title()
+            if "Bulk" not in title:
+                logger.info("After optimization, not on Bulk Writer ('%s'), navigating...", title)
+                if "Menu" in title:
+                    self.controller.open_bulk_writer()
+                else:
+                    self.controller.back_to_menu()
+                    time.sleep(2)
+                    self.controller._connected = False
+                    self.controller.connect()
+                    self.controller.open_bulk_writer()
+                time.sleep(2)
+                self.controller._connected = False
+                self.controller._control_cache.clear()
+                self.controller.connect()
+                logger.info("Back on Bulk Writer: '%s'", self.controller.get_window_title())
+        except Exception as e:
+            logger.warning("Post-optimization navigation failed: %s", e)
+
+        return opt_result
+
+    def _configure_site_image_options(self, domain: str, preset: Dict):
+        """Configure O button options for this site's specific image models only.
+
+        O button options are global per-model (not per-profile), but we only
+        configure the 2 models this site uses (featured + subheading) instead
+        of cycling through all models.
+        """
+        from .image_options import IMAGE_MODEL_OPTIONS
+
+        # Featured image model O button
+        featured_model = preset.get("featured_image", "")
+        if featured_model and featured_model != "None":
+            opts = IMAGE_MODEL_OPTIONS.get(featured_model)
+            if opts:
+                try:
+                    self.controller.set_dropdown(auto_id="79", value=featured_model)
+                    time.sleep(0.5)
+                    kwargs = {
+                        "enable_compression": opts.get("enable_compression", True),
+                        "aspect_ratio": opts.get("aspect_ratio", "16:9"),
+                    }
+                    if opts.get("is_ideogram"):
+                        kwargs["magic_prompt"] = opts.get("magic_prompt")
+                        kwargs["style"] = opts.get("style")
+                        kwargs["activate_similarity"] = opts.get("activate_similarity")
+                    self.controller.configure_featured_image_options(featured_model, **kwargs)
+                    time.sleep(0.5)
+                    logger.info("Featured image options: %s", featured_model)
+                except Exception as e:
+                    logger.warning("Failed to configure featured image options (%s): %s",
+                                   featured_model, e)
+
+        # Subheading image model O button
+        sub_model = preset.get("subheading_images_model", "")
+        if sub_model and sub_model != "None":
+            opts = IMAGE_MODEL_OPTIONS.get(sub_model)
+            if opts:
+                try:
+                    self.controller.set_dropdown(auto_id="85", value=sub_model)
+                    time.sleep(0.5)
+                    kwargs = {
+                        "enable_compression": opts.get("enable_compression", True),
+                        "aspect_ratio": opts.get("aspect_ratio", "16:9"),
+                    }
+                    if opts.get("is_ideogram"):
+                        kwargs["magic_prompt"] = opts.get("magic_prompt")
+                        kwargs["style"] = opts.get("style")
+                        kwargs["activate_similarity"] = opts.get("activate_similarity")
+                    self.controller.configure_subheading_image_options(sub_model, **kwargs)
+                    time.sleep(0.5)
+                    logger.info("Subheading image options: %s", sub_model)
+                except Exception as e:
+                    logger.warning("Failed to configure subheading image options (%s): %s",
+                                   sub_model, e)
 
     def _save_results(self):
         """Save orchestration results."""

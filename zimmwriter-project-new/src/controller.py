@@ -313,7 +313,15 @@ class ZimmWriterController:
 
     @staticmethod
     def _find_zimmwriter_pid() -> Optional[int]:
-        """Find ZimmWriter's AutoIt3.exe process ID."""
+        """Find ZimmWriter's AutoIt3.exe process ID.
+
+        Strategy:
+        1. PowerShell with MainWindowTitle filter (best: finds the right window)
+        2. PowerShell without title filter (catches ZimmWriter during transitions
+           when the title is blank or doesn't contain 'ZimmWriter')
+        3. psutil fallback (any AutoIt3 process)
+        """
+        # Strategy 1: AutoIt3 with ZimmWriter title
         try:
             result = subprocess.run(
                 ["powershell", "-Command",
@@ -328,7 +336,21 @@ class ZimmWriterController:
         except Exception:
             pass
 
-        # Fallback: any AutoIt3 process
+        # Strategy 2: Any AutoIt3 process (ZimmWriter may have blank title)
+        try:
+            result = subprocess.run(
+                ["powershell", "-Command",
+                 "Get-Process -Name 'AutoIt3*' -ErrorAction SilentlyContinue | "
+                 "Select-Object -First 1 -ExpandProperty Id"],
+                capture_output=True, text=True, timeout=10
+            )
+            pid_str = result.stdout.strip()
+            if pid_str:
+                return int(pid_str)
+        except Exception:
+            pass
+
+        # Strategy 3: psutil fallback
         try:
             import psutil
             for proc in psutil.process_iter(["name", "pid"]):
@@ -1467,34 +1489,60 @@ class ZimmWriterController:
         """Close a config window and clear cache.
 
         AutoIt (ZimmWriter) windows ignore WM_CLOSE but respond to ESC key.
-        Uses set_focus() + ESC as the primary method, with WM_CLOSE as fallback.
-        Verifies the window is actually gone and retries if needed.
+        Uses SetForegroundWindow + ESC (pyautogui) as the primary method.
+        set_focus() alone does NOT bring the window to foreground for keyboard
+        input on 32-bit AutoIt windows from 64-bit Python.
         """
         if not win:
             return
 
         handle = win.handle
+        import pyautogui as _pag
 
-        # Method 1: Focus + ESC key (works reliably on AutoIt windows)
+        # Method 1: SetForegroundWindow + pyautogui ESC (most reliable)
         try:
-            win.set_focus()
-            time.sleep(0.2)
-            send_keys("{ESC}", pause=0.1)
+            ctypes.windll.user32.SetForegroundWindow(handle)
+            time.sleep(0.3)
+            _pag.press('escape')
             time.sleep(0.5)
         except Exception as e:
-            logger.debug(f"ESC close attempt failed: {e}")
+            logger.debug(f"SetForegroundWindow+ESC close failed: {e}")
 
         # Verify it's closed
-        try:
-            if ctypes.windll.user32.IsWindow(handle):
-                # Method 2: WM_CLOSE as fallback
+        if ctypes.windll.user32.IsWindow(handle):
+            # Method 2: set_focus + send_keys (original method, as fallback)
+            try:
+                win.set_focus()
+                time.sleep(0.2)
+                send_keys("{ESC}", pause=0.1)
+                time.sleep(0.5)
+            except Exception:
+                pass
+
+        # Method 3: WM_CLOSE
+        if ctypes.windll.user32.IsWindow(handle):
+            try:
                 SendMsg = ctypes.windll.user32.SendMessageW
-                SendMsg.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+                SendMsg.argtypes = [wintypes.HWND, wintypes.UINT,
+                                    wintypes.WPARAM, wintypes.LPARAM]
                 SendMsg.restype = ctypes.c_long
                 SendMsg(handle, 0x0010, 0, 0)  # WM_CLOSE
                 time.sleep(0.5)
-        except Exception:
-            pass
+            except Exception:
+                pass
+
+        # Method 4: Alt+F4 as last resort
+        if ctypes.windll.user32.IsWindow(handle):
+            try:
+                ctypes.windll.user32.SetForegroundWindow(handle)
+                time.sleep(0.3)
+                _pag.hotkey('alt', 'F4')
+                time.sleep(0.5)
+            except Exception:
+                pass
+
+        if ctypes.windll.user32.IsWindow(handle):
+            logger.warning(f"Config window still open after all close attempts: handle={handle}")
 
         # Final fallback: close any lingering config windows
         self._close_stale_config_windows()
@@ -1503,9 +1551,10 @@ class ZimmWriterController:
     def _close_stale_config_windows(self):
         """Close any lingering config/sub-windows that aren't the main Bulk Writer or Menu.
 
-        Uses ESC key (works on AutoIt windows). Only closes windows whose titles
-        match known ZimmWriter config window patterns — NEVER close tooltips or
-        internal windows (doing so crashes AutoIt3).
+        Uses Desktop-level search (not app.windows()) to find ALL ZimmWriter
+        config windows, even those created under a different app connection.
+        Uses SetForegroundWindow + pyautogui ESC (reliable on 32-bit AutoIt
+        from 64-bit Python, unlike set_focus + send_keys).
         Runs up to 3 passes to ensure all stale windows are actually closed.
         """
         _KNOWN_CONFIG = {
@@ -1515,21 +1564,40 @@ class ZimmWriterController:
             "Set Featured", "Set Subheading", "Enable", "Load Link",
             "Set Custom", "Set Bulk",
         }
+        _SKIP_TITLES = {"Bulk", "Menu"}
+        import pyautogui as _pag
         for _pass in range(3):
             closed_any = False
             try:
-                for w in self.app.windows():
-                    title = w.window_text()
+                # Use Desktop search to find ALL ZimmWriter windows
+                for w in Desktop(backend="win32").windows():
+                    try:
+                        title = w.window_text()
+                    except Exception:
+                        continue
+                    if "ZimmWriter" not in title:
+                        continue
+                    # Skip main navigation windows
+                    if any(sk in title for sk in _SKIP_TITLES):
+                        continue
                     # Only close windows matching known config patterns
                     if not any(kw in title for kw in _KNOWN_CONFIG):
                         continue
                     try:
-                        w.set_focus()
-                        time.sleep(0.15)
-                        send_keys("{ESC}", pause=0.1)
+                        ctypes.windll.user32.SetForegroundWindow(w.handle)
                         time.sleep(0.3)
+                        _pag.press('escape')
+                        time.sleep(0.5)
+                        if not ctypes.windll.user32.IsWindow(w.handle):
+                            logger.info(f"Closed stale config window: '{title}'")
+                        else:
+                            # Retry with Alt+F4
+                            ctypes.windll.user32.SetForegroundWindow(w.handle)
+                            time.sleep(0.2)
+                            _pag.hotkey('alt', 'F4')
+                            time.sleep(0.5)
+                            logger.info(f"Force-closed stale config window: '{title}'")
                         closed_any = True
-                        logger.debug(f"Closed stale config window: '{title}'")
                     except Exception:
                         pass
             except Exception:
@@ -1886,14 +1954,64 @@ class ZimmWriterController:
 
     # ── Style Mimic Config ──
 
+    def _close_style_mimic_window(self, win):
+        """Close Style Mimic config window by clicking the title bar X button.
+
+        ESC, WM_CLOSE, and Alt+F4 all cancel the feature state in AutoIt3.
+        The only method that preserves the 'Enabled' toggle is clicking the
+        actual X button in the title bar via mouse coordinates.
+        """
+        if not win:
+            return
+        handle = win.handle
+        if not ctypes.windll.user32.IsWindow(handle):
+            return
+
+        try:
+            rect = win.rectangle()
+            # X button is at top-right of the title bar
+            x_btn_x = rect.right - 20
+            x_btn_y = rect.top + 12
+            pyautogui.click(x_btn_x, x_btn_y)
+            time.sleep(1.0)
+        except Exception:
+            pass
+
+        if ctypes.windll.user32.IsWindow(handle):
+            # Fallback: WM_SYSCOMMAND SC_CLOSE (different from WM_CLOSE)
+            try:
+                _SM = ctypes.windll.user32.SendMessageW
+                _SM.argtypes = [wintypes.HWND, wintypes.UINT,
+                                wintypes.WPARAM, wintypes.LPARAM]
+                _SM.restype = ctypes.c_long
+                _SM(handle, 0x0112, 0xF060, 0)  # WM_SYSCOMMAND, SC_CLOSE
+                time.sleep(1.0)
+            except Exception:
+                pass
+
+        if ctypes.windll.user32.IsWindow(handle):
+            # Last resort: focus main window and force-hide the config window
+            try:
+                main_hwnd = self.main_window.handle
+                ctypes.windll.user32.SetForegroundWindow(main_hwnd)
+                time.sleep(0.5)
+                SW_HIDE = 0
+                ctypes.windll.user32.ShowWindow(handle, SW_HIDE)
+                time.sleep(0.5)
+            except Exception:
+                pass
+
+        self._dismiss_dialog(timeout=1)
+
     def configure_style_mimic(self, style_text: str = None, mimic_name: str = None,
-                              generate: bool = True):
+                              generate: bool = True, min_chars: int = 2500):
         """
         Configure Style Mimic. Toggle auto_id=99, window "Style Mimic".
 
         Full workflow: paste sample text → set name → Generate (AI analysis)
-        → wait for generation → Save Mimic.  If a mimic with the given name
-        already exists, it is loaded from the dropdown instead of regenerating.
+        → wait for generation (must be >= min_chars) → Save Mimic.
+        If a mimic with the given name already exists, it is loaded from
+        the dropdown instead of regenerating.
 
         Control auto_ids (verified v10.872):
           Edit: style_to_mimic(114), mimicked_style(116), mimic_name(120)
@@ -1905,6 +2023,7 @@ class ZimmWriterController:
             mimic_name: Name for saving/loading the mimic (e.g. domain name).
             generate: If True, click Generate for AI analysis before saving.
                       If False, just paste text and save directly.
+            min_chars: Minimum characters required for the generated analysis (default 2500).
         """
         win = self._open_config_window("style_mimic")
         if not win:
@@ -1939,7 +2058,20 @@ class ZimmWriterController:
                 _SM(parent_hwnd, WM_COMMAND, wparam, load_combo.handle)
                 time.sleep(1.0)
 
-            elif style_text and style_text.strip():
+                # Check if the loaded mimic meets the minimum length
+                try:
+                    result_edit = self._find_child(win, control_type="Edit", auto_id="116")
+                    result_text = result_edit.window_text()
+                    if result_text and len(result_text.strip()) >= min_chars:
+                        logger.info(f"Style Mimic '{mimic_name}' loaded ({len(result_text)} chars)")
+                    else:
+                        chars = len(result_text.strip()) if result_text else 0
+                        logger.info(f"Style Mimic '{mimic_name}' too short ({chars} chars < {min_chars}), regenerating")
+                        mimic_exists = False  # Fall through to regeneration
+                except Exception:
+                    mimic_exists = False
+
+            if not mimic_exists and style_text and style_text.strip():
                 # Paste sample text into "Style to Mimic" field
                 self._set_config_text(win, "114", style_text)
                 time.sleep(0.5)
@@ -1954,11 +2086,12 @@ class ZimmWriterController:
                     self._click_config_button(win, auto_id="121")
                     logger.info(f"Style Mimic: generating analysis for '{mimic_name}'...")
 
-                    # Wait for generation to complete by polling the mimicked_style
-                    # field (116) for content. Timeout after 90 seconds.
-                    gen_timeout = 90
-                    poll_interval = 3
+                    # Wait for generation to complete — poll mimicked_style field (116).
+                    # Must reach min_chars (default 2500). Timeout 300s (5 minutes).
+                    gen_timeout = 300
+                    poll_interval = 5
                     elapsed = 0
+                    result_text = ""
                     while elapsed < gen_timeout:
                         time.sleep(poll_interval)
                         elapsed += poll_interval
@@ -1966,100 +2099,103 @@ class ZimmWriterController:
                             result_edit = self._find_child(win, control_type="Edit",
                                                            auto_id="116")
                             result_text = result_edit.window_text()
-                            if result_text and len(result_text.strip()) > 20:
+                            char_count = len(result_text.strip()) if result_text else 0
+                            if char_count >= min_chars:
                                 logger.info(f"Style Mimic: generation complete "
-                                            f"({len(result_text)} chars, {elapsed}s)")
+                                            f"({char_count} chars, {elapsed}s)")
                                 break
+                            if char_count > 0 and elapsed % 30 == 0:
+                                logger.info(f"Style Mimic: generating... "
+                                            f"({char_count}/{min_chars} chars, {elapsed}s)")
                         except Exception:
                             pass
-                        # Also dismiss any error dialogs during generation
+                        # Dismiss any error dialogs during generation
                         self._dismiss_dialog(timeout=1)
                     else:
-                        logger.warning(f"Style Mimic: generation timed out after {gen_timeout}s")
+                        char_count = len(result_text.strip()) if result_text else 0
+                        if char_count > 100:
+                            logger.warning(f"Style Mimic: generation timed out at {gen_timeout}s "
+                                           f"but has {char_count} chars — saving anyway")
+                        else:
+                            logger.warning(f"Style Mimic: generation timed out after {gen_timeout}s "
+                                           f"with only {char_count} chars")
 
                 # Click Save Mimic to save
                 self._click_config_button(win, title="Save Mimic")
                 time.sleep(1.0)
                 self._dismiss_dialog(timeout=2)
                 logger.info(f"Style Mimic saved: '{mimic_name}'")
-            else:
-                logger.warning("Style Mimic: no text provided, skipping")
+
+            elif not mimic_exists:
+                logger.warning("Style Mimic: no text provided and no existing mimic, skipping")
 
         except Exception as e:
             logger.error(f"Style Mimic config failed: {e}")
         finally:
-            # IMPORTANT: Do NOT use _close_config_window (ESC) for Style Mimic.
-            # ESC cancels the feature enable state, reverting the toggle to Disabled.
-            # Instead, switch focus to the main Bulk Writer window directly.
-            self._dismiss_dialog(timeout=1)
-            try:
-                config_handle = win.handle if win else None
-                # Method 1: Focus the main Bulk Writer window by handle
-                main_hwnd = self.main_window.handle
-                ctypes.windll.user32.SetForegroundWindow(main_hwnd)
-                time.sleep(1.0)
-                # Check if config window auto-closed
-                if config_handle and ctypes.windll.user32.IsWindow(config_handle):
-                    # Method 2: Send WM_CLOSE (may or may not work on AutoIt)
-                    _SM = ctypes.windll.user32.SendMessageW
-                    _SM.argtypes = [wintypes.HWND, wintypes.UINT,
-                                    wintypes.WPARAM, wintypes.LPARAM]
-                    _SM.restype = ctypes.c_long
-                    _SM(config_handle, 0x0010, 0, 0)  # WM_CLOSE
-                    time.sleep(0.5)
-                if config_handle and ctypes.windll.user32.IsWindow(config_handle):
-                    # Method 3: Alt+F4 (different from ESC — may preserve state)
-                    try:
-                        win.set_focus()
-                        time.sleep(0.2)
-                        send_keys("%{F4}", pause=0.1)
-                        time.sleep(0.5)
-                    except Exception:
-                        pass
-                if config_handle and ctypes.windll.user32.IsWindow(config_handle):
-                    # Method 4: Last resort — ESC (will cancel enable state)
-                    logger.warning("Style Mimic: falling back to ESC close")
-                    self._close_config_window(win)
-            except Exception:
-                self._close_config_window(win)
-            self._dismiss_dialog(timeout=1)
+            # Close the config window by clicking the title bar X button.
+            # ESC cancels the feature state — only X button preserves it.
+            self._close_style_mimic_window(win)
 
         # Verify the feature is Enabled and re-enable if needed.
-        # Full reconnect clears stale handles from the closed config window.
-        for re_enable_attempt in range(3):
+        for re_enable_attempt in range(5):
             try:
                 self.connect()
                 self.bring_to_front()
                 time.sleep(0.5)
+                self._control_cache.clear()
                 btn = self._find_child(control_type="Button",
                                         auto_id=self.FEATURE_TOGGLE_IDS["style_mimic"])
-                if "Enabled" in btn.window_text():
+                btn_text = btn.window_text()
+                if "Enabled" in btn_text:
                     logger.info("Style Mimic: Enabled after close")
                     break
                 logger.info("Style Mimic shows '%s' after close, re-enabling (attempt %d)",
-                            btn.window_text(), re_enable_attempt + 1)
+                            btn_text, re_enable_attempt + 1)
+
+                # Click toggle to re-enable
                 self.bring_to_front()
                 time.sleep(0.3)
                 btn.click_input()
                 time.sleep(2)
-                # Dismiss any config window that opens (mimic already saved)
+
+                # If config window reopens, load the saved mimic and close it
                 escaped = re.escape(self.FEATURE_CONFIG_WINDOWS["style_mimic"])
                 reopen_win = self._wait_for_window(escaped, timeout=3)
                 if reopen_win:
-                    # Close reopened window the same way (avoid ESC)
-                    main_hwnd = self.main_window.handle
-                    ctypes.windll.user32.SetForegroundWindow(main_hwnd)
-                    time.sleep(1.0)
-                    if ctypes.windll.user32.IsWindow(reopen_win.handle):
-                        self._close_config_window(reopen_win)
-                    self._dismiss_dialog(timeout=1)
+                    # Select the saved mimic from dropdown so ZimmWriter knows it's configured
+                    if mimic_name:
+                        try:
+                            load_combo = self._find_child(reopen_win, control_type="ComboBox",
+                                                          auto_id="118")
+                            name_buf = ctypes.create_unicode_buffer(mimic_name)
+                            idx = _SM(load_combo.handle, 0x0158, -1,
+                                      ctypes.addressof(name_buf))
+                            if idx >= 0:
+                                _SM(load_combo.handle, 0x014E, idx, 0)  # CB_SETCURSEL
+                                parent_hwnd = reopen_win.handle
+                                wparam = (1 << 16) | (118 & 0xFFFF)
+                                _SM(parent_hwnd, 0x0111, wparam, load_combo.handle)
+                                time.sleep(0.5)
+                                self._click_config_button(reopen_win, title="Save Mimic")
+                                time.sleep(1.0)
+                                self._dismiss_dialog(timeout=1)
+                                logger.info("Style Mimic: re-saved mimic from dropdown")
+                        except Exception:
+                            pass
+                    # Close the reopened window with X button (not ESC)
+                    self._close_style_mimic_window(reopen_win)
                     self.connect()
                     time.sleep(0.5)
+                else:
+                    # No config window — toggle might have enabled without opening
+                    time.sleep(1)
+
                 self._control_cache.clear()
                 btn = self._find_child(control_type="Button",
                                         auto_id=self.FEATURE_TOGGLE_IDS["style_mimic"])
-                logger.info(f"Style Mimic button now: '{btn.window_text()}'")
-                if "Enabled" in btn.window_text():
+                btn_text = btn.window_text()
+                logger.info(f"Style Mimic button now: '{btn_text}'")
+                if "Enabled" in btn_text:
                     break
             except Exception as e:
                 logger.warning(f"Style Mimic re-enable attempt {re_enable_attempt + 1} failed: {e}")
