@@ -41,7 +41,7 @@ BRIEFING_HOUR = 6  # 6 AM
 SERVICES = {
     "screenpipe": {"port": 3030, "health": "/health"},
     "vision": {"port": 8002, "health": "/health"},
-    "dashboard": {"port": 8000, "health": "/api/health"},
+    "dashboard": {"port": 8000, "health": "/health"},
     "grimoire": {"port": 8080, "health": "/health"},
     "videoforge": {"port": 8090, "health": "/health"},
     "bmc_webhook": {"port": 8095, "health": "/health"},

@@ -585,6 +585,50 @@ def brain_pin_calendar(site: str, days: int = 7):
     return AutoPinConnector().get_pin_calendar(site, days)
 
 
+# --- Credit Optimizer Endpoints ---
+
+@app.get("/tools/brain_credit_status")
+def brain_credit_status():
+    """Get current Claude Max credit usage status and optimization recommendations."""
+    from forge.credit_optimizer import CreditOptimizer
+    optimizer = CreditOptimizer(brain_db=db)
+    savings = optimizer.calculate_potential_savings()
+    sessions = optimizer.analyze_session_patterns()
+    return {
+        "potential_savings": savings,
+        "session_patterns": sessions,
+        "advisory": optimizer.generate_session_start_advisory(),
+    }
+
+
+@app.get("/tools/brain_credit_report")
+def brain_credit_report():
+    """Get full credit optimization report with recommendations."""
+    from scripts.credit_optimizer_hook import generate_report
+    return generate_report()
+
+
+@app.get("/tools/brain_credit_analysis")
+def brain_credit_analysis():
+    """Run deep credit analysis: CLAUDE.md sizes, compliance, waste patterns."""
+    from forge.credit_optimizer import CreditOptimizer
+    optimizer = CreditOptimizer(brain_db=db)
+    return optimizer.full_credit_analysis()
+
+
+@app.get("/tools/brain_claude_md_sizes")
+def brain_claude_md_sizes(limit: int = 15):
+    """List CLAUDE.md files sorted by size — oversized files inflate every conversation."""
+    from forge.credit_optimizer import CreditOptimizer
+    optimizer = CreditOptimizer(brain_db=db)
+    sizes = optimizer.analyze_claude_md_sizes()
+    return {
+        "total_files": len(sizes),
+        "total_tokens": sum(f["est_tokens"] for f in sizes),
+        "files": sizes[:limit],
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8200)
