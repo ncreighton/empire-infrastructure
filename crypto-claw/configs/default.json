@@ -1,0 +1,40 @@
+{
+  "starting_capital": 1000.0,
+  "coins": [
+    "BTC-USD",
+    "ETH-USD",
+    "SOL-USD",
+    "AVAX-USD",
+    "LINK-USD",
+    "DOT-USD",
+    "POL-USD",
+    "ADA-USD",
+    "NEAR-USD",
+    "ATOM-USD",
+    "DOGE-USD",
+    "SHIB-USD",
+    "PEPE-USD",
+    "FLOKI-USD",
+    "BONK-USD",
+    "WIF-USD",
+    "DEGEN-USD",
+    "TURBO-USD",
+    "MOG-USD",
+    "POPCAT-USD"
+  ],
+  "tick_interval_seconds": 60,
+  "candle_timeframes": [
+    "ONE_MINUTE",
+    "FIVE_MINUTE",
+    "FIFTEEN_MINUTE",
+    "ONE_HOUR",
+    "FOUR_HOUR"
+  ],
+  "max_risk_per_trade_pct": 0.02,
+  "max_position_pct": 0.12,
+  "max_positions": 8,
+  "daily_loss_limit_pct": 0.10,
+  "max_drawdown_pct": 0.25,
+  "min_reserve_pct": 0.20,
+  "min_reward_risk_ratio": 1.5
+}

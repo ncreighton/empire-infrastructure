@@ -1,0 +1,87 @@
+{
+  "weights": {
+    "MOMENTUM": 0.15,
+    "MEAN_REVERSION": 0.12,
+    "BREAKOUT": 0.13,
+    "VOLATILITY": 0.10,
+    "DCA_SMART": 0.10,
+    "MEME_MOMENTUM": 0.15,
+    "VOLUME_SPIKE": 0.13,
+    "MEME_REVERSAL": 0.12
+  },
+  "params": {
+    "MOMENTUM": {
+      "rsi_entry_threshold": 60,
+      "rsi_exit_threshold": 75,
+      "volume_spike_multiplier": 1.5,
+      "ema_alignment": true,
+      "take_profit_pct": 0.015,
+      "stop_loss_pct": 0.005,
+      "min_confidence": 0.6
+    },
+    "MEAN_REVERSION": {
+      "rsi_oversold": 25,
+      "rsi_overbought": 75,
+      "bb_entry_threshold": 0.02,
+      "volume_confirm_multiplier": 1.2,
+      "min_confidence": 0.55,
+      "take_profit_at_middle_bb": true
+    },
+    "BREAKOUT": {
+      "resistance_lookback": 20,
+      "breakout_threshold_pct": 0.005,
+      "volume_surge_multiplier": 2.0,
+      "atr_trailing_multiplier": 1.5,
+      "min_confidence": 0.6,
+      "consolidation_atr_threshold": 0.7
+    },
+    "VOLATILITY": {
+      "atr_expansion_threshold": 1.5,
+      "directional_rsi_min": 40,
+      "directional_rsi_max": 60,
+      "bb_width_min": 0.03,
+      "take_profit_atr_multiplier": 2.0,
+      "stop_loss_atr_multiplier": 1.0,
+      "min_confidence": 0.55,
+      "contraction_exit_threshold": 0.8
+    },
+    "DCA_SMART": {
+      "dip_levels": [0.03, 0.05, 0.08, 0.12],
+      "allocation_per_level": [0.25, 0.25, 0.25, 0.25],
+      "rsi_max_for_dip": 35,
+      "recovery_signal_rsi": 40,
+      "take_profit_pct": 0.05,
+      "stop_loss_pct": 0.15,
+      "min_confidence": 0.5,
+      "lookback_high_periods": 48
+    },
+    "MEME_MOMENTUM": {
+      "rsi_entry_threshold": 55,
+      "rsi_exit_threshold": 85,
+      "volume_spike_multiplier": 3.0,
+      "take_profit_pct": 0.03,
+      "stop_loss_pct": 0.015,
+      "min_confidence": 0.55,
+      "volume_exit_ratio": 0.7
+    },
+    "VOLUME_SPIKE": {
+      "volume_spike_threshold": 5.0,
+      "volume_spike_moderate": 3.0,
+      "take_profit_pct": 0.02,
+      "stop_loss_pct": 0.008,
+      "rsi_min": 25,
+      "rsi_max": 80,
+      "min_confidence": 0.6,
+      "meme_coin_bonus": 0.1
+    },
+    "MEME_REVERSAL": {
+      "rsi_oversold_threshold": 25,
+      "rsi_exit_threshold": 50,
+      "bb_entry_below": true,
+      "take_profit_pct": 0.05,
+      "stop_loss_pct": 0.02,
+      "min_confidence": 0.55,
+      "volume_decline_periods": 3
+    }
+  }
+}

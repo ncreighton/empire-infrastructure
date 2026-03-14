@@ -1,0 +1,25 @@
+version: "3.8"
+
+services:
+  crypto-claw:
+    build: .
+    container_name: empire-crypto-claw
+    restart: unless-stopped
+    ports:
+      - "8110:8110"
+    env_file:
+      - configs/.env
+    volumes:
+      - ./data:/app/data
+      - ./configs:/app/configs:ro
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+    networks:
+      - empire
+
+networks:
+  empire:
+    external: true
+    name: empire_empire
