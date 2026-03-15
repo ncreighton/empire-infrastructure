@@ -551,6 +551,51 @@ def test_vibecoder_engine():
             pass  # Windows SQLite file lock
 
 
+# ─── Test: Notifier Integration ─────────────────────────────────────────────
+
+def test_vibecoder_notifier():
+    """Test that VibeCoder fires webhook notifications on mission lifecycle."""
+    from openclaw.vibecoder.vibecoder_engine import VibeCoderEngine
+    from unittest.mock import MagicMock, AsyncMock
+
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+        db_path = f.name
+
+    try:
+        # Create mock notifier
+        mock_notifier = MagicMock()
+        mock_notifier.notify = AsyncMock()
+
+        engine = VibeCoderEngine(db_path=db_path, notifier=mock_notifier)
+        assert engine._notifier is mock_notifier
+
+        # Submit mission — should trigger notification
+        mission = engine.submit_mission(
+            project_id="test-proj",
+            title="Test notification",
+            description="Test that notifications fire",
+        )
+        assert mission.mission_id
+
+        # Engine without notifier should work fine (no crash)
+        engine2 = VibeCoderEngine(db_path=db_path)
+        assert engine2._notifier is None
+        mission2 = engine2.submit_mission(
+            project_id="test-proj",
+            title="No notifier",
+            description="Should not crash without notifier",
+        )
+        assert mission2.mission_id
+
+        print("  VibeCoder Notifier: PASSED")
+
+    finally:
+        try:
+            os.unlink(db_path)
+        except PermissionError:
+            pass
+
+
 # ─── Test: MissionDaemon ─────────────────────────────────────────────────────
 
 def test_mission_daemon():

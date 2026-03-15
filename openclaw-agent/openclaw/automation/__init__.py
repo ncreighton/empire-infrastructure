@@ -7,6 +7,7 @@ from openclaw.automation.scheduler import Scheduler
 from openclaw.automation.analytics import Analytics
 from openclaw.automation.profile_sync import ProfileSync
 from openclaw.automation.webhook_notifier import WebhookNotifier
+from openclaw.automation.profile_applier import ProfileApplier, ProfileApplyResult
 
 __all__ = [
     "EmailVerifier",
@@ -16,4 +17,6 @@ __all__ = [
     "Analytics",
     "ProfileSync",
     "WebhookNotifier",
+    "ProfileApplier",
+    "ProfileApplyResult",
 ]

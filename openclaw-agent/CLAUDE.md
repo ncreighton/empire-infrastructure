@@ -297,10 +297,12 @@ All modules are fully connected — no dead code:
 - **Retry -> Engine**: `RetryEngine` wraps any async callable. On failure, it categorizes the error (transient, rate-limited, CAPTCHA, blocked, etc.) and decides whether to retry, with exponential backoff and jitter. Used around signup attempts, email verification clicks, and profile sync operations.
 - **RateLimiter -> Engine**: Checked before every signup attempt to enforce per-platform cooldowns and hourly/daily caps.
 - **FORGE -> AMPLIFY**: `ProfileSmith` generates initial profile content from templates + brand config. The output feeds into `AmplifyPipeline` which runs 6 stages (Enrich/Expand/Fortify/Anticipate/Optimize/Validate) to refine the content to a quality score of 90+.
-- **Webhook -> Dashboard**: `WebhookNotifier` fires HTTP POST events to `OPENCLAW_WEBHOOK_URL` and `OPENCLAW_DASHBOARD_URL` on signup started, completed, failed, CAPTCHA encountered, batch finished, and sync completed. All delivery is best-effort.
+- **Webhook -> Dashboard**: `WebhookNotifier` fires HTTP POST events to `OPENCLAW_WEBHOOK_URL` and `OPENCLAW_DASHBOARD_URL` on signup started, completed, failed, CAPTCHA encountered, batch finished, sync completed, and VibeCoder mission lifecycle (queued/started/completed/failed/deployed). All delivery is best-effort.
 - **Session -> Browser**: `SessionManager` persists cookies to `data/sessions/{platform_id}.json`. On next browser launch for the same platform, `BrowserManager` restores the session to skip re-authentication.
 - **Codex -> Analytics**: `PlatformCodex` (SQLite) stores all account records, credentials, and event logs. `Analytics` reads from the Codex to generate coverage reports, timelines, and category breakdowns.
 - **WebSocket heartbeat**: Ping every 30s to detect stale connections.
+- **ProactiveAgent -> VibeCoder**: When health checks fail 3+ times consecutively, the ProactiveAgent auto-creates VibeCoder bugfix missions. Stalled missions (>1h executing) are force-failed for retry. Unregistered empire projects are auto-discovered via weekly cron scan.
+- **VibeCoder -> Webhook**: Mission lifecycle events (queued, started, completed, failed, deployed) fire webhook notifications to all configured endpoints, enabling dashboard monitoring of autonomous coding activity.
 
 ## LLM Usage
 

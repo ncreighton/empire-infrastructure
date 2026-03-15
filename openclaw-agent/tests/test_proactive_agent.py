@@ -294,6 +294,117 @@ class TestSessionCleanup:
         assert "old_platform" in actions[0].params["stale_sessions"]
 
 
+class TestVibeCoderOpportunities:
+    def test_no_vibecoder_returns_empty(self, agent, mock_engine):
+        """When engine has no vibecoder attribute, skip gracefully."""
+        del mock_engine.vibecoder
+        actions = agent._check_vibecoder_opportunities()
+        assert actions == []
+
+    def test_health_failure_creates_mission(self, agent, mock_engine):
+        """Repeated health failures create a VibeCoder bugfix mission."""
+        mock_engine.vibecoder = MagicMock()
+        mock_engine.vibecoder.list_missions.return_value = []
+
+        # Simulate 3+ consecutive failures
+        mock_engine.codex.get_latest_checks.return_value = {
+            "openclaw:self": {"result": "down", "message": "DB connection failed"},
+        }
+        mock_engine.codex.get_health_history.return_value = [
+            {"result": "down"},
+            {"result": "down"},
+            {"result": "down"},
+        ]
+        actions = agent._check_health_to_mission(mock_engine.vibecoder)
+        assert len(actions) == 1
+        assert actions[0].action_type == "vibecoder_mission"
+        assert actions[0].priority == 3
+        assert "Fix" in actions[0].params["title"]
+
+    def test_health_failure_skips_below_threshold(self, agent, mock_engine):
+        """Only 1-2 failures: no mission created yet."""
+        mock_engine.vibecoder = MagicMock()
+        mock_engine.codex.get_latest_checks.return_value = {
+            "openclaw:self": {"result": "down", "message": "err"},
+        }
+        mock_engine.codex.get_health_history.return_value = [
+            {"result": "down"},
+            {"result": "healthy"},
+        ]
+        actions = agent._check_health_to_mission(mock_engine.vibecoder)
+        assert actions == []
+
+    def test_stalled_mission_detection(self, agent, mock_engine):
+        """Missions stuck executing for >1h get force-failed."""
+        mock_engine.vibecoder = MagicMock()
+        old_time = (datetime.now() - timedelta(hours=2)).isoformat()
+        mock_engine.vibecoder.list_missions.return_value = [
+            {
+                "mission_id": "abc123",
+                "project_id": "test-proj",
+                "started_at": old_time,
+            },
+        ]
+        actions = agent._check_stalled_missions(mock_engine.vibecoder)
+        assert len(actions) == 1
+        assert actions[0].params["action"] == "force_fail"
+        assert actions[0].params["mission_id"] == "abc123"
+
+    def test_stalled_skips_recent_missions(self, agent, mock_engine):
+        """Missions still within the 1h window are not flagged."""
+        mock_engine.vibecoder = MagicMock()
+        recent = datetime.now().isoformat()
+        mock_engine.vibecoder.list_missions.return_value = [
+            {
+                "mission_id": "abc123",
+                "project_id": "test-proj",
+                "started_at": recent,
+            },
+        ]
+        actions = agent._check_stalled_missions(mock_engine.vibecoder)
+        assert actions == []
+
+    def test_project_discovery_skips_registered(self, agent, mock_engine, tmp_path):
+        """Already-registered projects are not flagged for discovery."""
+        mock_engine.vibecoder = MagicMock()
+        mock_engine.vibecoder.list_projects.return_value = [
+            {"project_id": "existing-proj"},
+        ]
+
+        # Create a project dir with a marker
+        proj_dir = tmp_path / "existing-proj"
+        proj_dir.mkdir()
+        (proj_dir / "pyproject.toml").write_text("[tool.test]")
+
+        os.environ["EMPIRE_ROOT"] = str(tmp_path)
+        try:
+            actions = agent._check_project_discovery(mock_engine.vibecoder)
+            # Should not flag existing-proj since it's already registered
+            for a in actions:
+                assert "existing-proj" not in a.params.get("projects", [])
+        finally:
+            del os.environ["EMPIRE_ROOT"]
+
+    def test_project_discovery_finds_new(self, agent, mock_engine, tmp_path):
+        """Unregistered projects with markers get discovered."""
+        mock_engine.vibecoder = MagicMock()
+        mock_engine.vibecoder.list_projects.return_value = []
+
+        # Create a new project dir with a marker
+        proj_dir = tmp_path / "new-project"
+        proj_dir.mkdir()
+        (proj_dir / "requirements.txt").write_text("fastapi\n")
+
+        os.environ["EMPIRE_ROOT"] = str(tmp_path)
+        try:
+            actions = agent._check_project_discovery(mock_engine.vibecoder)
+            assert len(actions) == 1
+            assert "new-project" in actions[0].params["projects"]
+            assert actions[0].action_type == "vibecoder_discover_projects"
+        finally:
+            del os.environ["EMPIRE_ROOT"]
+
+
 class TestConstants:
     def test_approval_required_set(self):
         assert "restart_service" in _APPROVAL_REQUIRED
@@ -304,6 +415,8 @@ class TestConstants:
         assert "retry_signup" in _AUTO_APPROVED
         assert "session_cleanup" in _AUTO_APPROVED
         assert "new_signup" in _AUTO_APPROVED
+        assert "vibecoder_mission" in _AUTO_APPROVED
+        assert "vibecoder_discover_projects" in _AUTO_APPROVED
 
 
 class TestDailySignupCap:

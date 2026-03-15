@@ -856,6 +856,27 @@ class PlatformCodex:
                 results[d["check_name"]] = d
             return results
 
+    def get_health_history(
+        self, check_name: str, limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        """Get recent health check results for a specific check_name."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM heartbeat_results
+                WHERE check_name = ?
+                ORDER BY checked_at DESC
+                LIMIT ?
+                """,
+                (check_name, limit),
+            ).fetchall()
+            results = []
+            for row in rows:
+                d = dict(row)
+                d["details"] = json.loads(d.pop("details_json", "{}"))
+                results.append(d)
+            return results
+
     # ================================================================== #
     #  Alerts                                                              #
     # ================================================================== #
@@ -1154,6 +1175,50 @@ class PlatformCodex:
                 (limit,),
             ).fetchall()
             return [dict(r) for r in rows]
+
+    def mark_profile_applied(self, platform_id: str) -> None:
+        """Record that a profile was applied to the live platform.
+
+        Writes an entry to the action_log table so the ProactiveAgent can
+        query it via ``get_last_applied()`` and avoid re-applying within the
+        cooldown window.
+
+        Args:
+            platform_id: The platform identifier.
+        """
+        self.log_action(
+            "apply_profile",
+            platform_id,
+            f"Profile applied to {platform_id}",
+            "success",
+        )
+
+    def get_last_applied(self, platform_id: str) -> str | None:
+        """Get ISO timestamp of the most recent successful profile application.
+
+        Queries the action_log for the latest apply_profile action with
+        result='success' for the given platform.
+
+        Args:
+            platform_id: The platform identifier.
+
+        Returns:
+            ISO timestamp string if found, or ``None`` if no successful
+            application exists.
+        """
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT timestamp FROM action_log
+                WHERE action_type = 'apply_profile'
+                  AND target = ?
+                  AND result = 'success'
+                ORDER BY timestamp DESC
+                LIMIT 1
+                """,
+                (platform_id,),
+            ).fetchone()
+            return row["timestamp"] if row else None
 
     # ================================================================== #
     #  Step model routing (Haiku/Sonnet cost optimization)                 #

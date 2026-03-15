@@ -561,12 +561,54 @@ class HeartbeatDaemon:
                     action.description, f"error: {str(e)[:200]}",
                 )
 
+        elif action.action_type == "apply_profile":
+            try:
+                from openclaw.automation.profile_applier import ProfileApplier
+                applier = ProfileApplier(codex=self.codex)
+                result = await applier.apply_profile(action.target)
+                status = "success" if result.success else "failed"
+                self.codex.log_action(
+                    "apply_profile", action.target,
+                    (
+                        f"Applied {len(result.fields_applied)} fields "
+                        f"{result.fields_applied}, "
+                        f"failed {len(result.fields_failed)} {result.fields_failed}"
+                    ),
+                    status,
+                )
+                if result.success:
+                    logger.info(
+                        f"[PROACTIVE] Profile applied: {action.target} "
+                        f"(fields={result.fields_applied})"
+                    )
+                else:
+                    logger.warning(
+                        f"[PROACTIVE] Profile apply incomplete: {action.target} "
+                        f"(applied={result.fields_applied}, "
+                        f"failed={result.fields_failed}, "
+                        f"errors={result.errors})"
+                    )
+            except Exception as e:
+                logger.error(
+                    f"[PROACTIVE] apply_profile failed for {action.target}: {e}"
+                )
+                self.codex.log_action(
+                    "apply_profile", action.target,
+                    action.description, f"error: {str(e)[:200]}",
+                )
+
         elif action.action_type == "session_cleanup":
             cleared = await self.healer.clear_expired_sessions()
             self.codex.log_action(
                 "session_cleanup", "sessions",
                 f"Cleared {cleared} stale sessions", "success",
             )
+
+        elif action.action_type == "vibecoder_mission":
+            await self._handle_vibecoder_mission(action)
+
+        elif action.action_type == "vibecoder_discover_projects":
+            await self._handle_vibecoder_discover(action)
 
         return False  # Non-signup actions don't count
 
@@ -694,6 +736,8 @@ class HeartbeatDaemon:
             ("product-factory-weekly-bundle", "weekly sun", "factory_weekly_bundle", {}),
             # Model Router — expire stale step promotions
             ("step-promotion-expiry", "daily 5am", "expire_step_promotions", {"days": 7}),
+            # VibeCoder — auto-discover projects weekly
+            ("vibecoder-discover", "weekly thu", "vibecoder_discover_all", {}),
         ]
         for name, schedule, action, params in defaults:
             self.cron.register(name, schedule, action, params)
@@ -715,6 +759,8 @@ class HeartbeatDaemon:
             "factory_weekly_bundle": self._cron_factory_weekly_bundle,
             # Model Router
             "expire_step_promotions": self._cron_expire_step_promotions,
+            # VibeCoder
+            "vibecoder_discover_all": self._cron_vibecoder_discover_all,
         }
 
     # ─── Cron action handlers ───
@@ -926,6 +972,174 @@ class HeartbeatDaemon:
         self.codex.expire_old_promotions(days=days)
         logger.info(f"[MODEL-ROUTER] Expired stale step promotions via codex (>{days}d)")
         return {"expired": -1}
+
+    async def _cron_vibecoder_discover_all(self, **kwargs):
+        """Weekly: scan empire root and register unregistered projects."""
+        import os as _os
+        from pathlib import Path as _Path
+
+        vibecoder = getattr(self.engine, "vibecoder", None)
+        if not vibecoder:
+            return {"error": "VibeCoder not available"}
+
+        empire_root = _Path(_os.environ.get("EMPIRE_ROOT", "D:/Claude Code Projects"))
+        if not empire_root.is_dir():
+            return {"error": f"Empire root not found: {empire_root}"}
+
+        registered = {p["project_id"] for p in vibecoder.list_projects()}
+        _MARKERS = ("CLAUDE.md", "pyproject.toml", "package.json", "requirements.txt")
+        _SKIP = {
+            "node_modules", "__pycache__", ".git", "assets", "reports",
+            "configs", "credentials", "docs", "prompts", "n8n", "launchers",
+        }
+        discovered = 0
+        for child in empire_root.iterdir():
+            if not child.is_dir() or child.name.startswith((".", "_")):
+                continue
+            if child.name in _SKIP or child.name in registered:
+                continue
+            has_marker = any((child / m).exists() for m in _MARKERS)
+            if has_marker:
+                try:
+                    vibecoder.register_project(child.name, str(child))
+                    discovered += 1
+                except Exception as e:
+                    logger.debug(f"[VIBECODER] Failed to register {child.name}: {e}")
+
+        logger.info(f"[VIBECODER] Discovered {discovered} new project(s)")
+        self.codex.log_action(
+            "vibecoder_discover_all", "vibecoder",
+            f"Weekly discovery: {discovered} new project(s)",
+            "success",
+        )
+        return {"discovered": discovered}
+
+    # ─── VibeCoder integration ───
+
+    async def _handle_vibecoder_mission(self, action) -> None:
+        """Create or manage a VibeCoder mission from ProactiveAgent."""
+        params = action.params or {}
+        vibecoder = getattr(self.engine, "vibecoder", None)
+        if not vibecoder:
+            logger.warning("[PROACTIVE] VibeCoder not available on engine")
+            return
+
+        # Force-fail a stalled mission
+        if params.get("action") == "force_fail":
+            mission_id = params.get("mission_id", "")
+            try:
+                from openclaw.vibecoder.models import MissionStatus
+                vibecoder.codex.update_mission_status(
+                    mission_id, MissionStatus.FAILED,
+                    errors=["Force-failed by ProactiveAgent: execution stalled"],
+                )
+                self.codex.log_action(
+                    "vibecoder_mission", action.target,
+                    f"Force-failed stalled mission {mission_id}",
+                    "success",
+                )
+                logger.info(
+                    f"[PROACTIVE] Force-failed stalled mission: {mission_id}"
+                )
+            except Exception as e:
+                logger.error(f"[PROACTIVE] Force-fail failed: {e}")
+            return
+
+        # Create a new mission from health issue
+        project_id = params.get("project_id", action.target)
+        title = params.get("title", f"Auto-fix for {action.target}")
+        description = params.get(
+            "mission_description", action.description,
+        )
+        priority = params.get("priority", 5)
+
+        try:
+            mission = vibecoder.submit_mission(
+                project_id=project_id,
+                title=title,
+                description=description,
+                priority=priority,
+                auto_deploy=False,  # Never auto-deploy from proactive agent
+            )
+            self.codex.log_action(
+                "vibecoder_mission", project_id,
+                f"Queued mission {mission.mission_id}: {title}",
+                "success",
+            )
+            logger.info(
+                f"[PROACTIVE] VibeCoder mission queued: {mission.mission_id} "
+                f"({mission.scope.value}) — {title}"
+            )
+
+            # Notify via alert
+            await self.alert_router.route(Alert(
+                severity=AlertSeverity.INFO,
+                source="vibecoder",
+                title=f"Auto-mission created: {title}",
+                message=(
+                    f"Mission {mission.mission_id} queued for {project_id}. "
+                    f"Scope: {mission.scope.value}. "
+                    f"The MissionDaemon will execute it automatically."
+                ),
+            ))
+
+        except Exception as e:
+            logger.error(
+                f"[PROACTIVE] Failed to create VibeCoder mission: {e}",
+                exc_info=True,
+            )
+            self.codex.log_action(
+                "vibecoder_mission", project_id,
+                f"Failed to queue mission: {title}",
+                f"error: {str(e)[:200]}",
+            )
+
+    async def _handle_vibecoder_discover(self, action) -> None:
+        """Auto-discover and register empire projects in VibeCoder."""
+        params = action.params or {}
+        projects = params.get("projects", [])
+        vibecoder = getattr(self.engine, "vibecoder", None)
+        if not vibecoder:
+            return
+
+        empire_root = os.environ.get("EMPIRE_ROOT", "D:/Claude Code Projects")
+        registered = 0
+        errors = 0
+
+        for project_id in projects:
+            root_path = os.path.join(empire_root, project_id)
+            if not os.path.isdir(root_path):
+                continue
+            try:
+                info = vibecoder.register_project(project_id, root_path)
+                registered += 1
+                logger.info(
+                    f"[PROACTIVE] Registered project: {project_id} "
+                    f"({info.language}/{info.framework}, {info.total_files} files, "
+                    f"deploy={info.deploy_target.value})"
+                )
+            except Exception as e:
+                errors += 1
+                logger.warning(
+                    f"[PROACTIVE] Failed to register {project_id}: {e}"
+                )
+
+        self.codex.log_action(
+            "vibecoder_discover_projects", "vibecoder",
+            f"Discovered {registered} project(s), {errors} error(s)",
+            "success" if errors == 0 else "partial",
+        )
+
+        if registered > 0:
+            await self.alert_router.route(Alert(
+                severity=AlertSeverity.INFO,
+                source="vibecoder",
+                title=f"Auto-discovered {registered} project(s)",
+                message=(
+                    f"Registered {registered} new project(s) in VibeCoder: "
+                    f"{', '.join(projects[:5])}"
+                ),
+            ))
 
     # ─── PID file management ───
 

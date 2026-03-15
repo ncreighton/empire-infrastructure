@@ -166,7 +166,7 @@ class TestRegisterDefaultCrons:
     def test_registers_default_jobs(self, daemon):
         daemon._register_default_crons()
         jobs = daemon.cron.get_all()
-        assert len(jobs) == 12
+        assert len(jobs) == 13
 
     def test_default_cron_names(self, daemon):
         daemon._register_default_crons()
@@ -181,7 +181,7 @@ class TestRegisterDefaultCrons:
         daemon._register_default_crons()
         daemon._register_default_crons()
         jobs = daemon.cron.get_all()
-        assert len(jobs) == 12  # No duplicates
+        assert len(jobs) == 13  # No duplicates
 
 
 class TestBuildActionRegistry:
@@ -192,6 +192,7 @@ class TestBuildActionRegistry:
         assert "signup_retry" in daemon._action_registry
         assert "session_cleanup" in daemon._action_registry
         assert "daily_report" in daemon._action_registry
+        assert "vibecoder_discover_all" in daemon._action_registry
 
     def test_registry_values_are_callable(self, daemon):
         daemon._build_action_registry()

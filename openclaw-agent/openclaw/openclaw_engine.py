@@ -59,9 +59,6 @@ class OpenClawEngine:
         # AMPLIFY
         self.amplify = AmplifyPipeline()
 
-        # VibeCoder — autonomous coding agent
-        self.vibecoder = VibeCoderEngine(db_path=db_path)
-
         # Browser + agents
         self.captcha = CaptchaHandler()
         self.proxy_manager = ProxyManager()
@@ -74,6 +71,11 @@ class OpenClawEngine:
         self.retry_engine = RetryEngine()
         self.notifier = WebhookNotifier()
         self.profile_sync = ProfileSync(codex=self.codex, sentinel=self.sentinel)
+
+        # VibeCoder — autonomous coding agent (wired to notifier for lifecycle events)
+        self.vibecoder = VibeCoderEngine(
+            db_path=db_path, notifier=self.notifier,
+        )
 
     def signup(self, platform_id: str, credentials: dict[str, str] | None = None) -> OpenClawResult:
         """Full signup pipeline: Scout → Smith → Planner → AMPLIFY → Executor → Verify → Codex."""

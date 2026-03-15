@@ -51,6 +51,12 @@ class EventType(str, Enum):
     BATCH_COMPLETED = "batch_completed"
     SYNC_COMPLETED = "sync_completed"
     ERROR = "error"
+    MISSION_QUEUED = "mission_queued"
+    MISSION_STARTED = "mission_started"
+    MISSION_COMPLETED = "mission_completed"
+    MISSION_FAILED = "mission_failed"
+    MISSION_DEPLOYED = "mission_deployed"
+    PROJECT_DISCOVERED = "project_discovered"
 
 
 # ---------------------------------------------------------------------------

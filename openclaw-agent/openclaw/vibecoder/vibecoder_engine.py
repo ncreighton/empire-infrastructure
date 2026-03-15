@@ -63,7 +63,12 @@ class VibeCoderEngine:
         )
     """
 
-    def __init__(self, db_path: str | None = None, monthly_budget: float = 100.0):
+    def __init__(
+        self,
+        db_path: str | None = None,
+        monthly_budget: float = 100.0,
+        notifier: Any = None,
+    ):
         # FORGE modules
         self.scout = ProjectScout()
         self.sentinel = CodeSentinel()
@@ -81,6 +86,38 @@ class VibeCoderEngine:
         self.planner = VibePlannerAgent()
         self.executor = VibeExecutorAgent(model_router=self.model_router)
         self.reviewer = VibeReviewerAgent()
+
+        # Webhook notifier (optional, injected from OpenClawEngine)
+        self._notifier = notifier
+
+    # ─── Notifications ───────────────────────────────────────────────────
+
+    def _notify(self, event_type: str, data: dict[str, Any]) -> None:
+        """Fire a webhook notification for a mission lifecycle event.
+
+        Resolves the string event_type to the EventType enum and dispatches
+        asynchronously (fire-and-forget) if an event loop is running.
+        """
+        if not self._notifier:
+            return
+        try:
+            from openclaw.automation.webhook_notifier import EventType
+            # Map string to enum member
+            try:
+                event = EventType(event_type)
+            except ValueError:
+                logger.debug(f"[VibeCoder] Unknown event type: {event_type}")
+                return
+
+            # Fire-and-forget async notification
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(self._notifier.notify(event, data))
+            except RuntimeError:
+                # No event loop — skip notification (non-critical)
+                pass
+        except Exception as e:
+            logger.debug(f"[VibeCoder] Notification failed (non-critical): {e}")
 
     # ─── Mission Lifecycle ────────────────────────────────────────────────
 
@@ -111,6 +148,12 @@ class VibeCoderEngine:
             f"[VibeCoder] Mission queued: {mission.mission_id} "
             f"({mission.scope.value}) — {title}"
         )
+        self._notify("mission_queued", {
+            "mission_id": mission.mission_id,
+            "project_id": project_id,
+            "title": title,
+            "scope": mission.scope.value,
+        })
         return mission
 
     async def run_mission(
@@ -480,6 +523,25 @@ class VibeCoderEngine:
             f"tokens={mission.total_tokens}, "
             f"duration={mission.duration_seconds:.1f}s"
         )
+
+        event_type = (
+            "mission_completed" if status == MissionStatus.COMPLETED
+            else "mission_failed" if status == MissionStatus.FAILED
+            else f"mission_{status.value}"
+        )
+        self._notify(event_type, {
+            "mission_id": mission.mission_id,
+            "project_id": mission.project_id,
+            "title": mission.title,
+            "status": status.value,
+            "scope": mission.scope.value,
+            "cost_usd": round(mission.total_cost_usd, 4),
+            "tokens": mission.total_tokens,
+            "duration_seconds": round(mission.duration_seconds, 1),
+            "errors": mission.errors[:3],
+            "commit_hash": mission.commit_hash,
+            "pr_url": mission.pr_url,
+        })
 
     @staticmethod
     def _row_to_mission(row: dict[str, Any]) -> Mission:

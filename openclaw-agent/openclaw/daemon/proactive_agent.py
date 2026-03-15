@@ -29,7 +29,8 @@ _APPROVAL_REQUIRED = {"profile_content_change", "restart_service"}
 # Actions the daemon executes immediately
 _AUTO_APPROVED = {
     "verify_email", "retry_signup", "session_cleanup",
-    "health_check", "report", "new_signup",
+    "health_check", "report", "new_signup", "vibecoder_mission",
+    "vibecoder_discover_projects", "apply_profile", "human_activity",
 }
 
 
@@ -43,7 +44,8 @@ class ProactiveAgent:
         4. High-priority unsigned platforms -> sign up (daily cap enforced)
         5. Low-score profiles -> re-optimize
         6. Stale profiles -> refresh
-        7. Nothing to do -> log idle state
+        7. Human activity sessions -> keep accounts alive
+        8. Nothing to do -> log idle state
     """
 
     def __init__(self, engine: Any, config: HeartbeatConfig):
@@ -60,7 +62,9 @@ class ProactiveAgent:
         actions.extend(self._check_failed_signups())
         actions.extend(self._check_unsigned_platforms())
         actions.extend(self._check_low_score_profiles())
+        actions.extend(self._check_unapplied_profiles())
         actions.extend(self._check_stale_profiles())
+        actions.extend(self._check_activity_sessions())
         actions.extend(self._check_session_cleanup())
         actions.extend(self._check_vibecoder_opportunities())
 
@@ -347,6 +351,86 @@ class ProactiveAgent:
                 ))
         return actions
 
+    def _check_unapplied_profiles(self) -> list[ProactiveAction]:
+        """Find profiles stored in the Codex that haven't been applied to the live platform.
+
+        Criteria for triggering an apply_profile action:
+        - Account status is PROFILE_INCOMPLETE or ACTIVE
+        - Stored profile has grade B or higher (score >= 75)
+        - No successful apply_profile action in the last 7 days
+
+        Priority is 5 (same as enhance_profile) since applying content is only
+        meaningful once a quality profile exists.
+        """
+        seven_days_ago = (
+            datetime.now() - timedelta(days=7)
+        ).isoformat()
+
+        # Build set of platforms that had a successful apply in the last 7 days
+        recently_applied: set[str] = set()
+        try:
+            history = self.codex.get_action_history(limit=500)
+            for h in history:
+                if (
+                    h.get("action_type") == "apply_profile"
+                    and h.get("result") == "success"
+                    and h.get("timestamp", "") >= seven_days_ago
+                ):
+                    recently_applied.add(h.get("target", ""))
+        except Exception:
+            pass
+
+        # Find profiles with score >= 75 (grade B or higher)
+        profiles = self.codex.get_all_profiles()
+        actions = []
+        for profile in profiles:
+            pid = profile.get("platform_id", "")
+            if not pid:
+                continue
+
+            score = profile.get("sentinel_score", 0)
+            grade = profile.get("grade", "F")
+
+            # Only apply high-quality profiles (grade B = score >= 75)
+            if score < 75 or grade in ("C", "D", "F"):
+                continue
+
+            # Skip if applied recently
+            if pid in recently_applied:
+                continue
+
+            # Only attempt for accounts that are active or have incomplete profiles
+            account = self.codex.get_account(pid)
+            if not account:
+                continue
+            status = account.get("status", "")
+            if status not in (
+                AccountStatus.PROFILE_INCOMPLETE.value,
+                AccountStatus.ACTIVE.value,
+            ):
+                continue
+
+            # Skip platforms that have no editable profile fields
+            from openclaw.knowledge.platforms import get_platform
+            platform = get_platform(pid)
+            if platform and platform.bio_max_length == 0 and platform.description_max_length == 0:
+                continue
+
+            actions.append(ProactiveAction(
+                action_type="apply_profile",
+                priority=5,
+                target=pid,
+                description=(
+                    f"Apply stored profile to {account.get('platform_name', pid)} "
+                    f"(grade {grade}, score {score:.0f})"
+                ),
+                requires_browser=True,
+                requires_approval=False,
+                params={"current_score": score, "grade": grade},
+            ))
+
+        return actions
+
     def _check_stale_profiles(self) -> list[ProactiveAction]:
         """Find profiles not updated in N days."""
         cutoff = (
@@ -398,3 +482,207 @@ class ProactiveAgent:
             )]
 
         return []
+
+    def _check_vibecoder_opportunities(self) -> list[ProactiveAction]:
+        """Detect issues that VibeCoder can auto-fix via coding missions.
+
+        Checks:
+        1. Health checks with repeated failures → create bugfix missions
+        2. Unregistered projects in the empire → auto-discover and register
+        3. Failed VibeCoder missions → suggest retry with more context
+
+        All missions are queued (not executed immediately) so the MissionDaemon
+        picks them up in the next poll cycle.
+        """
+        actions: list[ProactiveAction] = []
+
+        # Guard: skip if vibecoder isn't available
+        vibecoder = getattr(self.engine, "vibecoder", None)
+        if not vibecoder:
+            return actions
+
+        # 1. Auto-discover unregistered projects
+        actions.extend(self._check_project_discovery(vibecoder))
+
+        # 2. Health-issue → VibeCoder mission bridge
+        actions.extend(self._check_health_to_mission(vibecoder))
+
+        # 3. Retry stalled/failed missions
+        actions.extend(self._check_stalled_missions(vibecoder))
+
+        return actions
+
+    def _check_project_discovery(self, vibecoder) -> list[ProactiveAction]:
+        """Find empire project directories not yet registered in VibeCoder."""
+        from pathlib import Path
+
+        empire_root = Path(os.environ.get("EMPIRE_ROOT", "D:/Claude Code Projects"))
+        if not empire_root.is_dir():
+            return []
+
+        # Get already-registered projects
+        try:
+            registered = {p["project_id"] for p in vibecoder.list_projects()}
+        except Exception:
+            registered = set()
+
+        # Scan for project directories (must have CLAUDE.md or pyproject.toml or package.json)
+        _PROJECT_MARKERS = (
+            "CLAUDE.md", "pyproject.toml", "package.json", "Cargo.toml",
+            "go.mod", "requirements.txt",
+        )
+        unregistered = []
+        try:
+            for child in empire_root.iterdir():
+                if not child.is_dir():
+                    continue
+                if child.name.startswith(".") or child.name.startswith("_"):
+                    continue
+                # Skip common non-project dirs
+                if child.name in (
+                    "node_modules", "__pycache__", ".git", "assets",
+                    "reports", "configs", "credentials", "docs",
+                    "prompts", "n8n", "launchers",
+                ):
+                    continue
+                # Check for project markers
+                has_marker = any(
+                    (child / marker).exists() for marker in _PROJECT_MARKERS
+                )
+                if has_marker and child.name not in registered:
+                    unregistered.append(child.name)
+        except OSError:
+            return []
+
+        if not unregistered:
+            return []
+
+        # Limit to 5 per cycle to avoid overwhelming
+        batch = unregistered[:5]
+        return [ProactiveAction(
+            action_type="vibecoder_discover_projects",
+            priority=8,
+            target="vibecoder",
+            description=f"Auto-discover {len(batch)} unregistered project(s): {', '.join(batch[:3])}{'...' if len(batch) > 3 else ''}",
+            requires_browser=False,
+            requires_approval=False,
+            params={"projects": batch},
+        )]
+
+    def _check_health_to_mission(self, vibecoder) -> list[ProactiveAction]:
+        """Convert repeated health failures into VibeCoder bugfix missions.
+
+        If a service check has failed 3+ times in a row, the ProactiveAgent
+        creates a VibeCoder mission to investigate and fix the issue.
+        """
+        actions: list[ProactiveAction] = []
+
+        try:
+            # Get recent health checks
+            latest = self.codex.get_latest_checks()
+        except Exception:
+            return actions
+
+        # Look for repeatedly failing services
+        for name, check_data in latest.items():
+            if check_data.get("result") != "down":
+                continue
+
+            # Count consecutive failures in history
+            try:
+                history = self.codex.get_health_history(name, limit=5)
+                consecutive_failures = 0
+                for h in history:
+                    if h.get("result") in ("down", "degraded"):
+                        consecutive_failures += 1
+                    else:
+                        break
+            except Exception:
+                consecutive_failures = 1
+
+            if consecutive_failures < 3:
+                continue
+
+            # Check we haven't already created a mission for this
+            try:
+                recent_missions = vibecoder.list_missions(
+                    status="queued", limit=20,
+                )
+                already_queued = any(
+                    m.get("title", "").startswith(f"[auto] Fix {name}")
+                    for m in recent_missions
+                )
+                if already_queued:
+                    continue
+            except Exception:
+                pass
+
+            # Derive project_id from health check name (e.g., "openclaw:self" → "openclaw-agent")
+            project_id = name.split(":")[0].replace("_", "-")
+            message = check_data.get("message", "Unknown error")
+
+            actions.append(ProactiveAction(
+                action_type="vibecoder_mission",
+                priority=3,
+                target=project_id,
+                description=(
+                    f"Auto-fix: {name} has failed {consecutive_failures}x "
+                    f"consecutively — {message[:100]}"
+                ),
+                requires_browser=False,
+                requires_approval=False,
+                params={
+                    "project_id": project_id,
+                    "title": f"[auto] Fix {name} health check failure",
+                    "mission_description": (
+                        f"The health check '{name}' has failed {consecutive_failures} "
+                        f"times consecutively. Last error: {message[:300]}. "
+                        f"Investigate the root cause and fix it."
+                    ),
+                    "scope": "bugfix",
+                    "priority": 2,
+                },
+            ))
+
+        return actions
+
+    def _check_stalled_missions(self, vibecoder) -> list[ProactiveAction]:
+        """Find VibeCoder missions stuck in executing state for too long."""
+        actions: list[ProactiveAction] = []
+
+        try:
+            executing = vibecoder.list_missions(status="executing", limit=10)
+        except Exception:
+            return actions
+
+        stall_threshold = timedelta(hours=1)
+        now = datetime.now()
+
+        for mission in executing:
+            started = mission.get("started_at")
+            if not started:
+                continue
+            try:
+                started_dt = datetime.fromisoformat(started)
+            except (ValueError, TypeError):
+                continue
+
+            if now - started_dt > stall_threshold:
+                actions.append(ProactiveAction(
+                    action_type="vibecoder_mission",
+                    priority=4,
+                    target=mission.get("project_id", "unknown"),
+                    description=(
+                        f"Mission {mission['mission_id']} stuck in executing "
+                        f"for {(now - started_dt).total_seconds() / 3600:.1f}h — "
+                        f"force-failing for retry"
+                    ),
+                    requires_browser=False,
+                    requires_approval=False,
+                    params={
+                        "action": "force_fail",
+                        "mission_id": mission["mission_id"],
+                    },
+                ))
+
+        return actions
