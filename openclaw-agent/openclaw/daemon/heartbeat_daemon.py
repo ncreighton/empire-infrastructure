@@ -113,22 +113,35 @@ class HeartbeatDaemon:
         from openclaw.vibecoder.daemon.mission_daemon import MissionDaemon
         self._mission_daemon = MissionDaemon(self.engine.vibecoder)
 
+        # Collect coroutines — Telegram bot added if token is configured
+        coros = [
+            self._tier_loop("PULSE", self.config.pulse_interval, self._run_pulse),
+            self._tier_loop("SCAN", self.config.scan_interval, self._run_scan),
+            self._tier_loop("INTEL", self.config.intel_interval, self._run_intel),
+            self._tier_loop("DAILY", 86400, self._run_daily),
+            self._cron_loop(),
+            self._proactive_loop(),
+            self._mission_daemon.start(),
+        ]
+
+        # Wire Telegram bot into daemon lifecycle
+        telegram_bot = getattr(self.engine, "telegram_bot", None)
+        if telegram_bot is not None:
+            self._telegram_bot = telegram_bot
+            coros.append(telegram_bot.run())
+            logger.info("Telegram bot will start with daemon")
+
         try:
-            await asyncio.gather(
-                self._tier_loop("PULSE", self.config.pulse_interval, self._run_pulse),
-                self._tier_loop("SCAN", self.config.scan_interval, self._run_scan),
-                self._tier_loop("INTEL", self.config.intel_interval, self._run_intel),
-                self._tier_loop("DAILY", 86400, self._run_daily),
-                self._cron_loop(),
-                self._proactive_loop(),
-                self._mission_daemon.start(),
-            )
+            await asyncio.gather(*coros)
         finally:
             self._cleanup_pid()
 
     async def stop(self):
         """Graceful shutdown."""
         self._running = False
+        telegram_bot = getattr(self, "_telegram_bot", None)
+        if telegram_bot is not None:
+            await telegram_bot.stop()
         self._cleanup_pid()
         logger.info("HeartbeatDaemon stopped")
 
@@ -597,6 +610,39 @@ class HeartbeatDaemon:
                     action.description, f"error: {str(e)[:200]}",
                 )
 
+        elif action.action_type == "human_activity":
+            try:
+                from openclaw.daemon.human_activity import HumanActivityEngine
+                activity_engine = HumanActivityEngine(codex=self.codex)
+                session = await activity_engine.run_session(action.target)
+                status = "success" if session.activities_failed == 0 else "partial"
+                if session.activities_completed == 0:
+                    status = "failed" if session.activities_failed > 0 else "skipped"
+                self.codex.log_action(
+                    "human_activity", action.target,
+                    (
+                        f"Session: {session.activities_completed} done, "
+                        f"{session.activities_failed} failed, "
+                        f"{session.duration_seconds:.0f}s"
+                    ),
+                    status,
+                )
+                logger.info(
+                    f"[PROACTIVE] Human activity: {action.target} — "
+                    f"{session.activities_completed} ok, "
+                    f"{session.activities_failed} failed, "
+                    f"{session.duration_seconds:.0f}s"
+                )
+            except Exception as e:
+                logger.error(
+                    f"[PROACTIVE] human_activity failed for {action.target}: {e}",
+                    exc_info=True,
+                )
+                self.codex.log_action(
+                    "human_activity", action.target,
+                    action.description, f"error: {str(e)[:200]}",
+                )
+
         elif action.action_type == "session_cleanup":
             cleared = await self.healer.clear_expired_sessions()
             self.codex.log_action(
@@ -609,6 +655,72 @@ class HeartbeatDaemon:
 
         elif action.action_type == "vibecoder_discover_projects":
             await self._handle_vibecoder_discover(action)
+
+        elif action.action_type == "publish_content":
+            # Publishing always requires approval — this branch runs only when
+            # the action has been explicitly approved by the operator.
+            try:
+                from openclaw.automation.content_publisher import (
+                    ContentPublisher,
+                    PublishableContent,
+                )
+
+                publisher = ContentPublisher(codex=self.codex)
+                content_data = action.params.get("content", {})
+                content = PublishableContent(
+                    title=content_data.get("title", "Untitled"),
+                    description=content_data.get("description", ""),
+                    price=float(content_data.get("price", 0.0)),
+                    currency=content_data.get("currency", "USD"),
+                    category=content_data.get("category", ""),
+                    tags=content_data.get("tags", []),
+                    file_path=content_data.get("file_path", ""),
+                    cover_image_path=content_data.get("cover_image_path", ""),
+                    preview_text=content_data.get("preview_text", ""),
+                    extra_fields=content_data.get("extra_fields", {}),
+                )
+                result = await publisher.publish(action.target, content)
+                status = "success" if result.success else "failed"
+                listing_detail = (
+                    result.published_url
+                    or ("pending review" if result.needs_review else "no url")
+                )
+                self.codex.log_action(
+                    "publish_content",
+                    action.target,
+                    f"Published: {content.title} -> {listing_detail}",
+                    status,
+                )
+                if result.success:
+                    logger.info(
+                        f"[PROACTIVE] Content published: {action.target} "
+                        f"'{content.title}' -> {listing_detail}"
+                    )
+                    await self.alert_router.route(Alert(
+                        severity=AlertSeverity.INFO,
+                        source="proactive_agent",
+                        title=f"Content published: {action.target}",
+                        message=(
+                            f"Published '{content.title}' on {action.target}. "
+                            f"URL: {listing_detail}"
+                        ),
+                    ))
+                else:
+                    logger.warning(
+                        f"[PROACTIVE] Content publish failed: {action.target} "
+                        f"— {result.errors}"
+                    )
+            except Exception as e:
+                logger.error(
+                    f"[PROACTIVE] publish_content failed for {action.target}: {e}",
+                    exc_info=True,
+                )
+                self.codex.log_action(
+                    "publish_content",
+                    action.target,
+                    action.description,
+                    f"error: {str(e)[:200]}",
+                )
 
         return False  # Non-signup actions don't count
 

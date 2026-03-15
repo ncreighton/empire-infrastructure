@@ -467,3 +467,44 @@ class CaptchaTask:
     status: str = "pending"  # pending, solving, solved, failed
     created_at: Optional[datetime] = None
     solved_at: Optional[datetime] = None
+
+
+# ─── Content Publishing ───────────────────────────────────────────────────────
+
+
+@dataclass
+class PublishableContent:
+    """Content package ready for publishing on a marketplace platform."""
+
+    title: str
+    description: str
+    price: float = 0.0
+    """0.0 = free listing."""
+    currency: str = "USD"
+    category: str = ""
+    tags: list[str] = field(default_factory=list)
+    file_path: str = ""
+    """Absolute path to the main product file (ZIP, JSON, STL, PDF, etc.)."""
+    cover_image_path: str = ""
+    """Absolute path to the cover/thumbnail image."""
+    preview_text: str = ""
+    """Short preview excerpt shown before purchase."""
+    extra_fields: dict[str, Any] = field(default_factory=dict)
+    """Platform-specific fields not covered by the standard schema."""
+
+
+@dataclass
+class PublishResult:
+    """Result of a content publishing attempt."""
+
+    platform_id: str
+    success: bool = False
+    published_url: str = ""
+    """URL of the live listing after publish."""
+    listing_id: str = ""
+    """Platform-specific listing or product ID."""
+    errors: list[str] = field(default_factory=list)
+    screenshots: list[str] = field(default_factory=list)
+    duration_seconds: float = 0.0
+    needs_review: bool = False
+    """True when the platform queued the listing for manual review."""

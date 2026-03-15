@@ -24,13 +24,15 @@ from openclaw.models import (
 logger = logging.getLogger(__name__)
 
 # Actions that require human confirmation
-_APPROVAL_REQUIRED = {"profile_content_change", "restart_service"}
+_APPROVAL_REQUIRED = {"profile_content_change", "restart_service", "publish_content"}
 
-# Actions the daemon executes immediately
+# Actions the daemon executes immediately (publish_content is also listed here but
+# is always created with requires_approval=True, so it routes to the approval queue)
 _AUTO_APPROVED = {
     "verify_email", "retry_signup", "session_cleanup",
     "health_check", "report", "new_signup", "vibecoder_mission",
     "vibecoder_discover_projects", "apply_profile", "human_activity",
+    "publish_content",
 }
 
 
@@ -45,7 +47,8 @@ class ProactiveAgent:
         5. Low-score profiles -> re-optimize
         6. Stale profiles -> refresh
         7. Human activity sessions -> keep accounts alive
-        8. Nothing to do -> log idle state
+        8. Publishing opportunities -> suggest content publishing (approval required)
+        9. Nothing to do -> log idle state
     """
 
     def __init__(self, engine: Any, config: HeartbeatConfig):
@@ -67,6 +70,7 @@ class ProactiveAgent:
         actions.extend(self._check_activity_sessions())
         actions.extend(self._check_session_cleanup())
         actions.extend(self._check_vibecoder_opportunities())
+        actions.extend(self._check_publishing_opportunities())
 
         # Sort by priority (1=highest)
         actions.sort(key=lambda a: a.priority)
@@ -453,6 +457,92 @@ class ProactiveAgent:
 
         return actions
 
+    def _check_activity_sessions(self) -> list[ProactiveAction]:
+        """Find active accounts overdue for an organic activity session.
+
+        Recommends human_activity actions for platforms that:
+        - Have an ACTIVE or PROFILE_COMPLETE account
+        - Are enabled
+        - Have an activity playbook (category is supported)
+        - Haven't had a successful human_activity session in the playbook's
+          cooldown period (default 24 hours)
+
+        Capped at 3 platforms per evaluation cycle to avoid flooding the
+        proactive loop with browser-heavy tasks.
+        """
+        from openclaw.knowledge.activity_playbooks import get_playbook_for_platform
+        from openclaw.models import AccountStatus
+
+        _MAX_PER_CYCLE = 3
+        _ELIGIBLE_STATUSES = {
+            AccountStatus.ACTIVE.value,
+            AccountStatus.PROFILE_COMPLETE.value,
+        }
+
+        # Build set of platforms and their last activity timestamp
+        last_activity: dict[str, str] = {}
+        try:
+            history = self.codex.get_action_history(limit=500)
+            for entry in history:
+                if entry.get("action_type") != "human_activity":
+                    continue
+                target = entry.get("target", "")
+                if target and target not in last_activity:
+                    last_activity[target] = entry.get("timestamp", "")
+        except Exception:
+            pass
+
+        # Collect eligible account platform IDs
+        candidates: list[dict] = []
+        for status_enum in (AccountStatus.ACTIVE, AccountStatus.PROFILE_COMPLETE):
+            try:
+                accounts = self.codex.get_accounts_by_status(status_enum)
+                candidates.extend(accounts)
+            except Exception:
+                pass
+
+        now = datetime.now()
+        actions: list[ProactiveAction] = []
+
+        for account in candidates:
+            if len(actions) >= _MAX_PER_CYCLE:
+                break
+
+            pid = account.get("platform_id", "")
+            if not pid:
+                continue
+
+            # Skip disabled platforms
+            platform = get_platform(pid)
+            if not platform or not getattr(platform, "enabled", True):
+                continue
+
+            # Skip platforms without a playbook
+            playbook = get_playbook_for_platform(pid)
+            if not playbook:
+                continue
+
+            # Enforce cooldown using playbook's cooldown_hours
+            cutoff = (now - timedelta(hours=playbook.cooldown_hours)).isoformat()
+            last = last_activity.get(pid, "")
+            if last and last > cutoff:
+                continue  # Still within cooldown window
+
+            actions.append(ProactiveAction(
+                action_type="human_activity",
+                priority=6,
+                target=pid,
+                description=(
+                    f"Run organic activity session on {account.get('platform_name', pid)} "
+                    f"(cooldown={playbook.cooldown_hours}h, "
+                    f"category={platform.category.value})"
+                ),
+                requires_browser=True,
+                requires_approval=False,
+            ))
+
+        return actions
+
     def _check_session_cleanup(self) -> list[ProactiveAction]:
         """Check for stale session cookies."""
         from pathlib import Path
@@ -686,3 +776,235 @@ class ProactiveAgent:
                 ))
 
         return actions
+
+    # ── Publishing opportunities ──────────────────────────────────────────────
+
+    def _check_publishing_opportunities(self) -> list[ProactiveAction]:
+        """Identify marketplace accounts that have no published content yet.
+
+        Looks for:
+        1. Platforms in publishable categories (ai_marketplace, digital_product,
+           workflow_marketplace, prompt_marketplace, 3d_models) with ACTIVE accounts.
+        2. Platforms where no 'publish_content' action has been logged (i.e. nothing
+           has ever been published there).
+        3. Availability of product files in the products directory or venture-agent
+           output directory.
+
+        All actions are created with requires_approval=True — publishing is higher-risk
+        and should never run autonomously without human sign-off.
+
+        Priority: 7 — runs only after signups, profile quality, and cleanup are handled.
+        """
+        from openclaw.knowledge.publishing_playbooks import get_publishing_playbook
+
+        # Categories worth publishing on
+        _PUBLISHABLE_CATEGORIES = {
+            "ai_marketplace",
+            "digital_product",
+            "workflow_marketplace",
+            "prompt_marketplace",
+            "3d_models",
+        }
+
+        # ── 1. Check if there are any products available ─────────────────────
+        products_dir = self._find_products_directory()
+        available_products = self._scan_available_products(products_dir)
+        if not available_products:
+            logger.debug(
+                "[ProactiveAgent] No publishable products found — skipping publish check"
+            )
+            return []
+
+        # ── 2. Build set of platforms already published on ───────────────────
+        already_published: set[str] = set()
+        try:
+            history = self.codex.get_action_history(limit=500)
+            for h in history:
+                if h.get("action_type") == "publish_content" and h.get("result") == "success":
+                    already_published.add(h.get("target", ""))
+        except Exception:
+            pass
+
+        # ── 3. Find active marketplace accounts with no published content ────
+        actions: list[ProactiveAction] = []
+
+        try:
+            active_accounts = self.codex.get_accounts_by_status(AccountStatus.ACTIVE)
+        except Exception:
+            return []
+
+        for account in active_accounts:
+            pid = account.get("platform_id", "")
+            if not pid or pid in already_published:
+                continue
+
+            platform = get_platform(pid)
+            if not platform:
+                continue
+
+            category_value = platform.category.value
+            if category_value not in _PUBLISHABLE_CATEGORIES:
+                continue
+
+            playbook = get_publishing_playbook(category_value)
+            if not playbook:
+                continue
+
+            # Pick the best matching product for this platform
+            product = self._match_product_to_platform(
+                available_products, category_value
+            )
+            if not product:
+                continue
+
+            actions.append(ProactiveAction(
+                action_type="publish_content",
+                priority=7,
+                target=pid,
+                description=(
+                    f"Publish '{product['title']}' on {account.get('platform_name', pid)} "
+                    f"(category={category_value}, no content published yet)"
+                ),
+                requires_browser=True,
+                requires_approval=True,  # Always — publishing is irreversible
+                params={
+                    "content": {
+                        "title": product["title"],
+                        "description": product["description"],
+                        "price": product.get("price", 0.0),
+                        "category": product.get("category", ""),
+                        "tags": product.get("tags", []),
+                        "file_path": product.get("file_path", ""),
+                        "cover_image_path": product.get("cover_image_path", ""),
+                        "preview_text": product.get("preview_text", ""),
+                    },
+                    "platform_category": category_value,
+                    "product_source": product.get("source", ""),
+                },
+            ))
+
+        # Limit to 3 suggestions per cycle — don't overwhelm the approval queue
+        return actions[:3]
+
+    def _find_products_directory(self) -> list[str]:
+        """Return candidate directories that may contain publishable products.
+
+        Checks, in order:
+        1. OPENCLAW_PRODUCTS_DIR env var
+        2. ../venture-agent/data/products/ (sister project)
+        3. ./data/products/ (local agent data dir)
+        """
+        from pathlib import Path
+
+        candidates: list[Path] = []
+
+        env_dir = os.environ.get("OPENCLAW_PRODUCTS_DIR", "")
+        if env_dir:
+            candidates.append(Path(env_dir))
+
+        # Relative to this file: openclaw-agent/openclaw/daemon/ -> up 3 levels
+        agent_root = Path(__file__).resolve().parent.parent.parent
+        candidates.append(agent_root / "data" / "products")
+
+        # Look for venture-agent alongside openclaw-agent
+        empire_root = agent_root.parent
+        candidates.append(empire_root / "venture-agent" / "data" / "products")
+
+        return [str(p) for p in candidates if p.is_dir()]
+
+    def _scan_available_products(
+        self, product_dirs: list[str]
+    ) -> list[dict]:
+        """Scan product directories for publishable product manifests.
+
+        Looks for:
+        - JSON manifest files (product.json or any *.json with title/description keys)
+        - ZIP files with a companion *.json metadata sidecar
+        - STL files with a companion *.json sidecar
+
+        Returns a list of product dicts with keys:
+            title, description, price, category, tags, file_path,
+            cover_image_path, preview_text, source
+        """
+        import json
+        from pathlib import Path
+
+        products: list[dict] = []
+
+        for dir_str in product_dirs:
+            dir_path = Path(dir_str)
+            try:
+                for json_file in dir_path.rglob("*.json"):
+                    try:
+                        data = json.loads(json_file.read_text(encoding="utf-8"))
+                    except Exception:
+                        continue
+
+                    # Must have at minimum a title and description
+                    if not isinstance(data, dict):
+                        continue
+                    title = data.get("title", "").strip()
+                    description = data.get("description", "").strip()
+                    if not title or not description:
+                        continue
+
+                    product: dict = {
+                        "title": title,
+                        "description": description,
+                        "price": float(data.get("price", 0.0)),
+                        "category": data.get("category", ""),
+                        "tags": data.get("tags", []),
+                        "file_path": data.get("file_path", ""),
+                        "cover_image_path": data.get("cover_image_path", ""),
+                        "preview_text": data.get("preview_text", ""),
+                        "content_type": data.get("content_type", "product"),
+                        "source": str(json_file),
+                    }
+
+                    # Resolve relative file_path relative to the json file's dir
+                    if product["file_path"] and not Path(product["file_path"]).is_absolute():
+                        resolved = json_file.parent / product["file_path"]
+                        if resolved.exists():
+                            product["file_path"] = str(resolved)
+
+                    products.append(product)
+            except (OSError, PermissionError):
+                continue
+
+        return products
+
+    def _match_product_to_platform(
+        self, products: list[dict], category: str
+    ) -> dict | None:
+        """Pick the most suitable product for a given platform category.
+
+        Preference order:
+        1. Product whose content_type exactly matches the category's content_type
+        2. Any product with a file_path that exists on disk
+        3. Any product with a non-empty title/description
+
+        Returns None if no product is suitable.
+        """
+        from openclaw.knowledge.publishing_playbooks import get_publishing_playbook
+        from pathlib import Path
+
+        playbook = get_publishing_playbook(category)
+        target_type = playbook.content_type if playbook else ""
+
+        # Score each product: higher = better match
+        scored: list[tuple[int, dict]] = []
+        for p in products:
+            score = 0
+            if target_type and p.get("content_type", "") == target_type:
+                score += 10
+            if p.get("file_path") and Path(p["file_path"]).exists():
+                score += 5
+            if p.get("cover_image_path") and Path(p.get("cover_image_path", "")).exists():
+                score += 2
+            scored.append((score, p))
+
+        if not scored:
+            return None
+
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return scored[0][1]

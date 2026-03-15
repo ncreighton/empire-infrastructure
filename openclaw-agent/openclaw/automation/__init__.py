@@ -8,6 +8,7 @@ from openclaw.automation.analytics import Analytics
 from openclaw.automation.profile_sync import ProfileSync
 from openclaw.automation.webhook_notifier import WebhookNotifier
 from openclaw.automation.profile_applier import ProfileApplier, ProfileApplyResult
+from openclaw.automation.content_publisher import ContentPublisher, PublishableContent, PublishResult
 
 __all__ = [
     "EmailVerifier",
@@ -19,4 +20,7 @@ __all__ = [
     "WebhookNotifier",
     "ProfileApplier",
     "ProfileApplyResult",
+    "ContentPublisher",
+    "PublishableContent",
+    "PublishResult",
 ]
