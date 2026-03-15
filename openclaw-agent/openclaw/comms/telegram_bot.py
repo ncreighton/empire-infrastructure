@@ -367,6 +367,7 @@ class OpenClawTelegramBot:
             BotCommand("live", "What is happening right now"),
             BotCommand("report", "Comprehensive daily report"),
             BotCommand("fleet", "GoLogin browser identity fleet"),
+            BotCommand("revenue", "Revenue report (optional: days)"),
         ]
         await app.bot.set_my_commands(commands)
 
@@ -395,6 +396,7 @@ class OpenClawTelegramBot:
             ("live", self._cmd_live),
             ("report", self._cmd_report),
             ("fleet", self._cmd_fleet),
+            ("revenue", self._cmd_revenue),
         ]
         for name, handler in commands:
             app.add_handler(CommandHandler(name, handler))
@@ -1208,6 +1210,60 @@ class OpenClawTelegramBot:
             target = update.message if update.message else update.callback_query
             if target:
                 await target.reply_text(f"Report error: {e}")
+
+    @admin_only
+    async def _cmd_revenue(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Revenue report across all platforms."""
+        try:
+            tracker = getattr(self.engine, "revenue_tracker", None)
+            if not tracker:
+                target = update.message if update.message else update.callback_query
+                if target:
+                    await target.reply_text("Revenue tracker not available")
+                return
+
+            # Parse optional days argument
+            days = 30
+            if context.args:
+                try:
+                    days = int(context.args[0])
+                except (ValueError, IndexError):
+                    pass
+
+            report = tracker.get_report(days)
+            total_rev = report["total_revenue"]
+            total_events = report["total_events"]
+            avg_day = report["avg_per_day"]
+
+            lines = [
+                f"*\U0001f4b0 Revenue Report \\({days}d\\)*\n",
+                f"*Total:* ${escape_md(f'{total_rev:.2f}')}",
+                f"*Events:* {total_events}",
+                f"*Avg/day:* ${escape_md(f'{avg_day:.2f}')}\n",
+            ]
+
+            if report["by_platform"]:
+                lines.append("*By Platform:*")
+                for pid, amount in report["by_platform"].items():
+                    lines.append(f"  {escape_md(pid)}: ${escape_md(f'{amount:.2f}')}")
+                lines.append("")
+
+            if report["by_product"]:
+                lines.append("*Top Products:*")
+                for product, amount in list(report["by_product"].items())[:5]:
+                    lines.append(
+                        f"  {escape_md(product[:30])}: "
+                        f"${escape_md(f'{amount:.2f}')}"
+                    )
+            elif report["total_events"] == 0:
+                lines.append("_No revenue events yet\\. Sales will appear here automatically\\._")
+
+            target = update.message if update.message else update.callback_query
+            await safe_send(target, "\n".join(lines))
+        except Exception as e:
+            target = update.message if update.message else update.callback_query
+            if target:
+                await target.reply_text(f"Revenue error: {e}")
 
     @admin_only
     async def _cmd_fleet(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

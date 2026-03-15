@@ -41,6 +41,7 @@ from openclaw.automation.rate_limiter import RateLimiter
 from openclaw.automation.retry_engine import RetryEngine
 from openclaw.automation.profile_sync import ProfileSync
 from openclaw.automation.webhook_notifier import WebhookNotifier
+from openclaw.automation.revenue_tracker import RevenueTracker
 from openclaw.vibecoder import VibeCoderEngine
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,7 @@ class OpenClawEngine:
         self.retry_engine = RetryEngine()
         self.notifier = WebhookNotifier()
         self.profile_sync = ProfileSync(codex=self.codex, sentinel=self.sentinel)
+        self.revenue_tracker = RevenueTracker(codex=self.codex)
 
         # VibeCoder — autonomous coding agent (wired to notifier for lifecycle events)
         self.vibecoder = VibeCoderEngine(

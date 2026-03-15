@@ -1092,6 +1092,47 @@ async def step_model_routing():
     return engine.step_router.get_routing_summary()
 
 
+@app.get("/revenue")
+async def revenue_report(days: int = 30):
+    """Revenue report across all platforms."""
+    try:
+        report = engine.revenue_tracker.get_report(days)
+        return report
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/revenue/record")
+async def record_revenue(
+    platform_id: str,
+    amount: float,
+    product: str = "",
+    currency: str = "USD",
+    event_type: str = "sale",
+    source: str = "webhook",
+    external_id: str = "",
+):
+    """Record a revenue event (from webhook or manual entry)."""
+    try:
+        event = engine.revenue_tracker.record_sale(
+            platform_id=platform_id,
+            amount=amount,
+            product=product,
+            currency=currency,
+            event_type=event_type,
+            source=source,
+            external_id=external_id,
+        )
+        return {
+            "recorded": True,
+            "platform_id": event.platform_id,
+            "amount": event.amount,
+            "product": event.product,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 @app.get("/fleet")
 async def fleet_status():
     """GoLogin browser identity fleet status."""
