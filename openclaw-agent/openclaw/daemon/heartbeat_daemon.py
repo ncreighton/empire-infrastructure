@@ -696,6 +696,8 @@ class HeartbeatDaemon:
              {"skills": 2, "workflows": 3}),
             ("product-factory-performance", "daily 2pm", "factory_performance", {}),
             ("product-factory-weekly-bundle", "weekly sun", "factory_weekly_bundle", {}),
+            # Model Router — expire stale step promotions
+            ("step-promotion-expiry", "daily 5am", "expire_step_promotions", {"days": 7}),
         ]
         for name, schedule, action, params in defaults:
             self.cron.register(name, schedule, action, params)
@@ -715,6 +717,8 @@ class HeartbeatDaemon:
             "factory_daily_run": self._cron_factory_daily_run,
             "factory_performance": self._cron_factory_performance,
             "factory_weekly_bundle": self._cron_factory_weekly_bundle,
+            # Model Router
+            "expire_step_promotions": self._cron_expire_step_promotions,
         }
 
     # ─── Cron action handlers ───
@@ -913,6 +917,19 @@ class HeartbeatDaemon:
             "success" if result.get("success") else "failed",
         )
         return result
+
+    async def _cron_expire_step_promotions(self, **kwargs):
+        """Expire stale Haiku→Sonnet step promotions (platforms change UIs)."""
+        days = kwargs.get("days", 7)
+        step_router = getattr(self.engine, "step_router", None)
+        if step_router:
+            expired = step_router.expire_promotions(days=days)
+            logger.info(f"[MODEL-ROUTER] Expired {expired} stale step promotions (>{days}d)")
+            return {"expired": expired}
+        # Fallback: expire directly via codex
+        self.codex.expire_old_promotions(days=days)
+        logger.info(f"[MODEL-ROUTER] Expired stale step promotions via codex (>{days}d)")
+        return {"expired": -1}
 
     # ─── PID file management ───
 

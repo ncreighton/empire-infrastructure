@@ -76,52 +76,49 @@ services:
           cpus: '0.5'
 
   # -------------------------------------------------------------------------
-  # OpenClaw Agent — Autonomous Agent Platform (Supercharger Enhanced)
-  # Uses the openclaw-agent codebase with daemon mode, 46 platforms,
-  # health checks, cron scheduler, and the Supercharger workspace mounted.
-  # Includes Product Factory for autonomous skill/workflow generation.
+  # OpenClaw Agent — MOVED to standalone compose: openclaw-agent/docker-compose.yml
+  # This duplicate caused port 8100 conflicts and stale-file bugs.
+  # Deploy with: cd /opt/empire/openclaw-agent && docker compose up -d --build
   # -------------------------------------------------------------------------
-  openclaw-agent:
-    build:
-      context: ../openclaw-agent
-      dockerfile: Dockerfile
-    container_name: empire-openclaw-agent
-    restart: unless-stopped
-    ports:
-      - "8100:8100"
-    env_file:
-      - ../.env
-      - ../openclaw-agent/.env
-    environment:
-      - OPENCLAW_DAEMON_MODE=true
-      - OPENCLAW_QUIET_START=23
-      - OPENCLAW_QUIET_END=7
-      - OPENCLAW_MAX_SIGNUPS_PER_DAY=5
-      - SUBSTACK_AUTONOMOUS=true
-      - N8N_BASE_URL=http://empire-n8n:5678
-      # GUMROAD_ACCESS_TOKEN, N8N_MARKETPLACE_EMAIL, N8N_MARKETPLACE_PASSWORD,
-      # GITHUB_PAT are loaded via env_file: ../.env
-    volumes:
-      - openclaw-data:/app/data
-      - ../openclaw-agent/logs:/app/logs
-      - ../openclaw-empire/workspace:/app/supercharger/workspace:ro
-      - ../openclaw-empire/.agents:/app/supercharger/agents:ro
-      - ../openclaw-empire/configs:/app/supercharger/configs:ro
-      - ../config:/app/config:ro
-    networks:
-      - empire
-      - empire_empire
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-          cpus: '2.0'
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8100/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+  # openclaw-agent:
+  #   build:
+  #     context: ../openclaw-agent
+  #     dockerfile: Dockerfile
+  #   container_name: empire-openclaw-agent
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8100:8100"
+  #   env_file:
+  #     - ../.env
+  #     - ../openclaw-agent/.env
+  #   environment:
+  #     - OPENCLAW_DAEMON_MODE=true
+  #     - OPENCLAW_QUIET_START=23
+  #     - OPENCLAW_QUIET_END=7
+  #     - OPENCLAW_MAX_SIGNUPS_PER_DAY=5
+  #     - SUBSTACK_AUTONOMOUS=true
+  #     - N8N_BASE_URL=http://empire-n8n:5678
+  #   volumes:
+  #     - openclaw-data:/app/data
+  #     - ../openclaw-agent/logs:/app/logs
+  #     - ../openclaw-empire/workspace:/app/supercharger/workspace:ro
+  #     - ../openclaw-empire/.agents:/app/supercharger/agents:ro
+  #     - ../openclaw-empire/configs:/app/supercharger/configs:ro
+  #     - ../config:/app/config:ro
+  #   networks:
+  #     - empire
+  #     - empire_empire
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         memory: 4G
+  #         cpus: '2.0'
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8100/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 30s
 
   # -------------------------------------------------------------------------
   # BookForge Agent — Autonomous Multi-Platform Book Publisher
@@ -234,7 +231,7 @@ services:
 volumes:
   n8n-data:
   article-audit-data:
-  openclaw-data:
+  # openclaw-data: # Moved to openclaw-agent/docker-compose.yml
   bookforge-data:
   crypto-claw-data:
 

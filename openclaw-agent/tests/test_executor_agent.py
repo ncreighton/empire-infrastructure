@@ -171,7 +171,7 @@ class TestRetryLogic:
             monitor=mock_monitor,
         )
         plan = _make_plan(steps=[
-            _make_step(1, StepType.FILL_FIELD, "Fill email", target="email", max_retries=2),
+            _make_step(1, StepType.FILL_FIELD, "Fill email", target="email", is_sensitive=True, max_retries=2),
         ])
         result = await executor.execute_plan(plan)
         assert result.steps[0].status == StepStatus.FAILED
@@ -236,7 +236,7 @@ class TestCriticalStepFailure:
             monitor=mock_monitor,
         )
         plan = _make_plan(steps=[
-            _make_step(1, StepType.FILL_FIELD, "Fill email", target="email", max_retries=0),
+            _make_step(1, StepType.FILL_FIELD, "Fill email", target="email", is_sensitive=True, max_retries=0),
             _make_step(2, StepType.SUBMIT_FORM, "Submit form"),
         ])
         result = await executor.execute_plan(plan)

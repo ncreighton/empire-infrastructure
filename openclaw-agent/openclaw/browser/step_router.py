@@ -21,12 +21,22 @@ from openclaw.models import SignupStep, StepType
 
 logger = logging.getLogger(__name__)
 
-# Model constants
-# NOTE: Haiku 4.5 extended thinking breaks browser-use 0.12.2 AgentOutput
-# parsing (thinking field not in Pydantic schema). Use Sonnet as floor
-# until browser-use fixes this.
-HAIKU = "claude-sonnet-4-20250514"  # was claude-haiku-4-5-20251001
+# Model constants — logical tier IDs (distinct for routing logic)
+HAIKU = "claude-haiku-4-5-20251001"
 SONNET = "claude-sonnet-4-20250514"
+
+# Temporary override: Haiku 4.5 extended thinking breaks browser-use 0.12.2
+# AgentOutput parsing (thinking field not in Pydantic schema).
+# When True, all Haiku-tier steps resolve to Sonnet for API calls.
+# Flip to False when browser-use fixes this to enable real cost savings.
+_HAIKU_OVERRIDE = True
+
+
+def _resolve_model(model_id: str | None) -> str | None:
+    """Resolve logical model tier to actual API model ID."""
+    if _HAIKU_OVERRIDE and model_id == HAIKU:
+        return SONNET
+    return model_id
 
 # Step types that require no LLM call at all
 _NO_LLM_STEPS = frozenset({
@@ -89,42 +99,44 @@ class StepRouter:
 
         # 2. Password fields use JS injection primarily; HAIKU as fallback
         if step.step_type == StepType.FILL_FIELD and "password" in step.target.lower():
-            return HAIKU
+            return _resolve_model(HAIKU)
 
         # 3. Email fields need Sonnet (may need to reveal hidden email form)
         if step.step_type == StepType.FILL_FIELD and "email" in step.target.lower():
-            return SONNET
+            return _resolve_model(SONNET)
 
         # 4. Check if this (platform, step_type) was promoted due to Haiku failure
         if self._is_promoted(platform_id, step.step_type):
             logger.debug(
                 f"[{platform_id}] Step {step.step_type.value} promoted to Sonnet"
             )
-            return SONNET
+            return _resolve_model(SONNET)
 
         # 5. Default tier
-        return _DEFAULT_TIERS.get(step.step_type, SONNET)
+        return _resolve_model(_DEFAULT_TIERS.get(step.step_type, SONNET))
 
     def get_model_for_retry(
         self, step: SignupStep, platform_id: str, previous_model: str
     ) -> str:
-        """Get model for a retry attempt. Always promotes to Sonnet.
+        """Get model for a retry attempt. Promotes Haiku-tier steps to Sonnet.
 
-        If the step previously used Haiku and failed, promote to Sonnet
+        If the step's default tier is Haiku and it failed, promote to Sonnet
         and record the promotion for future runs.
         """
-        if previous_model == HAIKU:
+        default_tier = _DEFAULT_TIERS.get(step.step_type, SONNET)
+        if default_tier == HAIKU:
             self.record_failure(platform_id, step.step_type, previous_model)
-            return SONNET
-        # Already on Sonnet — keep it
-        return SONNET
+            return _resolve_model(SONNET)
+        # Already a Sonnet-tier step — keep it
+        return _resolve_model(SONNET)
 
     def record_failure(
         self, platform_id: str, step_type: StepType, model_used: str
     ) -> None:
-        """Record that a step failed with Haiku — promote to Sonnet next time."""
-        if model_used != HAIKU:
-            return  # Only promote from Haiku
+        """Record that a Haiku-tier step failed — promote to Sonnet next time."""
+        default_tier = _DEFAULT_TIERS.get(step_type, SONNET)
+        if default_tier != HAIKU:
+            return  # Only promote Haiku-tier steps
 
         reason = f"Haiku failed at {datetime.now().isoformat()}"
         logger.info(

@@ -163,10 +163,10 @@ class TestCompileDailyReport:
 
 
 class TestRegisterDefaultCrons:
-    def test_registers_8_default_jobs(self, daemon):
+    def test_registers_default_jobs(self, daemon):
         daemon._register_default_crons()
         jobs = daemon.cron.get_all()
-        assert len(jobs) == 8
+        assert len(jobs) == 12
 
     def test_default_cron_names(self, daemon):
         daemon._register_default_crons()
@@ -181,7 +181,7 @@ class TestRegisterDefaultCrons:
         daemon._register_default_crons()
         daemon._register_default_crons()
         jobs = daemon.cron.get_all()
-        assert len(jobs) == 8  # No duplicates
+        assert len(jobs) == 12  # No duplicates
 
 
 class TestBuildActionRegistry:

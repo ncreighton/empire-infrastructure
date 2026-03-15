@@ -7,7 +7,7 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from openclaw.browser.step_router import StepRouter, HAIKU, SONNET
+from openclaw.browser.step_router import StepRouter, HAIKU, SONNET, _resolve_model
 from openclaw.forge.platform_codex import PlatformCodex
 from openclaw.models import SignupStep, StepType
 
@@ -52,10 +52,13 @@ def test_default_routing():
             StepType.FILL_TEXTAREA,
             StepType.UPLOAD_FILE,
         ]
+        resolved_haiku = _resolve_model(HAIKU)
+        resolved_sonnet = _resolve_model(SONNET)
+
         for st in haiku_types:
             step = _make_step(st, target="some_field")
             model = router.get_model(step, "test_platform")
-            assert model == HAIKU, f"Expected HAIKU for {st.value}, got {model}"
+            assert model == resolved_haiku, f"Expected resolved HAIKU for {st.value}, got {model}"
 
         # Sonnet steps
         sonnet_types = [
@@ -66,7 +69,7 @@ def test_default_routing():
         for st in sonnet_types:
             step = _make_step(st, target="some_field")
             model = router.get_model(step, "test_platform")
-            assert model == SONNET, f"Expected SONNET for {st.value}, got {model}"
+            assert model == resolved_sonnet, f"Expected resolved SONNET for {st.value}, got {model}"
 
         # No-LLM steps
         no_llm_types = [
@@ -95,12 +98,12 @@ def test_email_field_uses_sonnet():
 
         step = _make_step(StepType.FILL_FIELD, target="email", value="test@example.com")
         model = router.get_model(step, "test_platform")
-        assert model == SONNET, f"Email field should use SONNET, got {model}"
+        assert model == _resolve_model(SONNET), f"Email field should use SONNET, got {model}"
 
         # Also test mixed case
         step2 = _make_step(StepType.FILL_FIELD, target="Email Address", value="x@y.com")
         model2 = router.get_model(step2, "test_platform")
-        assert model2 == SONNET, f"Email Address field should use SONNET, got {model2}"
+        assert model2 == _resolve_model(SONNET), f"Email Address field should use SONNET, got {model2}"
 
         print("  Email field routing: PASSED")
     finally:
@@ -118,7 +121,7 @@ def test_password_field_uses_haiku():
 
         step = _make_step(StepType.FILL_FIELD, target="password", value="secret123")
         model = router.get_model(step, "test_platform")
-        assert model == HAIKU, f"Password field should use HAIKU, got {model}"
+        assert model == _resolve_model(HAIKU), f"Password field should use resolved HAIKU, got {model}"
 
         print("  Password field routing: PASSED")
     finally:
@@ -136,11 +139,11 @@ def test_non_email_fill_uses_haiku():
 
         step = _make_step(StepType.FILL_FIELD, target="username", value="testuser")
         model = router.get_model(step, "test_platform")
-        assert model == HAIKU, f"Username field should use HAIKU, got {model}"
+        assert model == _resolve_model(HAIKU), f"Username field should use resolved HAIKU, got {model}"
 
         step2 = _make_step(StepType.FILL_FIELD, target="display_name", value="Test User")
         model2 = router.get_model(step2, "test_platform")
-        assert model2 == HAIKU, f"Display name field should use HAIKU, got {model2}"
+        assert model2 == _resolve_model(HAIKU), f"Display name field should use resolved HAIKU, got {model2}"
 
         print("  Non-email fill routing: PASSED")
     finally:
@@ -159,20 +162,20 @@ def test_promotion_on_failure():
         platform = "test_platform"
         step = _make_step(StepType.NAVIGATE, target="https://example.com")
 
-        # Initially should be Haiku
+        # Initially should be Haiku-tier (resolved)
         model = router.get_model(step, platform)
-        assert model == HAIKU, f"NAVIGATE should start as HAIKU, got {model}"
+        assert model == _resolve_model(HAIKU), f"NAVIGATE should start as resolved HAIKU, got {model}"
 
-        # Record failure with Haiku
-        router.record_failure(platform, StepType.NAVIGATE, HAIKU)
+        # Record failure — NAVIGATE is Haiku-tier, so it should be promoted
+        router.record_failure(platform, StepType.NAVIGATE, _resolve_model(HAIKU))
 
         # Now should be promoted to Sonnet
         model2 = router.get_model(step, platform)
-        assert model2 == SONNET, f"NAVIGATE should be promoted to SONNET, got {model2}"
+        assert model2 == _resolve_model(SONNET), f"NAVIGATE should be promoted to SONNET, got {model2}"
 
-        # Different platform should still be Haiku
+        # Different platform should still be Haiku-tier
         model3 = router.get_model(step, "other_platform")
-        assert model3 == HAIKU, f"Other platform should still be HAIKU, got {model3}"
+        assert model3 == _resolve_model(HAIKU), f"Other platform should still be resolved HAIKU, got {model3}"
 
         print("  Promotion on failure: PASSED")
     finally:
@@ -208,13 +211,13 @@ def test_retry_model_upgrade():
 
         step = _make_step(StepType.CLICK, target="submit_button")
 
-        # Retry from Haiku → Sonnet
-        retry_model = router.get_model_for_retry(step, "test_platform", HAIKU)
-        assert retry_model == SONNET, f"Retry from HAIKU should be SONNET, got {retry_model}"
+        # Retry from Haiku-tier → Sonnet
+        retry_model = router.get_model_for_retry(step, "test_platform", _resolve_model(HAIKU))
+        assert retry_model == _resolve_model(SONNET), f"Retry from HAIKU should be SONNET, got {retry_model}"
 
         # Retry from Sonnet → stays Sonnet
-        retry_model2 = router.get_model_for_retry(step, "test_platform", SONNET)
-        assert retry_model2 == SONNET, f"Retry from SONNET should stay SONNET, got {retry_model2}"
+        retry_model2 = router.get_model_for_retry(step, "test_platform", _resolve_model(SONNET))
+        assert retry_model2 == _resolve_model(SONNET), f"Retry from SONNET should stay SONNET, got {retry_model2}"
 
         print("  Retry model upgrade: PASSED")
     finally:
