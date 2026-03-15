@@ -22,7 +22,10 @@ from openclaw.models import SignupStep, StepType
 logger = logging.getLogger(__name__)
 
 # Model constants
-HAIKU = "claude-haiku-4-5-20251001"
+# NOTE: Haiku 4.5 extended thinking breaks browser-use 0.12.2 AgentOutput
+# parsing (thinking field not in Pydantic schema). Use Sonnet as floor
+# until browser-use fixes this.
+HAIKU = "claude-sonnet-4-20250514"  # was claude-haiku-4-5-20251001
 SONNET = "claude-sonnet-4-20250514"
 
 # Step types that require no LLM call at all

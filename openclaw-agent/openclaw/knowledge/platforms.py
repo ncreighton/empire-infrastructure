@@ -856,6 +856,7 @@ _register(PlatformConfig(
         "Strong emphasis on design assets (fonts, templates, graphics)",
     ],
     notes="Premium design marketplace. Good for AI-generated templates and assets.",
+    enabled=False,
 ))
 
 _register(PlatformConfig(
@@ -1129,6 +1130,7 @@ _register(PlatformConfig(
         "Massive SEO authority and internal search traffic",
     ],
     notes="Largest online course marketplace. Incredible audience reach.",
+    enabled=False,
 ))
 
 _register(PlatformConfig(
