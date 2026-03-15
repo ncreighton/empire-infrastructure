@@ -19,6 +19,7 @@ from typing import Any, Callable
 
 from openclaw.browser.session_manager import SessionManager
 from openclaw.browser.stealth import add_human_delays
+from openclaw.browser.browser_manager import _create_llm, BrowserManager
 
 logger = logging.getLogger(__name__)
 
@@ -163,17 +164,13 @@ class GoLoginBrowserManager:
         """Create a browser-use Agent using the GoLogin Orbita browser."""
         try:
             from browser_use import Agent
-            from browser_use.llm.anthropic.chat import ChatAnthropic
         except ImportError:
             raise ImportError("browser-use is required: pip install browser-use")
 
         if not self._port:
             await self.launch(platform_id)
 
-        llm = ChatAnthropic(
-            model=model,
-            temperature=0,
-        )
+        llm = _create_llm(model)
 
         agent_kwargs: dict[str, Any] = {
             "task": task,
@@ -197,6 +194,28 @@ class GoLoginBrowserManager:
         model: str = "claude-sonnet-4-20250514",
     ) -> dict[str, Any]:
         """Create and run a browser-use agent via GoLogin Orbita."""
+        import time as _time
+
+        # ── Circuit breaker pre-check ──────────────────────────────────────
+        if not BrowserManager.api_available():
+            elapsed = _time.time() - BrowserManager._api_circuit_opened_at
+            cooldown_remaining = max(
+                0, BrowserManager._api_circuit_cooldown - int(elapsed)
+            )
+            msg = (
+                f"API circuit breaker is open — skipping GoLogin agent attempt. "
+                f"Reason: {BrowserManager._api_circuit_error_msg!r}. "
+                f"Retry in {cooldown_remaining}s or call "
+                "BrowserManager.reset_api_circuit()."
+            )
+            logger.warning(msg)
+            return {
+                "success": False,
+                "error": msg,
+                "steps": 0,
+                "screenshots": [],
+            }
+
         agent = await self.create_agent(
             task=task,
             platform_id=platform_id,
@@ -232,10 +251,16 @@ class GoLoginBrowserManager:
                 "screenshots": screenshots,
             }
         except Exception as e:
+            error_str = str(e)
             logger.error(f"GoLogin agent execution failed: {e}")
+
+            # ── Circuit breaker: trip on fatal API errors ──────────────────
+            if BrowserManager._is_circuit_trip_error(error_str):
+                BrowserManager._trip_circuit(error_str)
+
             return {
                 "success": False,
-                "error": str(e),
+                "error": error_str,
                 "steps": step_count,
                 "screenshots": screenshots,
             }

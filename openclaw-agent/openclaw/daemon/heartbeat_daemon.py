@@ -160,6 +160,19 @@ class HeartbeatDaemon:
         if self._started_at:
             uptime = (datetime.now() - self._started_at).total_seconds()
 
+        # API circuit breaker status (graceful fallback if not yet wired)
+        from openclaw.browser.browser_manager import BrowserManager
+        _api_available = (
+            BrowserManager.api_available()
+            if hasattr(BrowserManager, "api_available")
+            else True
+        )
+        _api_circuit_error = (
+            getattr(BrowserManager, "_api_circuit_error_msg", "")
+            if not _api_available
+            else ""
+        )
+
         return {
             "running": self._running,
             "started_at": self._started_at.isoformat() if self._started_at else None,
@@ -167,6 +180,8 @@ class HeartbeatDaemon:
             "tier_runs": self._tier_runs,
             "cron_jobs": len(self.cron.get_all()),
             "pending_actions": len(self.proactive.evaluate()) if self._running else 0,
+            "api_available": _api_available,
+            "api_circuit_error": _api_circuit_error,
         }
 
     # ================================================================== #
@@ -400,7 +415,34 @@ class HeartbeatDaemon:
                 # Limit to 1 real browser signup per cycle to keep daemon responsive.
                 # Pre-flight rejections (disabled, 403, already-complete) don't count.
                 browser_signup_running = False
+
+                # Check API circuit breaker — skip browser actions when credits depleted.
+                from openclaw.browser.browser_manager import BrowserManager
+                _browser_actions = {
+                    "new_signup", "retry_signup", "apply_profile",
+                    "human_activity", "publish_content",
+                }
+                _api_ok = BrowserManager.api_available() if hasattr(BrowserManager, "api_available") else True
+                _circuit_notified = False
+
                 for action in auto:
+                    # Skip browser-dependent actions when the API circuit is open.
+                    if action.action_type in _browser_actions and not _api_ok:
+                        logger.info(
+                            f"[PROACTIVE] Skipping {action.action_type} "
+                            f"-> {action.target} (API circuit open)"
+                        )
+                        if not _circuit_notified:
+                            _circuit_error = getattr(
+                                BrowserManager, "_api_circuit_error_msg", ""
+                            ) if hasattr(BrowserManager, "_api_circuit_error_msg") else ""
+                            await self._notify_telegram("error", {
+                                "message": "API credits depleted — browser actions paused",
+                                "detail": _circuit_error,
+                            })
+                            _circuit_notified = True
+                        continue
+
                     if action.action_type in ("new_signup", "retry_signup"):
                         if browser_signup_running:
                             logger.info(
@@ -439,6 +481,22 @@ class HeartbeatDaemon:
 
         Returns True if a real browser signup ran (not a pre-flight rejection).
         """
+        # Secondary circuit breaker guard — _proactive_loop catches most cases,
+        # but _execute_proactive_action can also be called directly (e.g. from tests
+        # or future callers), so we enforce the check here as well.
+        _browser_actions = {
+            "new_signup", "retry_signup", "apply_profile",
+            "human_activity", "publish_content",
+        }
+        if action.action_type in _browser_actions:
+            from openclaw.browser.browser_manager import BrowserManager
+            if hasattr(BrowserManager, "api_available") and not BrowserManager.api_available():
+                logger.info(
+                    f"[PROACTIVE] API circuit open, skipping {action.action_type} "
+                    f"-> {action.target}"
+                )
+                return False
+
         if action.action_type == "verify_email":
             if self.engine.email_verifier.is_configured:
                 ok = await self.engine.email_verifier.auto_verify(

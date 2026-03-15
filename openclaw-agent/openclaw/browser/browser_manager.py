@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import logging
 import os
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
@@ -15,9 +16,124 @@ from openclaw.browser.proxy_manager import ProxyManager
 
 logger = logging.getLogger(__name__)
 
+# Error substrings that should trip the circuit breaker (permanent/fatal API errors)
+_CIRCUIT_TRIP_ERRORS = (
+    "credit balance too low",
+    "insufficient_quota",
+    "invalid_api_key",
+    "authentication_error",
+    "invalid x-api-key",
+    "permission_error",
+)
+
+# Error substrings that are transient — do NOT trip the circuit
+_TRANSIENT_ERRORS = (
+    "rate_limit",
+    "overloaded",
+    "timeout",
+    "connection",
+    "network",
+)
+
+
+def _create_llm(model: str = "claude-sonnet-4-20250514") -> Any:
+    """Create an LLM instance using the first available provider.
+
+    Priority order:
+      1. ANTHROPIC_API_KEY  → ChatAnthropic (native, best quality)
+      2. LITELLM_BASE_URL   → ChatAnthropic pointed at LiteLLM proxy
+                              (LiteLLM accepts Anthropic API format and routes internally)
+      3. OPENAI_API_KEY     → ChatOpenAI from browser_use or langchain
+
+    Model mapping when falling back to OpenAI:
+      claude-sonnet-*  → gpt-4o
+      claude-haiku-*   → gpt-4o-mini
+      anything else    → gpt-4o (safe default)
+
+    Raises:
+        ImportError: If browser-use is not installed.
+        EnvironmentError: If no API key or base URL is configured.
+    """
+    anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    litellm_url = os.environ.get("LITELLM_BASE_URL", "")
+    openai_key = os.environ.get("OPENAI_API_KEY", "")
+
+    # --- Provider 1: native Anthropic ---
+    if anthropic_key:
+        try:
+            from browser_use.llm.anthropic.chat import ChatAnthropic
+            logger.debug(f"LLM provider: Anthropic (model={model})")
+            return ChatAnthropic(model=model, temperature=0)
+        except ImportError:
+            raise ImportError("browser-use is required: pip install browser-use")
+
+    # --- Provider 2: LiteLLM proxy (uses Anthropic API format) ---
+    if litellm_url:
+        try:
+            from browser_use.llm.anthropic.chat import ChatAnthropic
+            logger.info(
+                f"LLM provider: LiteLLM proxy at {litellm_url} (model={model})"
+            )
+            return ChatAnthropic(
+                model=model,
+                temperature=0,
+                base_url=litellm_url,
+                # LiteLLM accepts any non-empty string as the api_key when auth
+                # is disabled, or uses its own configured keys.
+                api_key=os.environ.get("LITELLM_API_KEY", "litellm"),
+            )
+        except ImportError:
+            raise ImportError("browser-use is required: pip install browser-use")
+
+    # --- Provider 3: OpenAI ---
+    if openai_key:
+        # Map Anthropic model names to OpenAI equivalents
+        if "haiku" in model.lower():
+            openai_model = "gpt-4o-mini"
+        else:
+            openai_model = "gpt-4o"
+
+        # Prefer browser_use's own ChatOpenAI if available
+        try:
+            from browser_use.llm.openai.chat import ChatOpenAI  # type: ignore[import]
+            logger.info(
+                f"LLM provider: OpenAI via browser_use "
+                f"(mapped {model} → {openai_model})"
+            )
+            return ChatOpenAI(model=openai_model, temperature=0)
+        except ImportError:
+            pass
+
+        # Fall back to langchain-openai
+        try:
+            from langchain_openai import ChatOpenAI as LangchainOpenAI  # type: ignore[import]
+            logger.info(
+                f"LLM provider: OpenAI via langchain "
+                f"(mapped {model} → {openai_model})"
+            )
+            return LangchainOpenAI(model=openai_model, temperature=0)
+        except ImportError:
+            pass
+
+        raise ImportError(
+            "OpenAI key found but no OpenAI chat class available. "
+            "Install either browser-use>=0.11 or langchain-openai."
+        )
+
+    raise EnvironmentError(
+        "No LLM provider configured. Set one of: "
+        "ANTHROPIC_API_KEY, LITELLM_BASE_URL, or OPENAI_API_KEY."
+    )
+
 
 class BrowserManager:
     """Manages browser-use Browser lifecycle, screenshot capture, and session state."""
+
+    # ── Class-level API circuit breaker (shared across all instances) ─────────
+    _api_circuit_open: bool = False
+    _api_circuit_opened_at: float = 0.0
+    _api_circuit_cooldown: int = 1800  # seconds — 30 minutes before auto-retry
+    _api_circuit_error_msg: str = ""
 
     def __init__(
         self,
@@ -43,6 +159,94 @@ class BrowserManager:
         self._page = None
         self._step_callbacks: list[Callable] = []
         self._current_proxy = None
+
+    # ── Circuit breaker class methods ─────────────────────────────────────────
+
+    @classmethod
+    def api_available(cls) -> bool:
+        """Return True when the API circuit breaker is closed (API available).
+
+        If the circuit is open but the cooldown has expired the circuit is
+        automatically reset to half-open so the next call may proceed.
+        """
+        if not cls._api_circuit_open:
+            return True
+        elapsed = time.time() - cls._api_circuit_opened_at
+        if elapsed >= cls._api_circuit_cooldown:
+            logger.info(
+                f"API circuit breaker cooldown expired ({elapsed:.0f}s >= "
+                f"{cls._api_circuit_cooldown}s). Resetting to half-open."
+            )
+            cls.reset_api_circuit()
+            return True
+        return False
+
+    @classmethod
+    def reset_api_circuit(cls) -> None:
+        """Manually reset the API circuit breaker (force-close it)."""
+        cls._api_circuit_open = False
+        cls._api_circuit_opened_at = 0.0
+        cls._api_circuit_error_msg = ""
+        logger.info("API circuit breaker reset — attempts will be allowed.")
+
+    @classmethod
+    def _trip_circuit(cls, error_msg: str) -> None:
+        """Open the circuit breaker due to a fatal API error."""
+        cls._api_circuit_open = True
+        cls._api_circuit_opened_at = time.time()
+        cls._api_circuit_error_msg = error_msg
+        cooldown_min = cls._api_circuit_cooldown // 60
+        logger.warning(
+            f"API circuit breaker TRIPPED: {error_msg!r}. "
+            f"All browser-agent attempts paused for {cooldown_min} minutes. "
+            "Call BrowserManager.reset_api_circuit() to override."
+        )
+
+    @staticmethod
+    def _is_circuit_trip_error(error_str: str) -> bool:
+        """Return True if the error string should trip the circuit breaker."""
+        lower = error_str.lower()
+        # Transient errors must NOT trip the circuit even if they match a trip keyword
+        for transient in _TRANSIENT_ERRORS:
+            if transient in lower:
+                return False
+        for trip in _CIRCUIT_TRIP_ERRORS:
+            if trip in lower:
+                return True
+        return False
+
+    # ── LLM health ────────────────────────────────────────────────────────────
+
+    def llm_health(self) -> dict[str, Any]:
+        """Return LLM provider health status."""
+        cooldown_remaining: float = 0.0
+        if self.__class__._api_circuit_open:
+            elapsed = time.time() - self.__class__._api_circuit_opened_at
+            cooldown_remaining = max(
+                0.0, self.__class__._api_circuit_cooldown - elapsed
+            )
+
+        # Determine active provider
+        if os.environ.get("ANTHROPIC_API_KEY"):
+            active_provider = "anthropic"
+        elif os.environ.get("LITELLM_BASE_URL"):
+            active_provider = "litellm"
+        elif os.environ.get("OPENAI_API_KEY"):
+            active_provider = "openai"
+        else:
+            active_provider = "none"
+
+        return {
+            "circuit_open": self.__class__._api_circuit_open,
+            "circuit_error": self.__class__._api_circuit_error_msg,
+            "circuit_cooldown_remaining": cooldown_remaining,
+            "active_provider": active_provider,
+            "anthropic_key_set": bool(os.environ.get("ANTHROPIC_API_KEY")),
+            "openai_key_set": bool(os.environ.get("OPENAI_API_KEY")),
+            "litellm_url_set": bool(os.environ.get("LITELLM_BASE_URL")),
+        }
+
+    # ── Browser lifecycle ─────────────────────────────────────────────────────
 
     async def launch(self, platform_id: str | None = None) -> None:
         """Launch browser with stealth config, proxy rotation, and session restore."""
@@ -102,20 +306,16 @@ class BrowserManager:
             platform_id: Platform ID for session management
             sensitive_data: Dict of {placeholder: secret_value} to mask in logs
             max_steps: Maximum browser actions before stopping
-            model: Anthropic model ID (e.g. claude-sonnet-4-20250514, claude-haiku-4-5-20251001)
+            model: Model ID — mapped to the active provider automatically
         """
         try:
             from browser_use import Agent
-            from browser_use.llm.anthropic.chat import ChatAnthropic
         except ImportError:
             raise ImportError(
                 "browser-use is required: pip install browser-use"
             )
 
-        llm = ChatAnthropic(
-            model=model,
-            temperature=0,
-        )
+        llm = _create_llm(model)
 
         if not self._browser:
             await self.launch(platform_id)
@@ -151,8 +351,28 @@ class BrowserManager:
             sensitive_data: Secrets to mask in logs
             max_steps: Max browser steps
             on_step: Callback for each step (step_number, action, screenshot_path)
-            model: Anthropic model ID for this agent run
+            model: Model ID for this agent run
         """
+        # ── Circuit breaker pre-check ──────────────────────────────────────
+        if not self.api_available():
+            elapsed = time.time() - self.__class__._api_circuit_opened_at
+            cooldown_remaining = max(
+                0, self.__class__._api_circuit_cooldown - int(elapsed)
+            )
+            msg = (
+                f"API circuit breaker is open — skipping agent attempt. "
+                f"Reason: {self.__class__._api_circuit_error_msg!r}. "
+                f"Retry in {cooldown_remaining}s or call "
+                "BrowserManager.reset_api_circuit()."
+            )
+            logger.warning(msg)
+            return {
+                "success": False,
+                "error": msg,
+                "steps": 0,
+                "screenshots": [],
+            }
+
         agent = await self.create_agent(
             task=task,
             platform_id=platform_id,
@@ -194,7 +414,13 @@ class BrowserManager:
                 "screenshots": screenshots,
             }
         except Exception as e:
+            error_str = str(e)
             logger.error(f"Agent execution failed: {e}")
+
+            # ── Circuit breaker: trip on fatal API errors ──────────────────
+            if self._is_circuit_trip_error(error_str):
+                self._trip_circuit(error_str)
+
             # Report proxy failure
             if self._current_proxy:
                 self.proxy_manager.report_failure(
@@ -202,7 +428,7 @@ class BrowserManager:
                 )
             return {
                 "success": False,
-                "error": str(e),
+                "error": error_str,
                 "steps": step_count,
                 "screenshots": screenshots,
             }
