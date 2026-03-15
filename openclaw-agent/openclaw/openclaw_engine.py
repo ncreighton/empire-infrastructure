@@ -17,6 +17,7 @@ from openclaw.agents.verification_agent import VerificationAgent
 from openclaw.amplify.amplify_pipeline import AmplifyPipeline
 from openclaw.browser.browser_manager import BrowserManager
 from openclaw.browser.gologin_manager import GoLoginBrowserManager
+from openclaw.browser.identity_manager import IdentityManager
 from openclaw.browser.captcha_handler import CaptchaHandler
 from openclaw.browser.proxy_manager import ProxyManager
 from openclaw.browser.step_router import StepRouter
@@ -62,6 +63,7 @@ class OpenClawEngine:
         # Browser + agents
         self.captcha = CaptchaHandler()
         self.proxy_manager = ProxyManager()
+        self.identity_manager = IdentityManager()
         self.step_router = StepRouter(self.codex)
         self.headless = headless
 
@@ -250,8 +252,21 @@ class OpenClawEngine:
                 and os.environ.get("OPENCLAW_BROWSER_MODE", "").lower() != "playwright"
             )
             if use_gologin:
-                logger.info(f"[{platform_id}] Using GoLogin anti-detect browser")
-                browser = GoLoginBrowserManager(headless=self.headless)
+                # Resolve platform-specific GoLogin profile via IdentityManager
+                assignment = self.identity_manager.resolve(platform_id)
+                profile_id = (
+                    assignment.profile_id if assignment
+                    else os.environ.get("GOLOGIN_PROFILE_ID", "")
+                )
+                logger.info(
+                    f"[{platform_id}] Using GoLogin anti-detect browser "
+                    f"(profile={assignment.profile_name if assignment else 'default'}, "
+                    f"dedicated={assignment.dedicated if assignment else False})"
+                )
+                browser = GoLoginBrowserManager(
+                    headless=self.headless,
+                    profile_id=profile_id,
+                )
             else:
                 logger.info(f"[{platform_id}] Using Playwright stealth browser")
                 browser = BrowserManager(

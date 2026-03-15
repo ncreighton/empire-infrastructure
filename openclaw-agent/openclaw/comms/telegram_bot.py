@@ -95,6 +95,15 @@ def truncate(text: str, max_len: int = 80) -> str:
     return text[:max_len] + "..." if len(text) > max_len else text
 
 
+def _get_msg(update: Update) -> Any:
+    """Extract reply target from update (works for both messages and callbacks)."""
+    if update.message:
+        return update.message
+    if update.callback_query:
+        return update.callback_query.message
+    return None
+
+
 def _ts_within_minutes(timestamp: Any, minutes: int) -> bool:
     """Return True if *timestamp* falls within the last *minutes* minutes.
 
@@ -357,6 +366,7 @@ class OpenClawTelegramBot:
             BotCommand("deny", "Deny a pending action"),
             BotCommand("live", "What is happening right now"),
             BotCommand("report", "Comprehensive daily report"),
+            BotCommand("fleet", "GoLogin browser identity fleet"),
         ]
         await app.bot.set_my_commands(commands)
 
@@ -384,6 +394,7 @@ class OpenClawTelegramBot:
             ("deny", self._cmd_deny),
             ("live", self._cmd_live),
             ("report", self._cmd_report),
+            ("fleet", self._cmd_fleet),
         ]
         for name, handler in commands:
             app.add_handler(CommandHandler(name, handler))
@@ -400,11 +411,17 @@ class OpenClawTelegramBot:
 
     @admin_only
     async def _cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        msg = _get_msg(update)
+        if not msg:
+            return
         text = "*OpenClaw Command Center*\nSelect an action:"
-        await safe_send(update.message, text, reply_markup=main_menu())
+        await safe_send(msg, text, reply_markup=main_menu())
 
     @admin_only
     async def _cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        msg = _get_msg(update)
+        if not msg:
+            return
         lines = [
             "*OpenClaw Commands*\n",
             "*Monitoring*",
@@ -436,11 +453,14 @@ class OpenClawTelegramBot:
             "/mute \\<minutes\\> \\- Mute notifications",
             "/unmute \\- Resume notifications",
         ]
-        await safe_send(update.message, "\n".join(lines))
+        await safe_send(msg, "\n".join(lines))
 
     @admin_only
     async def _cmd_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        await update.message.chat.send_action("typing")
+        msg = _get_msg(update)
+        if not msg:
+            return
+        await msg.chat.send_action("typing")
         daemon = getattr(self.engine, "_daemon", None)
         if daemon:
             status = daemon.get_status()
@@ -462,15 +482,18 @@ class OpenClawTelegramBot:
         else:
             lines = ["\u23f9\ufe0f *Daemon not initialized*"]
 
-        await safe_send(update.message, "\n".join(lines))
+        await safe_send(msg, "\n".join(lines))
 
     @admin_only
     async def _cmd_health(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        await update.message.chat.send_action("typing")
+        msg = _get_msg(update)
+        if not msg:
+            return
+        await msg.chat.send_action("typing")
         try:
             checks = self.engine.codex.get_recent_checks(limit=20)
             if not checks:
-                await update.message.reply_text("No health checks recorded yet.")
+                await msg.reply_text("No health checks recorded yet.")
                 return
 
             lines = ["*Recent Health Checks*\n"]
@@ -482,20 +505,23 @@ class OpenClawTelegramBot:
                     "degraded": "\U0001f7e1",
                     "down": "\U0001f534",
                 }.get(result, "\u26aa")
-                msg = truncate(c.get("message", ""), 60)
-                lines.append(f"{icon} {escape_md(name)}: {escape_md(msg)}")
+                detail = truncate(c.get("message", ""), 60)
+                lines.append(f"{icon} {escape_md(name)}: {escape_md(detail)}")
 
-            await safe_send(update.message, "\n".join(lines))
+            await safe_send(msg, "\n".join(lines))
         except Exception as e:
-            await update.message.reply_text(f"Health check error: {e}")
+            await msg.reply_text(f"Health check error: {e}")
 
     @admin_only
     async def _cmd_alerts(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        await update.message.chat.send_action("typing")
+        msg = _get_msg(update)
+        if not msg:
+            return
+        await msg.chat.send_action("typing")
         try:
-            alerts = self.engine.codex.get_recent_alerts(limit=10)
+            alerts = self.engine.codex.get_alerts(limit=10)
             if not alerts:
-                await update.message.reply_text("No alerts.")
+                await msg.reply_text("No alerts.")
                 return
 
             lines = ["*Recent Alerts*\n"]
@@ -510,22 +536,25 @@ class OpenClawTelegramBot:
                 ack = "\u2705" if a.get("acknowledged") else ""
                 lines.append(f"{icon} {escape_md(title)} {ack}")
 
-            await safe_send(update.message, "\n".join(lines))
+            await safe_send(msg, "\n".join(lines))
         except Exception as e:
-            await update.message.reply_text(f"Alerts error: {e}")
+            await msg.reply_text(f"Alerts error: {e}")
 
     @admin_only
     async def _cmd_missions(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        await update.message.chat.send_action("typing")
+        msg = _get_msg(update)
+        if not msg:
+            return
+        await msg.chat.send_action("typing")
         vibe = getattr(self.engine, "vibecoder", None)
         if not vibe:
-            await update.message.reply_text("VibeCoder not initialized.")
+            await msg.reply_text("VibeCoder not initialized.")
             return
 
         try:
             missions = vibe.list_missions(limit=10)
             if not missions:
-                await update.message.reply_text("No missions.")
+                await msg.reply_text("No missions.")
                 return
 
             lines = ["*VibeCoder Missions*\n"]
@@ -544,10 +573,6 @@ class OpenClawTelegramBot:
                     f"{status_icon} `{escape_md(m.mission_id[:8])}` {escape_md(title)}"
                 )
 
-                # Action buttons for non-terminal missions
-                if m.status in ("queued", "executing", "reviewing", "paused"):
-                    pass  # Buttons via callback
-
             keyboard = None
             if missions and missions[0].status in ("failed",):
                 keyboard = InlineKeyboardMarkup([
@@ -556,38 +581,44 @@ class OpenClawTelegramBot:
                     )]
                 ])
 
-            await safe_send(update.message, "\n".join(lines), reply_markup=keyboard)
+            await safe_send(msg, "\n".join(lines), reply_markup=keyboard)
         except Exception as e:
-            await update.message.reply_text(f"Missions error: {e}")
+            await msg.reply_text(f"Missions error: {e}")
 
     @admin_only
     async def _cmd_projects(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        await update.message.chat.send_action("typing")
+        msg = _get_msg(update)
+        if not msg:
+            return
+        await msg.chat.send_action("typing")
         vibe = getattr(self.engine, "vibecoder", None)
         if not vibe:
-            await update.message.reply_text("VibeCoder not initialized.")
+            await msg.reply_text("VibeCoder not initialized.")
             return
 
         try:
             projects = vibe.list_projects()
             if not projects:
-                await update.message.reply_text("No registered projects.")
+                await msg.reply_text("No registered projects.")
                 return
 
             lines = ["*Registered Projects*\n"]
             for p in projects:
                 lines.append(f"\U0001f4c1 `{escape_md(p.project_id)}` \\- {escape_md(p.root_path)}")
 
-            await safe_send(update.message, "\n".join(lines))
+            await safe_send(msg, "\n".join(lines))
         except Exception as e:
-            await update.message.reply_text(f"Projects error: {e}")
+            await msg.reply_text(f"Projects error: {e}")
 
     @admin_only
     async def _cmd_costs(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        await update.message.chat.send_action("typing")
+        msg = _get_msg(update)
+        if not msg:
+            return
+        await msg.chat.send_action("typing")
         vibe = getattr(self.engine, "vibecoder", None)
         if not vibe:
-            await update.message.reply_text("VibeCoder not initialized.")
+            await msg.reply_text("VibeCoder not initialized.")
             return
 
         try:
@@ -606,13 +637,16 @@ class OpenClawTelegramBot:
                 cost_str = escape_md(f"{cost:.4f}")
                 lines.append(f"  {escape_md(model)}: ${cost_str} \\({calls} calls\\)")
 
-            await safe_send(update.message, "\n".join(lines))
+            await safe_send(msg, "\n".join(lines))
         except Exception as e:
-            await update.message.reply_text(f"Costs error: {e}")
+            await msg.reply_text(f"Costs error: {e}")
 
     @admin_only
     async def _cmd_dashboard(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        await update.message.chat.send_action("typing")
+        msg = _get_msg(update)
+        if not msg:
+            return
+        await msg.chat.send_action("typing")
         try:
             stats = self.engine.get_dashboard()
             lines = [
@@ -622,22 +656,25 @@ class OpenClawTelegramBot:
                 f"Pending: {stats.pending_signups}",
                 f"Categories: {stats.categories_covered}",
             ]
-            await safe_send(update.message, "\n".join(lines))
+            await safe_send(msg, "\n".join(lines))
         except Exception as e:
-            await update.message.reply_text(f"Dashboard error: {e}")
+            await msg.reply_text(f"Dashboard error: {e}")
 
     @admin_only
     async def _cmd_crons(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        await update.message.chat.send_action("typing")
+        msg = _get_msg(update)
+        if not msg:
+            return
+        await msg.chat.send_action("typing")
         daemon = getattr(self.engine, "_daemon", None)
         if not daemon:
-            await update.message.reply_text("Daemon not initialized.")
+            await msg.reply_text("Daemon not initialized.")
             return
 
         try:
             jobs = daemon.cron.get_all()
             if not jobs:
-                await update.message.reply_text("No cron jobs.")
+                await msg.reply_text("No cron jobs.")
                 return
 
             lines = ["*Cron Jobs*\n"]
@@ -645,15 +682,18 @@ class OpenClawTelegramBot:
                 icon = "\u25b6\ufe0f" if j.enabled else "\u23f8\ufe0f"
                 lines.append(f"{icon} {escape_md(j.name)} \\- {escape_md(j.schedule)}")
 
-            await safe_send(update.message, "\n".join(lines))
+            await safe_send(msg, "\n".join(lines))
         except Exception as e:
-            await update.message.reply_text(f"Cron error: {e}")
+            await msg.reply_text(f"Cron error: {e}")
 
     @admin_only
     async def _cmd_vibe(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Submit a VibeCoder mission: /vibe <title> | <description>"""
+        msg = _get_msg(update)
+        if not msg:
+            return
         if not context.args:
-            await update.message.reply_text(
+            await msg.reply_text(
                 "Usage: /vibe <title> | <description>\n"
                 "Example: /vibe Fix login bug | The login form crashes on empty email"
             )
@@ -670,27 +710,30 @@ class OpenClawTelegramBot:
 
         vibe = getattr(self.engine, "vibecoder", None)
         if not vibe:
-            await update.message.reply_text("VibeCoder not initialized.")
+            await msg.reply_text("VibeCoder not initialized.")
             return
 
-        await update.message.chat.send_action("typing")
+        await msg.chat.send_action("typing")
         try:
             mission = vibe.submit_mission(
                 project_id="openclaw-agent",
                 title=title,
                 description=description,
             )
-            await update.message.reply_text(
+            await msg.reply_text(
                 f"\U0001f4cb Mission queued: {mission.mission_id[:8]}\n"
                 f"Title: {title}\n"
                 f"Status: {mission.status}"
             )
         except Exception as e:
-            await update.message.reply_text(f"Mission submit failed: {e}")
+            await msg.reply_text(f"Mission submit failed: {e}")
 
     @admin_only
     async def _cmd_mute(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Mute notifications for N minutes."""
+        msg = _get_msg(update)
+        if not msg:
+            return
         minutes = 30
         if context.args:
             try:
@@ -699,12 +742,15 @@ class OpenClawTelegramBot:
                 pass
 
         self._muted_until = time.time() + (minutes * 60)
-        await update.message.reply_text(f"Notifications muted for {minutes} minutes.")
+        await msg.reply_text(f"Notifications muted for {minutes} minutes.")
 
     @admin_only
     async def _cmd_unmute(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        msg = _get_msg(update)
+        if not msg:
+            return
         self._muted_until = 0
-        await update.message.reply_text("Notifications resumed.")
+        await msg.reply_text("Notifications resumed.")
 
     @admin_only
     async def _cmd_accounts(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -903,8 +949,11 @@ class OpenClawTelegramBot:
     @admin_only
     async def _cmd_approve(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Approve a pending action: /approve <platform>"""
+        msg = _get_msg(update)
+        if not msg:
+            return
         if not context.args:
-            await update.message.reply_text("Usage: /approve <platform>")
+            await msg.reply_text("Usage: /approve <platform>")
             return
         platform = context.args[0].strip()
         try:
@@ -914,7 +963,7 @@ class OpenClawTelegramBot:
                 if h.get("result") == "pending_approval" and h.get("target") == platform
             ]
             if not pending:
-                await update.message.reply_text(f"No pending action found for platform: {platform}")
+                await msg.reply_text(f"No pending action found for platform: {platform}")
                 return
             action = pending[0]
             self.engine.codex.log_action(
@@ -924,15 +973,18 @@ class OpenClawTelegramBot:
                 result="approved",
                 autonomous=False,
             )
-            await update.message.reply_text(f"\u2705 Approved action for {platform}")
+            await msg.reply_text(f"\u2705 Approved action for {platform}")
         except Exception as e:
-            await update.message.reply_text(f"Approve error: {e}")
+            await msg.reply_text(f"Approve error: {e}")
 
     @admin_only
     async def _cmd_deny(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Deny a pending action: /deny <platform>"""
+        msg = _get_msg(update)
+        if not msg:
+            return
         if not context.args:
-            await update.message.reply_text("Usage: /deny <platform>")
+            await msg.reply_text("Usage: /deny <platform>")
             return
         platform = context.args[0].strip()
         try:
@@ -942,7 +994,7 @@ class OpenClawTelegramBot:
                 if h.get("result") == "pending_approval" and h.get("target") == platform
             ]
             if not pending:
-                await update.message.reply_text(f"No pending action found for platform: {platform}")
+                await msg.reply_text(f"No pending action found for platform: {platform}")
                 return
             action = pending[0]
             self.engine.codex.log_action(
@@ -952,9 +1004,9 @@ class OpenClawTelegramBot:
                 result="denied",
                 autonomous=False,
             )
-            await update.message.reply_text(f"\u274c Denied action for {platform}")
+            await msg.reply_text(f"\u274c Denied action for {platform}")
         except Exception as e:
-            await update.message.reply_text(f"Deny error: {e}")
+            await msg.reply_text(f"Deny error: {e}")
 
     @admin_only
     async def _cmd_live(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1156,6 +1208,44 @@ class OpenClawTelegramBot:
             target = update.message if update.message else update.callback_query
             if target:
                 await target.reply_text(f"Report error: {e}")
+
+    @admin_only
+    async def _cmd_fleet(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """GoLogin browser identity fleet status."""
+        try:
+            from openclaw.browser.identity_manager import IdentityManager
+
+            im = IdentityManager()
+            stats = im.stats()
+
+            lines = [
+                "*\U0001f30d GoLogin Identity Fleet*\n",
+                f"*Dedicated Profiles:* {stats['dedicated_profiles']}",
+                f"*Pool Profiles:* {stats['pool_profiles']}",
+                f"*Total:* {stats['total_profiles']}\n",
+                "*Dedicated Assignments:*",
+            ]
+            for pid in stats["dedicated_platforms"]:
+                a = im.resolve(pid)
+                if a:
+                    lines.append(
+                        f"  \u2022 {escape_md(pid)}: "
+                        f"`{escape_md(a.profile_id[:12])}\\.\\.\\."
+                        f"` \\({escape_md(a.profile_name)}\\)"
+                    )
+
+            lines.append("\n*Pool Coverage:*")
+            lines.append(
+                f"  {46 - stats['dedicated_profiles']} platforms share "
+                f"{stats['pool_profiles']} pooled profiles"
+            )
+
+            target = update.message if update.message else update.callback_query
+            await safe_send(target, "\n".join(lines))
+        except Exception as e:
+            target = update.message if update.message else update.callback_query
+            if target:
+                await target.reply_text(f"Fleet error: {e}")
 
     # -------------------------------------------------------------------
     # Callback handlers

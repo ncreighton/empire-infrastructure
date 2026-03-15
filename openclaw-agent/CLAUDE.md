@@ -23,7 +23,7 @@ Uses FORGE + AMPLIFY intelligence pattern. Deploys to VPS Docker on port 8100.
 - Knowledge base: `openclaw/knowledge/` (platforms.py, profile_templates.py, brand_config.py)
 - FORGE modules: `openclaw/forge/`
 - AMPLIFY pipeline: `openclaw/amplify/amplify_pipeline.py`
-- Browser automation: `openclaw/browser/` (browser_manager, stealth, captcha_handler, session_manager, proxy_manager, step_router)
+- Browser automation: `openclaw/browser/` (browser_manager, gologin_manager, identity_manager, cookie_seeder, stealth, captcha_handler, session_manager, proxy_manager, step_router)
 - Agent system: `openclaw/agents/`
 - Automation: `openclaw/automation/` (email_verifier, rate_limiter, retry_engine, scheduler, profile_sync, webhook_notifier, analytics)
 - Daemon: `openclaw/daemon/` (heartbeat_daemon, alert_router, cron_scheduler, proactive_agent, self_healer, heartbeat_config)
@@ -308,7 +308,9 @@ All modules are fully connected — no dead code:
 - **ProactiveAgent -> VibeCoder**: When health checks fail 3+ times consecutively, the ProactiveAgent auto-creates VibeCoder bugfix missions. Stalled missions (>1h executing) are force-failed for retry. Unregistered empire projects are auto-discovered via weekly cron scan.
 - **VibeCoder -> Webhook**: Mission lifecycle events (queued, started, completed, failed, deployed) fire webhook notifications to all configured endpoints, enabling dashboard monitoring of autonomous coding activity.
 - **Webhook -> Telegram**: WebhookNotifier has a `telegram_bot` attribute wired by OpenClawEngine. Every `notify()` call also pushes to Telegram via `notify_if_not_muted()`. Mute/unmute via `/mute` and `/unmute` commands.
-- **Telegram -> Engine**: Command center with 13 commands (/status, /health, /alerts, /missions, /projects, /costs, /dashboard, /crons, /vibe, /mute, /unmute, /start, /help). Admin-only via decorator. Inline keyboard buttons for navigation. Starts alongside HeartbeatDaemon in asyncio.gather().
+- **Telegram -> Engine**: Command center with 22 commands (/status, /health, /alerts, /missions, /projects, /costs, /dashboard, /crons, /vibe, /mute, /unmute, /accounts, /profiles, /activity, /pending, /approve, /deny, /live, /report, /fleet, /start, /help). Admin-only via decorator. Inline keyboard buttons for navigation. Starts alongside HeartbeatDaemon in asyncio.gather().
+- **IdentityManager -> GoLogin**: Maps each platform to a unique GoLogin browser profile. 6 dedicated profiles for high-revenue platforms (Gumroad, Etsy, Creative Market, Envato, PromptBase, n8n Creator Hub). Remaining 40 platforms share 3 pool profiles via consistent hashing.
+- **CookieSeeder -> GoLogin**: Injects realistic browsing cookies (Google, YouTube, Amazon, Reddit, GitHub, etc.) into GoLogin profiles so they look like real used browsers, not fresh bot instances. Each profile gets a unique cookie mix from 15-35 cookies across 5-11 domains.
 
 ## LLM Usage
 

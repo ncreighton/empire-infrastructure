@@ -6,6 +6,7 @@ from openclaw.browser.proxy_manager import ProxyManager
 from openclaw.browser.captcha_handler import CaptchaHandler
 from openclaw.browser.session_manager import SessionManager
 from openclaw.browser.step_router import StepRouter
+from openclaw.browser.identity_manager import IdentityManager
 from openclaw.browser.stealth import (
     get_browser_config,
     get_random_user_agent,
@@ -18,6 +19,7 @@ from openclaw.browser.stealth import (
 __all__ = [
     "BrowserManager",
     "GoLoginBrowserManager",
+    "IdentityManager",
     "ProxyManager",
     "CaptchaHandler",
     "SessionManager",

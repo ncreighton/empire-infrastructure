@@ -1092,6 +1092,27 @@ async def step_model_routing():
     return engine.step_router.get_routing_summary()
 
 
+@app.get("/fleet")
+async def fleet_status():
+    """GoLogin browser identity fleet status."""
+    try:
+        stats = engine.identity_manager.stats()
+        # Add per-platform assignments
+        assignments = {}
+        for pid in stats["dedicated_platforms"]:
+            a = engine.identity_manager.resolve(pid)
+            if a:
+                assignments[pid] = {
+                    "profile_id": a.profile_id,
+                    "profile_name": a.profile_name,
+                    "dedicated": a.dedicated,
+                }
+        stats["assignments"] = assignments
+        return stats
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 # ─── Daemon auto-start ──────────────────────────────────────────────────────
 
 
