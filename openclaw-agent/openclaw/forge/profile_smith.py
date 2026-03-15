@@ -438,6 +438,8 @@ class ProfileSmith:
         remaining: list[tuple[str, str]] = []
 
         for name, url in brand_socials.items():
+            if not url:  # Skip empty URLs
+                continue
             name_lower = name.lower()
             if name_lower in priority_order:
                 sorted_links.append((name, url))

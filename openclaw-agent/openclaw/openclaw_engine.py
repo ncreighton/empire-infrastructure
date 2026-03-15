@@ -420,13 +420,21 @@ class OpenClawEngine:
         stored = self.codex.get_profile(platform_id)
         if not stored:
             return None
+        # get_profile() wraps the actual fields inside a "content" key
+        profile_data = stored.get("content", stored)
         content = ProfileContent(
             platform_id=platform_id,
-            username=stored.get("username", ""),
-            bio=stored.get("bio", ""),
-            tagline=stored.get("tagline", ""),
-            description=stored.get("description", ""),
-            website_url=stored.get("website_url", ""),
+            username=profile_data.get("username", ""),
+            display_name=profile_data.get("display_name", ""),
+            email=profile_data.get("email", ""),
+            bio=profile_data.get("bio", ""),
+            tagline=profile_data.get("tagline", ""),
+            description=profile_data.get("description", ""),
+            website_url=profile_data.get("website_url", ""),
+            avatar_path=profile_data.get("avatar_path", ""),
+            banner_path=profile_data.get("banner_path", ""),
+            social_links=profile_data.get("social_links", {}),
+            seo_keywords=profile_data.get("seo_keywords", []),
         )
         return self.sentinel.score(content)
 

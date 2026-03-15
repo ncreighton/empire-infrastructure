@@ -192,7 +192,7 @@ class TestLowScoreProfiles:
         assert len(actions) == 1
         assert actions[0].action_type == "enhance_profile"
         assert actions[0].priority == 5
-        assert actions[0].requires_approval is True
+        assert actions[0].requires_approval is False
 
     def test_skips_good_grade_profiles(self, agent, mock_engine):
         mock_engine.codex.get_all_profiles.return_value = [

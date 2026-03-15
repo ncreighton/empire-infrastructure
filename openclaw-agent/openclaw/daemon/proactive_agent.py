@@ -62,6 +62,7 @@ class ProactiveAgent:
         actions.extend(self._check_low_score_profiles())
         actions.extend(self._check_stale_profiles())
         actions.extend(self._check_session_cleanup())
+        actions.extend(self._check_vibecoder_opportunities())
 
         # Sort by priority (1=highest)
         actions.sort(key=lambda a: a.priority)
@@ -318,13 +319,23 @@ class ProactiveAgent:
             return 0
 
     def _check_low_score_profiles(self) -> list[ProactiveAction]:
-        """Find profiles below quality threshold."""
+        """Find profiles below quality threshold.
+
+        Skips platforms that have no profile fields (bio_max_length=0 and
+        description_max_length=0) since enhancing them is pointless.
+        """
+        from openclaw.knowledge.platforms import get_platform
+
         profiles = self.codex.get_all_profiles()
         actions = []
         for profile in profiles:
             score = profile.get("sentinel_score", 0)
             grade = profile.get("grade", "F")
             if grade in ("D", "F") and score > 0:
+                # Skip platforms that don't support profile content
+                platform = get_platform(profile["platform_id"])
+                if platform and platform.bio_max_length == 0 and platform.description_max_length == 0:
+                    continue
                 actions.append(ProactiveAction(
                     action_type="enhance_profile",
                     priority=5,

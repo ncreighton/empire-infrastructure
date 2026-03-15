@@ -535,19 +535,15 @@ class HeartbeatDaemon:
 
         elif action.action_type == "enhance_profile":
             try:
-                # Regenerate profile content and re-score
+                # Generate fresh profile content via ProfileSmith
                 content = self.engine.generate_profile(action.target)
-                score = self.engine.score_profile(action.target)
-                if score:
-                    score.calculate()
-                    new_grade = score.grade.value
-                    new_score = score.total_score
-                else:
-                    # Build a fresh score from the sentinel
-                    score = self.engine.sentinel.score(content)
-                    new_grade = score.grade.value
-                    new_score = score.total_score
-                # Persist via codex
+                # Score the NEW content and auto-enhance if below threshold
+                score, content = self.engine.sentinel.score_and_enhance(
+                    content, threshold=75.0
+                )
+                new_grade = score.grade.value
+                new_score = score.total_score
+                # Persist enhanced content + score
                 self.codex.store_profile(content, score)
                 self.codex.log_action(
                     "enhance_profile", action.target,
