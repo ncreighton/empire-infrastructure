@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Primary Meta -->
+  {% block meta_title %}<title>{% block title %}Mystic Luna{% endblock %} — AI Spiritual Guide & Tarot Reader</title>{% endblock %}
+  {% block meta_description %}<meta name="description" content="{% block description %}Free tarot readings, moon rituals, spell crafting, and spiritual guidance from Luna Moonshadow. Your AI-powered mystical companion.{% endblock %}">{% endblock %}
+  <meta name="theme-color" content="#0a0a1a">
+
+  <!-- Canonical -->
+  <link rel="canonical" href="https://mysticluna.com{{ request.path if request is defined else '' }}">
+
+  <!-- Favicon -->
+  <link rel="icon" href="/static/images/favicon.png" type="image/png">
+  <link rel="apple-touch-icon" href="/static/images/favicon.png">
+
+  <!-- PWA -->
+  <link rel="manifest" href="/static/manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Mystic Luna">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Mystic Luna">
+  <meta property="og:title" content="{% block og_title %}Mystic Luna — AI Spiritual Guide & Tarot Reader{% endblock %}">
+  <meta property="og:description" content="{% block og_description %}Free tarot readings, moon rituals, spell crafting, and spiritual guidance from Luna Moonshadow. Your AI-powered mystical companion.{% endblock %}">
+  <meta property="og:image" content="{% block meta_image %}/static/images/og-image.png{% endblock %}">
+  <meta property="og:url" content="https://mysticluna.com{{ request.path if request is defined else '' }}">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:site" content="@MysticLunaAI">
+  <meta name="twitter:title" content="{% block twitter_title %}Mystic Luna — AI Spiritual Guide & Tarot Reader{% endblock %}">
+  <meta name="twitter:description" content="{% block twitter_description %}Free tarot readings, moon rituals, spell crafting, and spiritual guidance from Luna Moonshadow. Your AI-powered mystical companion.{% endblock %}">
+  <meta name="twitter:image" content="{% block twitter_image %}/static/images/og-image.png{% endblock %}">
+
+  <!-- Structured Data: Website -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "Mystic Luna",
+    "url": "https://mysticluna.com",
+    "description": "AI-powered spiritual guide offering free tarot readings, moon rituals, spell crafting, and personalized guidance.",
+    "potentialAction": {
+      "@type": "SearchAction",
+      "target": "https://mysticluna.com/encyclopedia?q={search_term_string}",
+      "query-input": "required name=search_term_string"
+    }
+  }
+  </script>
+
+  <link rel="stylesheet" href="/static/css/style.css">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <div class="starfield"></div>
+
+  <!-- Navigation -->
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="/" class="nav-logo"><span class="moon">🌙</span> Mystic Luna</a>
+      <button class="nav-toggle" onclick="this.nextElementSibling.classList.toggle('open')" aria-label="Menu">☰</button>
+      <ul class="nav-links">
+        <li><a href="/#readings">Readings</a></li>
+        <li><a href="/pricing">Pricing</a></li>
+        <li><a href="/#how-it-works">How It Works</a></li>
+        <li><a href="/daily">Daily</a></li>
+        <li><a href="/moon-oracle">Moon</a></li>
+        <li><a href="/spell-workshop">Spells</a></li>
+        <li><a href="/encyclopedia">Herbs &amp; Crystals</a></li>
+        {% if user %}
+          <li><a href="/grimoire">Grimoire</a></li>
+          <li><a href="/chat">Chat with Luna</a></li>
+          <li><a href="/companion">Journey</a></li>
+          <li><a href="/dashboard">Dashboard</a></li>
+          <li><a href="/account">Account</a></li>
+          {% if user.role == 'admin' %}<li><a href="/admin">Admin</a></li>{% endif %}
+          <li><a href="/logout" class="btn btn-ghost btn-sm">Sign Out</a></li>
+        {% else %}
+          <li><a href="/login">Sign In</a></li>
+          <li><a href="/free-reading" class="btn btn-primary btn-sm nav-cta">Free Reading</a></li>
+        {% endif %}
+      </ul>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div>
+          <h4>🌙 Mystic Luna</h4>
+          <p>AI-powered spiritual readings guided by centuries of mystical tradition. Luna Moonshadow offers personalized tarot, astrology, and spiritual guidance — transparently powered by artificial intelligence.</p>
+        </div>
+        <div>
+          <h4>Readings</h4>
+          <ul>
+            <li><a href="/free-reading">Free Card Pull</a></li>
+            <li><a href="/pricing">All Readings</a></li>
+            <li><a href="/reading/celtic_cross">Celtic Cross</a></li>
+            <li><a href="/reading/love_relationships">Love Reading</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Explore</h4>
+          <ul>
+            <li><a href="/daily">Daily Practice</a></li>
+            <li><a href="/moon-oracle">Moon Oracle</a></li>
+            <li><a href="/spell-workshop">Spell Workshop</a></li>
+            <li><a href="/encyclopedia">Herb &amp; Crystal Guide</a></li>
+            <li><a href="/wheel-of-year">Wheel of the Year</a></li>
+            <li><a href="/meditation">Meditations</a></li>
+            <li><a href="/grimoire">Book of Shadows</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Connect</h4>
+          <ul>
+            <li><a href="#">Telegram</a></li>
+            <li><a href="#">Discord</a></li>
+            <li><a href="#">Newsletter</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>&copy; 2026 Mystic Luna. All readings are AI-generated spiritual guidance.</span>
+        <span><a href="/terms">Terms</a> &middot; <a href="/privacy">Privacy</a> &middot; <a href="/refund-policy">Refund Policy</a></span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="/static/js/app.js"></script>
+  {% block scripts %}{% endblock %}
+  <script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/static/service-worker.js')
+    .then(r => console.log('Luna SW registered'))
+    .catch(e => console.log('SW failed:', e));
+}
+</script>
+</body>
+</html>

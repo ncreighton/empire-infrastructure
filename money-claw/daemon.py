@@ -18,6 +18,7 @@ import threading
 from moneyclaw.brain import Brain
 from moneyclaw.memory import Memory
 from moneyclaw.scheduler import Scheduler
+from moneyclaw.agents import LunaGuardian
 from moneyclaw.config import get_config
 
 logging.basicConfig(
@@ -40,27 +41,13 @@ def start_api(config):
 
 
 def start_telegram(brain):
-    """Start Telegram bot if configured."""
+    """Telegram bot now starts via FastAPI lifespan — this is a no-op."""
     config = get_config()
     if not config.telegram.bot_token:
         logger.info("Telegram bot not configured (no TELEGRAM_BOT_TOKEN)")
-        return None
-
-    try:
-        from moneyclaw.channels.telegram import TelegramBot
-        bot = TelegramBot(brain=brain)
-        app = bot.build_app()
-
-        def run_bot():
-            app.run_polling(drop_pending_updates=True)
-
-        thread = threading.Thread(target=run_bot, daemon=True)
-        thread.start()
-        logger.info("Telegram bot started")
-        return thread
-    except Exception as e:
-        logger.warning("Telegram bot failed to start: %s", e)
-        return None
+    else:
+        logger.info("Telegram bot will start via FastAPI lifespan")
+    return None
 
 
 def check_proactive_events(memory):
@@ -105,6 +92,28 @@ def main():
     # Check proactive events on startup
     check_proactive_events(memory)
 
+    # Start Luna Guardian agent in background thread
+    guardian = LunaGuardian(
+        base_url=f"http://localhost:{config.port}",
+        vision_url="http://localhost:8002",
+    )
+
+    def run_guardian():
+        import time
+        time.sleep(15)  # Wait for API server to be ready
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(guardian.run())
+        except Exception as e:
+            logger.error("Guardian crashed: %s", e)
+        finally:
+            loop.close()
+
+    guardian_thread = threading.Thread(target=run_guardian, daemon=True, name="luna-guardian")
+    guardian_thread.start()
+    logger.info("  Guardian: running (PULSE=5m, SCAN=30m, INTEL=6h, DAILY=24h)")
+
     # Start API (blocking)
     logger.info("  API: starting on port %d", config.port)
     logger.info("="*50)
@@ -114,6 +123,7 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        guardian.stop()
         scheduler.stop()
         logger.info("MoneyClaw daemon stopped")
 

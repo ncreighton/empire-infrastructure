@@ -1,0 +1,383 @@
+{% extends "base.html" %}
+{% block title %}Account Settings — Mystic Luna{% endblock %}
+{% block description %}Manage your Mystic Luna account, subscription, and reading credits.{% endblock %}
+{% block og_title %}Account Settings — Mystic Luna{% endblock %}
+{% block og_description %}Manage your Mystic Luna account, subscription, and reading credits.{% endblock %}
+{% block twitter_title %}Account Settings — Mystic Luna{% endblock %}
+{% block twitter_description %}Manage your Mystic Luna account, subscription, and reading credits.{% endblock %}
+
+{% block head %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --void: #06060f;
+  --deep: #0f0f24;
+  --purple: #2d1b69;
+  --violet: #7c3aed;
+  --gold: #d4a574;
+  --gold-bright: #e8c897;
+  --gold-dim: #a07a4f;
+  --rose: #c77dba;
+  --silver: #b8c6db;
+  --silver-dim: #8a95a8;
+  --text: #e8e0f0;
+  --text-bright: #f5f0ff;
+  --text-dim: #9a92a8;
+  --card-bg: rgba(20, 20, 50, 0.6);
+  --card-border: rgba(212, 165, 116, 0.15);
+  --font-display: 'Cinzel', serif;
+  --font-body: 'Crimson Pro', serif;
+  --font-ui: 'Inter', sans-serif;
+  --radius: 16px;
+  --radius-sm: 10px;
+  --radius-full: 999px;
+  --success: #4ade80;
+  --error: #f87171;
+  --transition: 0.2s ease;
+  --glow-purple: 0 0 20px rgba(124,58,237,0.4);
+  --glow-gold: 0 0 20px rgba(212,165,116,0.4);
+}
+
+.acct-page { padding-top: 5.5rem; padding-bottom: 3rem; }
+.acct-container { max-width: 720px; margin: 0 auto; padding: 0 1.25rem; display: flex; flex-direction: column; gap: 1.5rem; }
+
+.acct-header h1 {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  color: var(--gold-bright);
+  margin: 0;
+}
+.acct-header p {
+  font-family: var(--font-body);
+  color: var(--text-dim);
+  margin: 0.25rem 0 0;
+}
+
+.acct-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  backdrop-filter: blur(12px);
+}
+.acct-card h2 {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  color: var(--gold);
+  margin: 0 0 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--card-border);
+}
+
+.form-row { margin-bottom: 1rem; }
+.form-row label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--silver);
+  margin-bottom: 0.3rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.form-row input, .form-row select {
+  width: 100%;
+  padding: 0.6rem 0.8rem;
+  background: rgba(15, 15, 36, 0.8);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 1rem;
+  outline: none;
+  transition: border var(--transition);
+  box-sizing: border-box;
+}
+.form-row input:focus, .form-row select:focus {
+  border-color: var(--violet);
+  box-shadow: var(--glow-purple);
+}
+
+.btn-primary {
+  display: inline-block;
+  padding: 0.6rem 1.5rem;
+  background: linear-gradient(135deg, var(--violet), var(--purple));
+  color: var(--text-bright);
+  border: 1px solid rgba(124,58,237,0.3);
+  border-radius: var(--radius-full);
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.btn-primary:hover { box-shadow: var(--glow-purple); transform: translateY(-1px); }
+
+.btn-danger {
+  display: inline-block;
+  padding: 0.5rem 1.2rem;
+  background: transparent;
+  color: var(--error);
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  border-radius: var(--radius-full);
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.btn-danger:hover { background: rgba(248, 113, 113, 0.1); }
+
+.tier-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--radius-full);
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.tier-free { background: rgba(138,149,168,0.2); color: var(--silver); }
+.tier-seeker { background: rgba(124,58,237,0.2); color: var(--violet); border: 1px solid rgba(124,58,237,0.3); }
+.tier-mystic { background: rgba(199,125,186,0.2); color: var(--rose); border: 1px solid rgba(199,125,186,0.3); }
+.tier-inner-circle { background: rgba(212,165,116,0.2); color: var(--gold-bright); border: 1px solid rgba(212,165,116,0.3); }
+
+.sub-features { list-style: none; padding: 0; margin: 0.75rem 0; }
+.sub-features li {
+  font-family: var(--font-body);
+  color: var(--text-dim);
+  font-size: 0.95rem;
+  padding: 0.2rem 0;
+}
+.sub-features li::before { content: "✦ "; color: var(--gold-dim); }
+
+.credit-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 1rem;
+  background: rgba(212,165,116,0.12);
+  border: 1px solid rgba(212,165,116,0.25);
+  border-radius: var(--radius-full);
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  color: var(--gold-bright);
+}
+
+.sub-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.toast {
+  position: fixed;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  color: var(--text-bright);
+  z-index: 1000;
+  transition: transform 0.3s ease;
+  pointer-events: none;
+}
+.toast.show { transform: translateX(-50%) translateY(0); }
+.toast-success { background: rgba(74,222,128,0.2); border: 1px solid rgba(74,222,128,0.4); }
+.toast-error { background: rgba(248,113,113,0.2); border: 1px solid rgba(248,113,113,0.4); }
+
+@media (max-width: 600px) {
+  .acct-header h1 { font-size: 1.4rem; }
+  .sub-row { flex-direction: column; align-items: flex-start; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="acct-page">
+<div class="acct-container">
+
+  <div class="acct-header">
+    <h1>Account Settings</h1>
+    <p>{{ user.email }}</p>
+  </div>
+
+  <!-- Profile -->
+  <div class="acct-card">
+    <h2>Profile</h2>
+    <form id="profile-form">
+      <div class="form-row">
+        <label for="name">Display Name</label>
+        <input type="text" id="name" name="name" value="{{ user.name or '' }}" placeholder="What shall Luna call you?">
+      </div>
+      <div class="form-row">
+        <label for="zodiac">Zodiac Sign</label>
+        <select id="zodiac" name="zodiac">
+          <option value="">— Select —</option>
+          {% for sign in zodiac_signs %}
+          <option value="{{ sign }}" {% if user.zodiac_sign == sign %}selected{% endif %}>{{ sign|capitalize }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-row">
+        <label for="birth_date">Birth Date (for chart readings)</label>
+        <input type="date" id="birth_date" name="birth_date" value="{{ user.birth_date or '' }}">
+      </div>
+      <button type="submit" class="btn-primary">Save Profile</button>
+    </form>
+  </div>
+
+  <!-- Subscription -->
+  <div class="acct-card">
+    <h2>Subscription</h2>
+    {% set tier = user.subscription_tier or 'free' %}
+    <div class="sub-row">
+      <div>
+        <span class="tier-badge tier-{{ tier|replace('_', '-') }}">{{ tier|replace('_', ' ')|title }}</span>
+        {% if tier != 'free' %}
+        <span style="color:var(--text-dim); font-family:var(--font-body); font-size:0.9rem; margin-left:0.5rem;">Active</span>
+        {% endif %}
+      </div>
+      {% if tier == 'free' %}
+      <a href="/pricing" class="btn-primary">Upgrade</a>
+      {% else %}
+      <button id="cancel-sub-btn" class="btn-danger">Cancel Subscription</button>
+      {% endif %}
+    </div>
+    {% if tier != 'free' and plans.get(tier|replace('_', '-')) %}
+    {% set plan = plans[tier|replace('_', '-')] %}
+    <ul class="sub-features">
+      {% for feat in plan.features %}
+      <li>{{ feat }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+
+  <!-- Reading Credits -->
+  <div class="acct-card">
+    <h2>Reading Credits</h2>
+    <div class="sub-row">
+      <div class="credit-badge">{{ credits }} credits remaining</div>
+      <a href="/pricing" class="btn-primary">Buy More</a>
+    </div>
+  </div>
+
+  <!-- Companion Stats -->
+  {% if profile %}
+  <div class="acct-card">
+    <h2>Spiritual Journey</h2>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(140px,1fr)); gap:1rem;">
+      <div>
+        <div style="color:var(--text-dim); font-family:var(--font-ui); font-size:0.75rem; text-transform:uppercase;">Level</div>
+        <div style="color:var(--gold-bright); font-family:var(--font-display); font-size:1rem;">{{ profile.level_name or 'New Seeker' }}</div>
+      </div>
+      <div>
+        <div style="color:var(--text-dim); font-family:var(--font-ui); font-size:0.75rem; text-transform:uppercase;">XP</div>
+        <div style="color:var(--violet); font-family:var(--font-display); font-size:1rem;">{{ profile.xp or 0 }}</div>
+      </div>
+      <div>
+        <div style="color:var(--text-dim); font-family:var(--font-ui); font-size:0.75rem; text-transform:uppercase;">Streak</div>
+        <div style="color:var(--rose); font-family:var(--font-display); font-size:1rem;">{{ profile.streak_days or 0 }} days</div>
+      </div>
+      <div>
+        <div style="color:var(--text-dim); font-family:var(--font-ui); font-size:0.75rem; text-transform:uppercase;">Interactions</div>
+        <div style="color:var(--silver); font-family:var(--font-display); font-size:1rem;">{{ profile.interaction_count or 0 }}</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Change Password -->
+  <div class="acct-card">
+    <h2>Change Password</h2>
+    <form id="password-form">
+      <div class="form-row">
+        <label for="current_password">Current Password</label>
+        <input type="password" id="current_password" name="current_password" required>
+      </div>
+      <div class="form-row">
+        <label for="new_password">New Password</label>
+        <input type="password" id="new_password" name="new_password" required minlength="8" placeholder="At least 8 characters">
+      </div>
+      <button type="submit" class="btn-primary">Update Password</button>
+    </form>
+  </div>
+
+</div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast toast-' + type + ' show';
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+document.getElementById('profile-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    const res = await fetch('/api/account/update', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        name: document.getElementById('name').value,
+        zodiac: document.getElementById('zodiac').value,
+        birth_date: document.getElementById('birth_date').value,
+      }),
+    });
+    const data = await res.json();
+    if (res.ok) showToast('Profile updated', 'success');
+    else showToast(data.detail || 'Update failed', 'error');
+  } catch (err) { showToast('Network error', 'error'); }
+});
+
+document.getElementById('password-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    const res = await fetch('/api/account/change-password', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        current_password: document.getElementById('current_password').value,
+        new_password: document.getElementById('new_password').value,
+      }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      showToast('Password changed', 'success');
+      document.getElementById('password-form').reset();
+    } else {
+      showToast(data.detail || 'Failed', 'error');
+    }
+  } catch (err) { showToast('Network error', 'error'); }
+});
+
+const cancelBtn = document.getElementById('cancel-sub-btn');
+if (cancelBtn) {
+  cancelBtn.addEventListener('click', async () => {
+    if (!confirm('Cancel your subscription? You\'ll keep access until the end of your billing period.')) return;
+    try {
+      const res = await fetch('/api/subscription/cancel', {method: 'POST'});
+      const data = await res.json();
+      if (res.ok) {
+        showToast('Subscription will cancel at period end', 'success');
+        cancelBtn.textContent = 'Canceling...';
+        cancelBtn.disabled = true;
+      } else {
+        showToast(data.detail || 'Cancel failed', 'error');
+      }
+    } catch (err) { showToast('Network error', 'error'); }
+  });
+}
+</script>
+{% endblock %}

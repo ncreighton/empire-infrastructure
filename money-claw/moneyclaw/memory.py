@@ -172,6 +172,30 @@ CREATE TABLE IF NOT EXISTS heartbeats (
     health_score REAL,
     created_at TEXT DEFAULT (datetime('now'))
 );
+
+-- Reading credit bundles (one-time purchases)
+CREATE TABLE IF NOT EXISTS reading_credits (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    credits_remaining INTEGER NOT NULL DEFAULT 0,
+    credits_total INTEGER NOT NULL DEFAULT 0,
+    bundle_name TEXT,
+    stripe_payment_id TEXT,
+    purchased_at TEXT NOT NULL DEFAULT (datetime('now')),
+    expires_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_reading_credits_user ON reading_credits(user_id);
+
+-- Credit redemption history
+CREATE TABLE IF NOT EXISTS credit_redemptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    credit_id INTEGER REFERENCES reading_credits(id),
+    spread_type TEXT NOT NULL,
+    reading_id INTEGER,
+    redeemed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_credit_redemptions_user ON credit_redemptions(user_id);
 """
 
 
@@ -600,6 +624,49 @@ class Memory:
                 (agent, json.dumps(checks), json.dumps(actions), health_score)
             )
             return cur.lastrowid
+
+    # --- Reading Credits ---
+
+    def add_credits(self, user_id: str, credits: int, bundle_name: str,
+                    stripe_payment_id: str = "") -> int:
+        """Add reading credits for a user."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                """INSERT INTO reading_credits
+                   (user_id, credits_remaining, credits_total, bundle_name, stripe_payment_id)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (user_id, credits, credits, bundle_name, stripe_payment_id)
+            )
+            return cur.lastrowid
+
+    def get_credits(self, user_id: str) -> int:
+        """Get total remaining credits for a user."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT COALESCE(SUM(credits_remaining), 0) as total FROM reading_credits WHERE user_id = ? AND credits_remaining > 0",
+                (user_id,)
+            ).fetchone()
+            return row["total"]
+
+    def redeem_credit(self, user_id: str, spread_type: str) -> bool:
+        """Redeem one credit for a reading. Returns True if successful."""
+        with self._conn() as conn:
+            # Find oldest credit pack with remaining credits
+            credit = conn.execute(
+                "SELECT id, credits_remaining FROM reading_credits WHERE user_id = ? AND credits_remaining > 0 ORDER BY purchased_at ASC LIMIT 1",
+                (user_id,)
+            ).fetchone()
+            if not credit:
+                return False
+            conn.execute(
+                "UPDATE reading_credits SET credits_remaining = credits_remaining - 1 WHERE id = ?",
+                (credit["id"],)
+            )
+            conn.execute(
+                "INSERT INTO credit_redemptions (user_id, credit_id, spread_type) VALUES (?, ?, ?)",
+                (user_id, credit["id"], spread_type)
+            )
+            return True
 
     # --- Analytics ---
 
