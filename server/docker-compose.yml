@@ -155,6 +155,40 @@ services:
       start_period: 15s
 
   # -------------------------------------------------------------------------
+  # MoneyClaw — Mystic Luna Spiritual Readings & Revenue Engine
+  # Luna Moonshadow AI practitioner, tarot, subscriptions, Telegram bot
+  # -------------------------------------------------------------------------
+  money-claw:
+    build:
+      context: ./money-claw
+      dockerfile: Dockerfile
+    container_name: empire-money-claw
+    restart: unless-stopped
+    ports:
+      - "8160:8160"
+    env_file:
+      - ./money-claw/configs/.env
+    volumes:
+      - money-claw-data:/app/data
+      - ./money-claw/configs:/app/configs:ro
+      - ./money-claw/ventures:/app/ventures:ro
+      - ./config:/app/empire-config:ro
+    networks:
+      - empire
+      - empire_empire
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; r = httpx.get('http://localhost:8160/health'); assert r.status_code == 200"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # -------------------------------------------------------------------------
   # MoneyClaw — Autonomous Crypto Trading Agent
   # 5 strategies, strict risk management, self-evolution, paper trade default
   # -------------------------------------------------------------------------
@@ -233,6 +267,7 @@ volumes:
   article-audit-data:
   # openclaw-data: # Moved to openclaw-agent/docker-compose.yml
   bookforge-data:
+  money-claw-data:
   crypto-claw-data:
 
 networks:
