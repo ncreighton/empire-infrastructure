@@ -77,6 +77,11 @@ class OpenClawEngine:
             db_path=db_path, notifier=self.notifier,
         )
 
+        # Telegram bot — command center + notification sink
+        from openclaw.comms.telegram_bot import OpenClawTelegramBot
+        self.telegram_bot = OpenClawTelegramBot(self)
+        self.notifier.telegram_bot = self.telegram_bot
+
     def signup(self, platform_id: str, credentials: dict[str, str] | None = None) -> OpenClawResult:
         """Full signup pipeline: Scout → Smith → Planner → AMPLIFY → Executor → Verify → Codex."""
         try:

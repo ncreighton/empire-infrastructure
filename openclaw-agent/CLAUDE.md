@@ -13,6 +13,7 @@ Uses FORGE + AMPLIFY intelligence pattern. Deploys to VPS Docker on port 8100.
 - **Daemon**: HeartbeatDaemon (4-tier cascading loops), AlertRouter, CronScheduler, ProactiveAgent, SelfHealer
 - **Health Checks**: WordPress, Services, n8n, Email, Profiles, SEO/GSC, Security
 - **VibeCoder**: Autonomous coding agent — natural language → code changes → review → commit → deploy
+- **Telegram**: Command center + real-time notification sink (python-telegram-bot v21+)
 - **API**: FastAPI port 8100 (49+ endpoints)
 - **CLI**: Full command-line interface (`python cli.py`)
 
@@ -33,6 +34,7 @@ Uses FORGE + AMPLIFY intelligence pattern. Deploys to VPS Docker on port 8100.
 - VibeCoder Agents: `openclaw/vibecoder/agents/` (vibe_planner_agent, vibe_executor_agent, vibe_reviewer_agent)
 - VibeCoder AMPLIFY: `openclaw/vibecoder/amplify/code_amplify.py`
 - VibeCoder Daemon: `openclaw/vibecoder/daemon/mission_daemon.py`
+- Telegram bot: `openclaw/comms/telegram_bot.py` (command center + notification sink)
 - API server: `api/app.py`
 - CLI: `cli.py`
 - SQLite DB: `data/openclaw.db` (10 tables: 5 original + 5 daemon)
@@ -274,6 +276,8 @@ Optional:
 - `OPENCLAW_DEDUP_WINDOW_HOURS` — Alert dedup window (default 6)
 - `GSC_CREDENTIALS_PATH` — Google Search Console OAuth JSON
 - `N8N_API_KEY` — n8n API key for workflow health checks
+- `TELEGRAM_COMMANDER_TOKEN` — Telegram bot token for command center
+- `TELEGRAM_ADMIN_IDS` — Comma-separated admin user IDs (default: 8246744420)
 
 ## Platform Categories (46 platforms)
 
@@ -303,6 +307,8 @@ All modules are fully connected — no dead code:
 - **WebSocket heartbeat**: Ping every 30s to detect stale connections.
 - **ProactiveAgent -> VibeCoder**: When health checks fail 3+ times consecutively, the ProactiveAgent auto-creates VibeCoder bugfix missions. Stalled missions (>1h executing) are force-failed for retry. Unregistered empire projects are auto-discovered via weekly cron scan.
 - **VibeCoder -> Webhook**: Mission lifecycle events (queued, started, completed, failed, deployed) fire webhook notifications to all configured endpoints, enabling dashboard monitoring of autonomous coding activity.
+- **Webhook -> Telegram**: WebhookNotifier has a `telegram_bot` attribute wired by OpenClawEngine. Every `notify()` call also pushes to Telegram via `notify_if_not_muted()`. Mute/unmute via `/mute` and `/unmute` commands.
+- **Telegram -> Engine**: Command center with 13 commands (/status, /health, /alerts, /missions, /projects, /costs, /dashboard, /crons, /vibe, /mute, /unmute, /start, /help). Admin-only via decorator. Inline keyboard buttons for navigation. Starts alongside HeartbeatDaemon in asyncio.gather().
 
 ## LLM Usage
 

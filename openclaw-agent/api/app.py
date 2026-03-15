@@ -690,6 +690,7 @@ async def daemon_start():
         return {"status": "already_running", "uptime": _daemon.get_status().get("uptime_seconds", 0)}
 
     _daemon = HeartbeatDaemon(engine)
+    engine._daemon = _daemon  # So Telegram bot can access daemon status
     _daemon_task = asyncio.create_task(_daemon.start())
     return {"status": "starting"}
 
@@ -1101,5 +1102,6 @@ async def startup_event():
     if os.environ.get("OPENCLAW_DAEMON_MODE", "").lower() in ("true", "1", "yes"):
         from openclaw.daemon.heartbeat_daemon import HeartbeatDaemon
         _daemon = HeartbeatDaemon(engine)
+        engine._daemon = _daemon
         _daemon_task = asyncio.create_task(_daemon.start())
         logger.info("Daemon auto-started via OPENCLAW_DAEMON_MODE")
