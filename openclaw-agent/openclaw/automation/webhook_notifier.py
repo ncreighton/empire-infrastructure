@@ -39,24 +39,34 @@ logger = logging.getLogger(__name__)
 class EventType(str, Enum):
     """All event types that can trigger webhook notifications."""
 
-    SIGNUP_STARTED = "signup_started"
-    SIGNUP_COMPLETED = "signup_completed"
-    SIGNUP_FAILED = "signup_failed"
+    APPLY_PROFILE_COMPLETED = "apply_profile_completed"
+    APPLY_PROFILE_FAILED = "apply_profile_failed"
+    APPLY_PROFILE_STARTED = "apply_profile_started"
+    APPROVAL_NEEDED = "approval_needed"
+    BATCH_COMPLETED = "batch_completed"
+    BATCH_STARTED = "batch_started"
     CAPTCHA_NEEDED = "captcha_needed"
     CAPTCHA_SOLVED = "captcha_solved"
     EMAIL_VERIFICATION_NEEDED = "email_verification_needed"
     EMAIL_VERIFIED = "email_verified"
-    PROFILE_SCORED = "profile_scored"
-    BATCH_STARTED = "batch_started"
-    BATCH_COMPLETED = "batch_completed"
-    SYNC_COMPLETED = "sync_completed"
     ERROR = "error"
+    HUMAN_ACTIVITY_COMPLETED = "human_activity_completed"
+    HUMAN_ACTIVITY_STARTED = "human_activity_started"
+    MISSION_COMPLETED = "mission_completed"
+    MISSION_DEPLOYED = "mission_deployed"
+    MISSION_FAILED = "mission_failed"
     MISSION_QUEUED = "mission_queued"
     MISSION_STARTED = "mission_started"
-    MISSION_COMPLETED = "mission_completed"
-    MISSION_FAILED = "mission_failed"
-    MISSION_DEPLOYED = "mission_deployed"
+    PROFILE_ENHANCED = "profile_enhanced"
+    PROFILE_SCORED = "profile_scored"
     PROJECT_DISCOVERED = "project_discovered"
+    PUBLISH_COMPLETED = "publish_completed"
+    PUBLISH_FAILED = "publish_failed"
+    PUBLISH_STARTED = "publish_started"
+    SIGNUP_COMPLETED = "signup_completed"
+    SIGNUP_FAILED = "signup_failed"
+    SIGNUP_STARTED = "signup_started"
+    SYNC_COMPLETED = "sync_completed"
 
 
 # ---------------------------------------------------------------------------
@@ -131,6 +141,7 @@ class WebhookNotifier:
     def __init__(self) -> None:
         self.webhooks: list[WebhookConfig] = []
         self.event_history: list[dict[str, Any]] = []
+        self.telegram_bot: Any = None  # Set by OpenClawEngine after bot init
         self._load_from_env()
 
     # ------------------------------------------------------------------ #
@@ -235,6 +246,15 @@ class WebhookNotifier:
 
         # Record in history
         self._record_event(event_type, data)
+
+        # Push to Telegram bot if wired
+        if self.telegram_bot is not None:
+            try:
+                await self.telegram_bot.notify_if_not_muted(
+                    event_type.value, data,
+                )
+            except Exception as e:
+                logger.debug(f"Telegram notification failed (non-critical): {e}")
 
         # Find matching webhooks
         targets = [w for w in self.webhooks if w.accepts(event_type)]
@@ -479,6 +499,137 @@ class WebhookNotifier:
         if context:
             data["context"] = context
         return await self.notify(EventType.ERROR, data)
+
+    async def notify_apply_profile_started(
+        self, platform_id: str, platform_name: str
+    ) -> list[DeliveryResult]:
+        """Notify that profile application has started on a platform."""
+        return await self.notify(EventType.APPLY_PROFILE_STARTED, {
+            "platform_id": platform_id,
+            "platform_name": platform_name,
+        })
+
+    async def notify_apply_profile_completed(
+        self,
+        platform_id: str,
+        platform_name: str,
+        fields_applied: list[str],
+        fields_failed: list[str],
+    ) -> list[DeliveryResult]:
+        """Notify that profile application completed on a platform."""
+        return await self.notify(EventType.APPLY_PROFILE_COMPLETED, {
+            "platform_id": platform_id,
+            "platform_name": platform_name,
+            "fields_applied": fields_applied,
+            "fields_failed": fields_failed,
+        })
+
+    async def notify_apply_profile_failed(
+        self,
+        platform_id: str,
+        platform_name: str,
+        error: str,
+    ) -> list[DeliveryResult]:
+        """Notify that profile application failed on a platform."""
+        return await self.notify(EventType.APPLY_PROFILE_FAILED, {
+            "platform_id": platform_id,
+            "platform_name": platform_name,
+            "error": error,
+        })
+
+    async def notify_human_activity_started(
+        self, platform_id: str, platform_name: str
+    ) -> list[DeliveryResult]:
+        """Notify that human activity simulation has started on a platform."""
+        return await self.notify(EventType.HUMAN_ACTIVITY_STARTED, {
+            "platform_id": platform_id,
+            "platform_name": platform_name,
+        })
+
+    async def notify_human_activity_completed(
+        self,
+        platform_id: str,
+        platform_name: str,
+        activities_completed: int,
+        activities_failed: int,
+        duration_seconds: float,
+    ) -> list[DeliveryResult]:
+        """Notify that human activity simulation completed on a platform."""
+        return await self.notify(EventType.HUMAN_ACTIVITY_COMPLETED, {
+            "platform_id": platform_id,
+            "platform_name": platform_name,
+            "activities_completed": activities_completed,
+            "activities_failed": activities_failed,
+            "duration_seconds": round(duration_seconds, 1),
+        })
+
+    async def notify_publish_started(
+        self, platform_id: str, platform_name: str, title: str
+    ) -> list[DeliveryResult]:
+        """Notify that content publishing has started on a platform."""
+        return await self.notify(EventType.PUBLISH_STARTED, {
+            "platform_id": platform_id,
+            "platform_name": platform_name,
+            "title": title,
+        })
+
+    async def notify_publish_completed(
+        self,
+        platform_id: str,
+        platform_name: str,
+        title: str,
+        published_url: str,
+        needs_review: bool = False,
+    ) -> list[DeliveryResult]:
+        """Notify that content was published successfully on a platform."""
+        return await self.notify(EventType.PUBLISH_COMPLETED, {
+            "platform_id": platform_id,
+            "platform_name": platform_name,
+            "title": title,
+            "published_url": published_url,
+            "needs_review": needs_review,
+        })
+
+    async def notify_publish_failed(
+        self,
+        platform_id: str,
+        platform_name: str,
+        title: str,
+        error: str,
+    ) -> list[DeliveryResult]:
+        """Notify that content publishing failed on a platform."""
+        return await self.notify(EventType.PUBLISH_FAILED, {
+            "platform_id": platform_id,
+            "platform_name": platform_name,
+            "title": title,
+            "error": error,
+        })
+
+    async def notify_profile_enhanced(
+        self,
+        platform_id: str,
+        grade: str,
+        score: float,
+    ) -> list[DeliveryResult]:
+        """Notify that a profile was enhanced and graded."""
+        return await self.notify(EventType.PROFILE_ENHANCED, {
+            "platform_id": platform_id,
+            "grade": grade,
+            "score": round(score, 0),
+        })
+
+    async def notify_approval_needed(
+        self,
+        action_type: str,
+        target: str,
+        description: str,
+    ) -> list[DeliveryResult]:
+        """Notify that a human approval is required before proceeding."""
+        return await self.notify(EventType.APPROVAL_NEEDED, {
+            "action_type": action_type,
+            "target": target,
+            "description": description,
+        })
 
     # ------------------------------------------------------------------ #
     #  Event history                                                       #

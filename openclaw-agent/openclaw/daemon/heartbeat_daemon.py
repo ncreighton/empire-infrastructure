@@ -89,6 +89,15 @@ class HeartbeatDaemon:
         # Action registry for cron jobs
         self._action_registry: dict[str, Callable] = {}
 
+    async def _notify_telegram(self, event_type: str, data: dict) -> None:
+        """Push a notification to Telegram bot (best-effort)."""
+        try:
+            bot = getattr(self.engine, "telegram_bot", None)
+            if bot:
+                await bot.notify_if_not_muted(event_type, data)
+        except Exception as e:
+            logger.debug(f"Telegram notify failed (non-critical): {e}")
+
     async def start(self):
         """Start the daemon with all tier loops + cron + proactive agent."""
         if self._running:
@@ -244,6 +253,14 @@ class HeartbeatDaemon:
             f"{flushed} queued alerts flushed"
         )
 
+        issues = sum(1 for c in checks if c.result != CheckResult.HEALTHY)
+        if issues > 0:
+            await self._notify_telegram("health_check", {
+                "tier": "SCAN",
+                "checks": len(checks),
+                "issues": issues,
+            })
+
     async def _run_intel(self):
         """INTEL tier (6 hr): GSC traffic + recommendations."""
         checks = await seo_check.check_traffic(self.config.gsc_drop_threshold)
@@ -275,6 +292,14 @@ class HeartbeatDaemon:
 
         logger.info(f"[INTEL] Completed: {len(checks)} SEO checks")
 
+        issues = sum(1 for c in checks if c.result != CheckResult.HEALTHY)
+        if issues > 0:
+            await self._notify_telegram("health_check", {
+                "tier": "INTEL",
+                "checks": len(checks),
+                "issues": issues,
+            })
+
     async def _run_daily(self):
         """DAILY tier (24 hr at 7 AM EST): full report + security."""
         # Wait for target hour
@@ -296,6 +321,13 @@ class HeartbeatDaemon:
         ))
 
         logger.info(f"[DAILY] Report sent, {len(sec_checks)} security checks completed")
+
+        issues = sum(1 for c in sec_checks if c.result != CheckResult.HEALTHY)
+        await self._notify_telegram("health_check", {
+            "tier": "DAILY",
+            "checks": len(sec_checks),
+            "issues": issues,
+        })
 
     # ================================================================== #
     #  Cron + Proactive loops                                              #
@@ -358,6 +390,12 @@ class HeartbeatDaemon:
                                 "pending_approval",
                                 autonomous=False,
                             )
+                            # Notify about pending approval
+                            await self._notify_telegram("approval_needed", {
+                                "action": action.action_type,
+                                "target": action.target,
+                                "description": action.description,
+                            })
 
                 # Limit to 1 real browser signup per cycle to keep daemon responsive.
                 # Pre-flight rejections (disabled, 403, already-complete) don't count.
@@ -375,6 +413,11 @@ class HeartbeatDaemon:
                         f"[PROACTIVE] Executing: {action.action_type} "
                         f"-> {action.target}"
                     )
+                    await self._notify_telegram("proactive_action", {
+                        "action": action.action_type,
+                        "target": action.target,
+                        "description": action.description,
+                    })
                     try:
                         was_real = await self._execute_proactive_action(action)
                         if was_real and action.action_type in (
@@ -406,6 +449,10 @@ class HeartbeatDaemon:
                     "verify_email", action.target,
                     action.description, result,
                 )
+                await self._notify_telegram("email_verified" if ok else "error", {
+                    "platform": action.target,
+                    "result": "verified" if ok else "failed",
+                })
             return False  # Not a browser signup
 
         elif action.action_type == "new_signup":
@@ -479,6 +526,19 @@ class HeartbeatDaemon:
                         message=f"Successfully signed up for {action.target}. "
                                 f"Status: {result.status.value}",
                     ))
+                    await self._notify_telegram("signup_completed", {
+                        "platform": action.target,
+                        "profile_url": result.profile_url or "",
+                    })
+                elif not preflight_reject:
+                    logger.warning(
+                        f"[PROACTIVE] Signup FAILED: {action.target} "
+                        f"({result.errors})"
+                    )
+                    await self._notify_telegram("signup_failed", {
+                        "platform": action.target,
+                        "error": result.errors[0][:100] if result.errors else "unknown",
+                    })
                 else:
                     logger.warning(
                         f"[PROACTIVE] Signup FAILED: {action.target} "
@@ -533,6 +593,16 @@ class HeartbeatDaemon:
                         "retry_signup", action.target,
                         f"{action.description} -> {detail}", status,
                     )
+                    if result.success:
+                        await self._notify_telegram("signup_completed", {
+                            "platform": action.target,
+                            "profile_url": result.profile_url or "",
+                        })
+                    else:
+                        await self._notify_telegram("signup_failed", {
+                            "platform": action.target,
+                            "error": result.errors[0][:100] if result.errors else "unknown",
+                        })
                 else:
                     logger.debug(
                         f"[PROACTIVE] Pre-flight reject {action.target}: "
@@ -567,6 +637,11 @@ class HeartbeatDaemon:
                     f"[PROACTIVE] Enhanced profile: {action.target} "
                     f"-> grade {new_grade}, score {new_score:.0f}"
                 )
+                await self._notify_telegram("profile_enhanced", {
+                    "platform": action.target,
+                    "grade": new_grade,
+                    "score": f"{new_score:.0f}",
+                })
             except Exception as e:
                 logger.error(f"[PROACTIVE] Enhance failed for {action.target}: {e}")
                 self.codex.log_action(
@@ -601,6 +676,14 @@ class HeartbeatDaemon:
                         f"failed={result.fields_failed}, "
                         f"errors={result.errors})"
                     )
+                await self._notify_telegram(
+                    "apply_profile_completed" if result.success else "apply_profile_failed",
+                    {
+                        "platform": action.target,
+                        "fields_applied": ", ".join(result.fields_applied) if result.fields_applied else "none",
+                        "fields_failed": ", ".join(result.fields_failed) if result.fields_failed else "none",
+                    },
+                )
             except Exception as e:
                 logger.error(
                     f"[PROACTIVE] apply_profile failed for {action.target}: {e}"
@@ -633,6 +716,11 @@ class HeartbeatDaemon:
                     f"{session.activities_failed} failed, "
                     f"{session.duration_seconds:.0f}s"
                 )
+                await self._notify_telegram("human_activity_completed", {
+                    "platform": action.target,
+                    "activities": f"{session.activities_completed} done, {session.activities_failed} failed",
+                    "duration": f"{session.duration_seconds:.0f}s",
+                })
             except Exception as e:
                 logger.error(
                     f"[PROACTIVE] human_activity failed for {action.target}: {e}",
@@ -710,6 +798,14 @@ class HeartbeatDaemon:
                         f"[PROACTIVE] Content publish failed: {action.target} "
                         f"— {result.errors}"
                     )
+                await self._notify_telegram(
+                    "publish_completed" if result.success else "publish_failed",
+                    {
+                        "platform": action.target,
+                        "title": content.title,
+                        "url": result.published_url or "pending review",
+                    },
+                )
             except Exception as e:
                 logger.error(
                     f"[PROACTIVE] publish_content failed for {action.target}: {e}",
