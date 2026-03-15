@@ -13,6 +13,7 @@ from typing import Any, Callable, TYPE_CHECKING
 
 from openclaw.agents.monitor_agent import MonitorAgent
 from openclaw.browser.browser_manager import BrowserManager
+from openclaw.browser.browsing_warmup import BrowsingWarmup, should_warmup
 from openclaw.browser.captcha_handler import CaptchaHandler
 from openclaw.browser.stealth import randomize_delay, add_human_delays
 from openclaw.models import (
@@ -71,6 +72,35 @@ class ExecutorAgent:
 
         try:
             await self.browser.launch(plan.platform_id)
+
+            # Browsing warmup: visit common sites first to build organic
+            # cookie/referrer chain before hitting the target platform.
+            # Only for new signups (not profile edits or maintenance).
+            if should_warmup(plan.platform_id, "new_signup"):
+                try:
+                    from openclaw.knowledge.platforms import get_platform
+                    plat = get_platform(plan.platform_id)
+                    signup_url = plat.signup_url if plat else ""
+                    if signup_url:
+                        page = None
+                        if hasattr(self.browser, "_get_page"):
+                            page = await self.browser._get_page()
+                        elif hasattr(self.browser, "_browser") and self.browser._browser:
+                            page = await self.browser._browser.get_current_page()
+                        if page:
+                            warmup = BrowsingWarmup()
+                            warmup_result = await warmup.execute(
+                                page, plan.platform_id,
+                                plan.platform_name, signup_url,
+                            )
+                            logger.info(
+                                f"[{plan.platform_id}] Warmup: "
+                                f"{warmup_result.get('sites_visited', 0)} sites, "
+                                f"{warmup_result.get('total_time', 0):.0f}s"
+                            )
+                except Exception as e:
+                    # Warmup failure is never fatal
+                    logger.debug(f"[{plan.platform_id}] Warmup skipped: {e}")
 
             for step in plan.steps:
                 step.started_at = datetime.now()
